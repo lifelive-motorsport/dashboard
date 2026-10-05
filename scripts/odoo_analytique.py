@@ -41,7 +41,8 @@ def cross_plans(p, since: date, until: date) -> None:
     """Comment les lignes ventilées sur MEETING se répartissent sur les AUTRES axes (BU, XC, CARS, PROGRAM…)."""
     chosen, all_plans = p._event_plans()
     mcols = sorted({p._plan_column(c, all_plans) for c in chosen})
-    roots = [pl for pl in all_plans if not pl.get("parent_id") and p._plan_column(pl, all_plans) not in mcols]
+    ignored = {"program", "to be deleted"}                       # axes non utilisés
+    roots = [pl for pl in all_plans if not pl.get("parent_id") and p._plan_column(pl, all_plans) not in mcols and p._plain(pl["name"]).strip() not in ignored]
     print("\nRépartition des lignes MEETING sur les autres axes (produits = montants positifs, charges = montants négatifs) :")
     for pl in sorted(roots, key=lambda x: x["name"]):
         col = p._plan_column(pl, all_plans)

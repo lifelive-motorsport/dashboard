@@ -314,8 +314,11 @@ def _events_provider(plans=None, lines=None):
     return p, seen
 
 
-def _aline(event, gen, amount, col="x_plan1_id"):
-    return {col: [event[0], event[1]], "general_account_id": [1, gen], "amount:sum": amount}
+def _aline(event, gen, amount, col="x_plan1_id", bu=None):
+    r = {col: [event[0], event[1]], "general_account_id": [1, gen], "amount:sum": amount}
+    if bu is not None:
+        r["x_plan2_id"] = [7, bu] if bu else False          # axe BU renseigné (ou vide)
+    return r
 
 
 AND = (10, "Andalucia 2026")
@@ -326,7 +329,7 @@ def test_events_filter_on_the_meeting_plan_column_not_on_the_main_account():
     p, seen = _events_provider(lines=[])
     p.events(date(2026, 1, 1), date(2026, 9, 4))
     q = seen["account.analytic.line"][0]
-    assert ("x_plan1_id", "!=", False) in q["domain"] and q["groupby"] == ["x_plan1_id", "general_account_id"]   # colonne de l'axe MEETING
+    assert ("x_plan1_id", "!=", False) in q["domain"] and q["groupby"] == ["x_plan1_id", "general_account_id", "x_plan2_id"]   # colonnes MEETING puis BU
     assert not any(c[0] == "account_id" for c in q["domain"])                                                  # pas le compte principal
     assert len(seen["account.analytic.line"]) == 1                                                            # le sous-plan partage la colonne du plan racine
 
@@ -359,3 +362,25 @@ def test_events_plan_not_found_gives_a_clear_message():
         raise AssertionError("aurait dû échouer")
     except LookupError as e:
         assert "PROJECTS" in str(e) and "EVENT_PLAN" in str(e)
+
+
+def test_event_bu_comes_from_the_bu_axis_before_the_accounts():
+    # comptes XC mais axe BU = CARS : l'axe prime
+    lines = [_aline(AND, "700010 CA XC Manufacturer", 10_000.0, bu="CARS"), _aline(AND, "602012 FRAIS XC Race team", -4_000.0, bu="CARS")]
+    e = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))["events"][0]
+    assert e["group"] == "CARS" and e["source"] == "axe BU" and e["mixed"] is False
+
+
+def test_event_falls_back_to_accounts_when_bu_axis_is_empty():
+    lines = [_aline(SPA, "700010 CA XC Manufacturer", 10_000.0, bu=False), _aline(SPA, "602012 FRAIS XC Race team", -4_000.0, bu=False)]
+    e = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))["events"][0]
+    assert e["group"] == "XC" and e["source"] == "comptes"
+
+
+def test_event_mixed_flag_and_unrecognized_bu_axis_accounts_are_reported():
+    lines = [_aline(AND, "700020 CA Modern Rally", 8_000.0, bu="CARS"), _aline(AND, "700010 CA XC Manufacturer", 2_000.0, bu="XC"),
+             _aline(AND, "612051 Frais", -100.0, bu="Autre chose")]
+    r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
+    e = r["events"][0]
+    assert e["group"] == "CARS" and e["mixed"] is True                       # XC pèse 20 % : événement mixte
+    assert r["bu_unmapped"] == ["Autre chose"] and r["bu_axis"] == "BU"

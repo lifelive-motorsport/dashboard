@@ -25,3 +25,6 @@ WEBSHOP_LABELS = {
 # Plan (axe) analytique des événements : sous-chaîne de son nom, sans tenir compte des accents ni de la casse.
 # Défaut : « MEETING ». Vide = détection automatique (plan dont le nom contient « event » ou « événement »).
 EVENT_PLAN = os.getenv("EVENT_PLAN", "meeting")
+
+# Axe analytique « BU » : sert à rattacher chaque événement (axe MEETING) à XC ou à CARS. Nom exact du plan, sans tenir compte de la casse.
+BU_PLAN = os.getenv("BU_PLAN", "BU")

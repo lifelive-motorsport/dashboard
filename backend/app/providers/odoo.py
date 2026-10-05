@@ -13,6 +13,7 @@ import httpx
 from .. import settings
 
 PNL_PREFIXES = ("602", "603", "604", "700")
+READ_METHODS = frozenset({"search_read", "search_count", "read", "formatted_read_group", "read_group", "fields_get"})
 
 
 class OdooProvider:
@@ -26,7 +27,10 @@ class OdooProvider:
         )
 
     def _call(self, model: str, method: str, **payload):
-        r = self._http.post(f"/json/2/{model}/{method}", json=payload)
+        # Odoo n'a pas de clé API en lecture seule : la garantie est appliquée ici.
+        if method not in READ_METHODS:
+            raise PermissionError(f"Méthode Odoo non autorisée (lecture seule) : {method}")
+        r =self._http.post(f"/json/2/{model}/{method}", json=payload)
         r.raise_for_status()
         return r.json()
 

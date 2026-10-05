@@ -39,7 +39,11 @@ for label, model, method, kw in checks:
     print(f"{'OK ' if not err else 'KO '} {label}: {detail}")
     if label == "Sites web" and res:
         print("    sites :", [w["name"] for w in res])
-# la clé ne doit PAS pouvoir écrire :
-res, err = call("res.partner", "write", ids=[1], vals={"comment": "test"})
-print("OK " if err else "KO ", "Écriture refusée (attendu)" if err else "ATTENTION : la clé peut écrire !")
-sys.exit(0 if ok and err else 1)
+# Odoo n'a pas de clé en lecture seule : on signale (sans rien écrire) les droits d'écriture de l'utilisateur.
+for model in ("account.move", "account.move.line", "sale.order"):
+    res, err = call(model, "has_access", operation="write")
+    if err:
+        print(f"?   Droit d'écriture sur {model}: non vérifiable ({err[:60]})")
+    else:
+        print(f"{'WARN' if res else 'OK  '} Écriture sur {model}: {'AUTORISÉE (à restreindre)' if res else 'refusée'}")
+sys.exit(0 if ok else 1)

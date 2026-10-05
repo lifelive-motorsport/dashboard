@@ -533,7 +533,9 @@ def test_webshop_visits_window_is_fixed_weekly_with_orders_and_top_pages_merge_q
     assert v["granularity"] == "week" and v["points"][0]["label"] == "17 août" and len(v["points"]) == 8     # semaines commençant le lundi
     assert v["orders"] == 7 and v["visitors"] == 4 and v["views"] == 10 and (v["from"], v["to"]) == ("2026-08-17", "2026-10-05")
     assert v["incomplete"] and v["complete_from"] == "2026-09-20" and v["points"][0]["avg"] is None and v["points"][-1]["avg"] == 10.0
-    assert ("url", "like", "%/shop%") in seen[0]["domain"] and ("visitor_id.website_id", "=", 1) in seen[0]["domain"]
+    d0 = seen[0]["domain"]
+    assert ("url", "like", "%/shop%") in d0 and ("visitor_id.website_id", "=", 1) in d0
+    assert d0[2:6] == ["|", "|", ("product_id", "=", False), ("product_id.website_id", "=", 1)] and ("product_id.website_id", "=", False) in d0   # produits d'un autre site écartés
     pages = p._top_pages(1, date(2026, 8, 17), date(2026, 10, 5))
     assert [(x["label"], x["path"], x["views"]) for x in pages] == [("Pneu cross car", "/shop/pneu-cross-car-1234", 50), ("Page d'accueil du shop", "/fr/shop", 25)]
     assert round(pages[0]["share"], 3) == round(50 / 75, 3)

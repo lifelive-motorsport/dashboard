@@ -498,12 +498,21 @@ class OdooProvider:
             y, m = (y + 1, 1) if m == 12 else (y, m + 1)
         return "month", out
 
+    @staticmethod
+    def _shop_pages(wid: int) -> list:
+        """Domaine des pages vues du webshop `wid` : visiteurs de ce site, chemin WEBSHOP_PATH, et — pour les pages produit — produit
+        rattaché à CE site (champ « Site web » de la fiche produit). Odoo attribue parfois à un site des visites de produits d'un
+        autre site ; une page sans produit (accueil du shop) est conservée. Un produit sans site précis (publié partout) est gardé
+        sauf si WEBSHOP_STRICT_SITE est activé."""
+        product = [("product_id", "=", False), ("product_id.website_id", "=", wid)] + ([] if settings.WEBSHOP_STRICT_SITE else [("product_id.website_id", "=", False)])
+        return [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%")] + ["|"] * (len(product) - 1) + product
+
     def _visits(self, wid: int, d_from: date, d_to: date) -> dict:
         """Visites du webshop d'après le suivi des pages d'Odoo (website.track), limité aux pages du chemin WEBSHOP_PATH.
         Pages vues et visiteurs uniques par semaine/mois, et totaux de la période. Odoo ne suit que certaines pages
         (produits, pages marquées « suivre ») : ce sont des ordres de grandeur, pas une mesure d'audience exhaustive."""
         gran, buckets = self._buckets(d_from, d_to, weekly=True)
-        shop = [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%")]
+        shop = self._shop_pages(wid)
 
         def span(a: date, b: date) -> list:
             return shop + [("visit_datetime", ">=", a.isoformat()), ("visit_datetime", "<", (b + timedelta(days=1)).isoformat())]
@@ -554,8 +563,7 @@ class OdooProvider:
 
     def _top_pages(self, wid: int, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Pages les plus vues du webshop (adresses regroupées sans leurs paramètres)."""
-        dom = [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%"),
-               ("visit_datetime", ">=", d_from.isoformat()), ("visit_datetime", "<", (d_to + timedelta(days=1)).isoformat())]
+        dom = self._shop_pages(wid) + [("visit_datetime", ">=", d_from.isoformat()), ("visit_datetime", "<", (d_to + timedelta(days=1)).isoformat())]
         rows = self._call("website.track", "formatted_read_group", domain=dom, groupby=["url"], aggregates=["__count"],
                           order="__count desc", limit=300)
         merged: dict[str, dict] = {}

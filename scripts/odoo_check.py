@@ -49,8 +49,8 @@ for label, model, method, kw in checks:
 Y = date.today().year
 YEAR = [("date", ">=", f"{Y}-01-01"), ("date", "<=", f"{Y}-12-31")]
 OPEN = [("state", "=", "posted"), ("payment_state", "in", ["not_paid", "partial"])]
-for label, mt in ((f"Dettes fournisseurs (factures ouvertes {Y})", "in_invoice"), (f"Créances clients (factures ouvertes {Y})", "out_invoice")):
-    res, err = call("account.move", "formatted_read_group", domain=OPEN + [("move_type", "=", mt)] + YEAR,
+for label, mt in ((f"Dettes fournisseurs (factures et avoirs ouverts {Y})", ["in_invoice", "in_refund"]), (f"Créances clients (factures et avoirs ouverts {Y})", ["out_invoice", "out_refund"])):
+    res, err = call("account.move", "formatted_read_group", domain=OPEN + [("move_type", "in", mt)] + YEAR,
                     groupby=[], aggregates=["amount_residual_signed:sum", "__count"])
     print(f"{'OK ' if not err else 'KO '} {label}:", err or f"{(res[0]['amount_residual_signed:sum'] or 0):,.2f} € sur {res[0]['__count']} factures")
 
@@ -61,6 +61,10 @@ if not err:
     print(f"    Diagnostic {Y} — fournisseurs, par type / statut de paiement (reste dû, nb) :")
     for r in res:
         print(f"      {r['move_type']:11} {str(r['payment_state']):12} {r['amount_residual_signed:sum']:>14,.2f} €  ({r['__count']})")
+res, err = call("account.move", "formatted_read_group", domain=[("state", "=", "draft"), ("move_type", "in", ["in_invoice", "in_refund"])],
+                groupby=["move_type"], aggregates=["amount_total_signed:sum", "__count"])
+if not err:
+    print("    Brouillons fournisseurs (NON comptés dans l'application) :", {r["move_type"]: f"{r['__count']} pièces, {r['amount_total_signed:sum']:,.2f} €" for r in res} or "aucun")
 res, err = call("account.move", "formatted_read_group", domain=OPEN + [("move_type", "=", "in_invoice")] + YEAR,
                 groupby=["invoice_date:month"], aggregates=["amount_residual_signed:sum", "__count"])
 if not err:

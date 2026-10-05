@@ -131,7 +131,7 @@ function clients(d, allowed) {
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
 const FINANCE = B('finance', 'Position financière (à date)', d => `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
   + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
-  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (mêmes critères que « Vendor bills to pay » dans Odoo ; avoirs non déduits). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`, true);
+  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`, true);
 
 const ALL_CLIENTS = ['total','XC','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};

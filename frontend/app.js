@@ -265,8 +265,9 @@ function webshopPage(pick) {
     B('visits', 'Évolution des visites', d => {
       const w = shop(d); if (!w) return miss(d);
       const v = w.visits; if (!v) return `<p class="na">Visites indisponibles pour le moment.</p>${(w.errors || {}).visits ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.visits)}</small>` : ''}`;
-      const conv = v.visitors ? w.orders / v.visitors : null;
-      return `<div class="kpis">${kpi('Pages vues', num(v.views))}${kpi('Visiteurs uniques', v.visitors == null ? '–' : num(v.visitors))}${kpi('Taux de conversion', conv == null ? '–' : pct(conv), '', 'commandes ÷ visiteurs uniques')}</div>`
+      const conv = v.visitors && !v.incomplete ? w.orders / v.visitors : null;       // faux si l'historique de visites est tronqué
+      return (v.incomplete ? `<p class="neg">Historique incomplet avant le ${fmtDate(v.complete_from)} : Odoo supprime les visiteurs anonymes inactifs après environ 60 jours, et leurs pages vues avec. Les périodes antérieures ne sont pas tracées, et les totaux ci-dessous sont sous-estimés.</p>` : '')
+        + `<div class="kpis">${kpi('Pages vues', num(v.views))}${kpi('Visiteurs uniques', v.visitors == null ? '–' : num(v.visitors))}${kpi('Taux de conversion', conv == null ? '–' : pct(conv), '', v.incomplete ? 'indisponible : historique de visites incomplet' : 'commandes ÷ visiteurs uniques')}</div>`
         + lineChart(v.points, null, `Pages vues par ${v.granularity === 'week' ? 'semaine' : 'mois'}, limitées aux pages « ${esc(v.path)} » suivies par Odoo. Survolez un point pour le détail. Odoo ne suit que certaines pages (produits, pages marquées « suivre ») et exclut une partie des robots : ce sont des ordres de grandeur, à comparer plutôt qu’à lire en valeur absolue.`,
           x => num(Math.round(x)), p => `${p.label} : ${num(p.views)} pages vues${p.visitors == null ? '' : ', ' + num(p.visitors) + ' visiteurs'}`, '');
     }),

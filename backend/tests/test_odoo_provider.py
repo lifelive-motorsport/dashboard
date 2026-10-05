@@ -520,12 +520,15 @@ def test_webshop_visits_by_month_and_top_pages_merge_query_strings():
             start, end = kw["domain"][2][2], kw["domain"][3][2]
             n = 100 if (start, end) == ("2026-01-01", "2026-04-01") else {"2026-01": 30, "2026-02": 20, "2026-03": 50}[start[:7]]   # totaux : période entière
             return [{"__count": n, "visitor_id:count_distinct": 10}]
+        if model == "website.track" and method == "search_read":
+            return [{"visit_datetime": "2026-02-10 08:00:00"}]                       # plus ancienne visite anonyme conservée par Odoo
         return base(model, method, **kw)
     p._call = call
     (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
     v = w["visits"]
     assert v["granularity"] == "month" and [x["label"] for x in v["points"]] == ["janv. 2026", "févr. 2026", "mars 2026"]
     assert [x["views"] for x in v["points"]] == [30, 20, 50] and v["views"] == 100 and v["visitors"] == 10
+    assert [x["avg"] for x in v["points"]] == [None, 20.0, 50.0] and v["incomplete"] and v["complete_from"] == "2026-02-10"   # janvier : avant l'historique conservé
     assert ("url", "like", "%/shop%") in seen[0]["domain"] and ("visitor_id.website_id", "=", 1) in seen[0]["domain"]
     pages = w["top_pages"]
     assert [(x["label"], x["path"], x["views"]) for x in pages] == [("Pneu cross car", "/shop/pneu-cross-car-1234", 50), ("Page d'accueil du shop", "/fr/shop", 25)]

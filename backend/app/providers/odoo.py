@@ -524,9 +524,21 @@ class OdooProvider:
             ranges.append((max(st, d_from), min(end, d_to), lbl))
         with ThreadPoolExecutor(max_workers=5) as pool:
             res = list(pool.map(lambda r: count(r[0], r[1]), ranges + [(d_from, d_to, "")]))
-        pts = [{"label": r[2], "views": v, "visitors": u, "avg": float(v)} for r, (v, u) in zip(ranges, res[:-1])]
+        # Odoo supprime les visiteurs anonymes inactifs depuis ~60 jours (et leurs pages vues) : avant la plus ancienne visite
+        # anonyme encore présente, l'historique est incomplet (il ne reste que des visiteurs identifiés). On ne trace pas cette partie.
+        first = None
+        try:
+            f = self._call("website.track", "search_read", domain=shop + [("visitor_id.partner_id", "=", False)],
+                           fields=["visit_datetime"], order="visit_datetime asc", limit=1)
+            first = date.fromisoformat(str(f[0]["visit_datetime"])[:10]) if f else None
+        except Exception:
+            first = None
+        pts = [{"label": r[2], "views": v, "visitors": u, "avg": None if first and r[1] < first else float(v)}
+               for r, (v, u) in zip(ranges, res[:-1])]
         views, visitors = res[-1]
-        return {"granularity": gran, "points": pts, "views": views, "visitors": visitors, "path": settings.WEBSHOP_PATH}
+        return {"granularity": gran, "points": pts, "views": views, "visitors": visitors, "path": settings.WEBSHOP_PATH,
+                "complete_from": first.isoformat() if first else None,
+                "incomplete": bool(first and first > d_from + timedelta(days=7))}
 
     @staticmethod
     def _page_label(url: str) -> tuple[str, str]:

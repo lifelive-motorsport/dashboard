@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lifelive Dashboard</title>
+<meta name="theme-color" content="#1b1d22">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>LIFELIVE <span>Dashboard</span></h1>
+  <div class="controls">
+    <select id="period">
+      <option value="ytd">Année en cours</option>
+      <option value="month">Mois en cours</option>
+      <option value="prev">Année précédente</option>
+      <option value="12m">12 derniers mois</option>
+    </select>
+    <button id="refresh" title="Actualiser">↻</button>
+  </div>
+</header>
+<div id="status"></div>
+<div id="login" hidden><div id="g_btn"></div></div>
+<main id="app" hidden>
+  <section class="kpis" id="kpis"></section>
+  <section><h2>CA &amp; marge brute par BU</h2><div id="bus"></div></section>
+  <section><h2>XC vs CARS</h2><div id="groups" class="two"></div></section>
+  <section><h2>Trésorerie, créances &amp; dettes</h2><div class="kpis" id="bs"></div></section>
+  <section><h2>Hit-parade clients</h2><div class="tabs" id="tabs"></div><ol id="clients"></ol></section>
+  <section><h2>Webshops</h2><div class="two" id="shops"></div></section>
+  <footer id="foot"></footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

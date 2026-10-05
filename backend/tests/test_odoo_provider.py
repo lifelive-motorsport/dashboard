@@ -149,3 +149,10 @@ def test_client_names_are_normalized_for_display_only():
     rows = [_row(1, "TÜRKİYE OTOMOBİL SPORLARI FEDERASYONU (TOSFED)", "700010 CA XC", 100), _row(2, "Eduardo Salorio Instalaciones sl", "700010 CA XC", 50)]
     r = make(rows, [_partner(1, "TÜRKİYE OTOMOBİL SPORLARI FEDERASYONU (TOSFED)"), _partner(2, "Eduardo Salorio Instalaciones sl")], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
     assert [c["name"] for c in r["total"]] == ["Türkiye Otomobil Sporlari Federasyonu (TOSFED)", "Eduardo Salorio Instalaciones SL"]
+
+
+def test_top_clients_default_is_fifteen_and_sorted():
+    rows = [_row(i, f"Client {i:02d}", "700010 CA XC", 1000 - i) for i in range(1, 21)]
+    r = make(rows, [_partner(i, f"Client {i:02d}") for i in range(1, 21)], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    assert len(r["total"]) == 15 and len(r["XC"]) == 15
+    assert [c["ca"] for c in r["total"]] == sorted((c["ca"] for c in r["total"]), reverse=True)

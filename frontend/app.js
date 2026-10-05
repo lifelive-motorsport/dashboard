@@ -125,11 +125,18 @@ function clients(d, allowed) {
   if (tc.unavailable) return `<p class="na">${esc(tc.unavailable)}</p>`;
   const cur = allowed.includes(tab) ? tab : allowed[0];
   const labels = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
+  const scope = cur === 'total' ? d.pnl.total.ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre affiché
+  const share = v => scope > 0 ? pct(v / scope) : '–';
+  const list = tc[cur] || [], shown = list.reduce((s, c) => s + c.ca, 0), other = scope - shown;
+  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td></tr>`);
+  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers clients</td><td>${eur(shown)}</td><td>${share(shown)}</td></tr>`,
+    `<tr><td></td><td>Autres clients et ventes sans client identifié</td><td>${eur(other)}</td><td>${share(other)}</td></tr>`,
+    `<tr class="tot"><td></td><td>CA du périmètre</td><td>${eur(scope)}</td><td>100,0 %</td></tr>`);
   const m = tc._meta, info = !m ? '' : m.grouping
-    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}.</small>`
+    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. Le « % » est la part du CA du périmètre sélectionné (comptes 700).</small>`
     : `<small class="neg">Regroupement indisponible : les clients sont affichés tels que saisis dans Odoo.</small>`;
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    <ol>${(tc[cur] || []).map(c => `<li><span>${esc(c.name)}</span><b>${eur(c.ca)}</b></li>`).join('')}</ol>${info}`;
+    ${list.length ? table(['#', 'Client', 'CA', '% du CA'], rows, 'prodtable') : '<p class="na">Aucun client sur la période.</p>'}${info}`;
 }
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).

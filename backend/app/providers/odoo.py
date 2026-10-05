@@ -107,7 +107,7 @@ class OdooProvider:
                 out[pid] = (f"c:{com['id']}", com["display_name"])
         return out
 
-    def top_clients(self, d_from: date, d_to: date, limit: int = 10) -> dict:
+    def top_clients(self, d_from: date, d_to: date, limit: int = 15) -> dict:
         """Classement des clients par CA (comptes 700) : total et par BU, avec regroupement. Lecture seule."""
         from ..bu import classify
         domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()),

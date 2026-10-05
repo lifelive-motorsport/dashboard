@@ -28,12 +28,12 @@ class DemoProvider:
 
     def top_clients(self, d_from: date, d_to: date) -> dict:
         rnd = random.Random(7)
-        names = ["Client A", "Client B", "Client C", "Client D", "Client E", "Client F", "Client G", "Client H"]
+        names = [f"Client {c}" for c in "ABCDEFGHIJKLMNOPQRST"]
         s = _scale(d_from, d_to)
 
         def board(total: float) -> list[dict]:
             w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
-            return [{"name": n, "ca": round(total * s * x / sum(w))} for n, x in zip(names, w)]
+            return [{"name": n, "ca": round(total * s * 0.8 * x / sum(w))} for n, x in list(zip(names, w))[:15]]  # 15 premiers ≈ 80 % du CA
 
         return {"total": board(2_800_000), "XC": board(1_700_000), "MODERN_RALLY": board(160_000),
                 "HISTORIC_RALLY": board(130_000), "HISTORIC_RACING": board(580_000)}

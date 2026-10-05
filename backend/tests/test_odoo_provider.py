@@ -335,24 +335,24 @@ def test_events_filter_on_the_meeting_plan_column_not_on_the_main_account():
 
 
 def test_events_result_by_meeting_plan_with_signed_analytic_amounts():
-    lines = [_aline(AND, "700040 CA Historic Racing", 41_500.0), _aline(AND, "604040 ACH. MARCH. Historic Racing", -50_000.0),
-             _aline(AND, "615001 Carburant", -18_500.0),
-             _aline(SPA, "700010 CA XC Manufacturer", 30_000.0), _aline(SPA, "602012 FRAIS XC Race team", -12_000.0),
-             _aline(SPA, "612051 Frais de représentation", -1_000.0),
-             _aline(SPA, "400000 Clients", 999.0)]                                          # compte de bilan : ignoré
+    lines = [_aline(AND, "700040 CA Historic Racing", 41_500.0, bu="CARS"), _aline(AND, "604040 ACH. MARCH. Historic Racing", -50_000.0, bu="CARS"),
+             _aline(AND, "615001 Carburant", -18_500.0, bu="CARS"),
+             _aline(SPA, "700010 CA XC Manufacturer", 30_000.0, bu="XC"), _aline(SPA, "602012 FRAIS XC Race team", -12_000.0, bu="XC"),
+             _aline(SPA, "612051 Frais de représentation", -1_000.0, bu="XC"),
+             _aline(SPA, "400000 Clients", 999.0, bu="XC")]                                 # compte de bilan : ignoré
     r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
     e = {x["name"]: x for x in r["events"]}
     a = e["Andalucia 2026"]
     assert (a["ca"], a["direct_costs"], a["other_costs"], a["result"], a["group"]) == (41_500, 50_000, 18_500, -27_000, "CARS")   # la perte de l'analyse de septembre
     s = e["Spa 2026"]
     assert (s["ca"], s["direct_costs"], s["other_costs"], s["result"], s["group"]) == (30_000, 12_000, 1_000, 17_000, "XC")
-    assert r["plans"] == ["MEETING", "Rallyes"]
+    assert r["plans"] == ["MEETING", "Rallyes"] and r["bu_missing"] == 0
 
 
-def test_events_without_bu_coded_account_go_to_none():
-    lines = [_aline(AND, "612051 Frais de représentation", -500.0), _aline(AND, "700099 Frais refacturés", 200.0)]
+def test_events_with_unrecognized_bu_axis_account_go_to_none():
+    lines = [_aline(AND, "612051 Frais de représentation", -500.0, bu="Autre chose"), _aline(AND, "700099 Frais refacturés", 200.0, bu="Autre chose")]
     r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
-    assert r["events"][0]["group"] == "NONE"
+    assert r["events"][0]["group"] == "NONE" and r["bu_unmapped"] == ["Autre chose"]
 
 
 def test_events_plan_not_found_gives_a_clear_message():
@@ -368,13 +368,23 @@ def test_event_bu_comes_from_the_bu_axis_before_the_accounts():
     # comptes XC mais axe BU = CARS : l'axe prime
     lines = [_aline(AND, "700010 CA XC Manufacturer", 10_000.0, bu="CARS"), _aline(AND, "602012 FRAIS XC Race team", -4_000.0, bu="CARS")]
     e = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))["events"][0]
-    assert e["group"] == "CARS" and e["source"] == "axe BU" and e["mixed"] is False
+    assert e["group"] == "CARS" and e["mixed"] is False
 
 
-def test_event_falls_back_to_accounts_when_bu_axis_is_empty():
+def test_event_with_empty_bu_axis_is_flagged_not_guessed_from_accounts():
     lines = [_aline(SPA, "700010 CA XC Manufacturer", 10_000.0, bu=False), _aline(SPA, "602012 FRAIS XC Race team", -4_000.0, bu=False)]
-    e = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))["events"][0]
-    assert e["group"] == "XC" and e["source"] == "comptes"
+    r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["events"][0]["group"] == "NONE" and r["bu_missing"] == 2          # pas de déduction par les comptes : anomalie signalée
+    assert r["events"][0]["ca"] == 10_000                                      # les montants restent comptés
+
+
+def test_events_require_the_bu_axis():
+    p, _ = _events_provider(plans=[{"id": 1, "name": "MEETING", "parent_id": False}])
+    try:
+        p.events(date(2026, 1, 1), date(2026, 9, 4))
+        raise AssertionError("aurait dû échouer")
+    except LookupError as e:
+        assert "BU_PLAN" in str(e) and "MEETING" in str(e)
 
 
 def test_event_mixed_flag_and_unrecognized_bu_axis_accounts_are_reported():

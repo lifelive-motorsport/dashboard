@@ -69,8 +69,8 @@ class DemoProvider:
                 ("Meeting C (démo)", "CARS", 140_000, 70_000, 30_000), ("Meeting D (démo)", "CARS", 41_500, 35_000, 33_500),
                 ("Meeting E (démo)", "NONE", 12_000, 0, 4_000)]
         out = [{"id": i, "name": n, "plan": "MEETING", "group": g, "ca": round(ca * s), "direct_costs": round(dc * s), "other_costs": round(oc * s),
-                "result": round((ca - dc - oc) * s), "mixed": i == 4, "source": "axe BU" if g != "NONE" else None} for i, (n, g, ca, dc, oc) in enumerate(demo, 1)]
-        return {"events": out, "plans": ["MEETING"], "bu_axis": "BU", "bu_unmapped": []}
+                "result": round((ca - dc - oc) * s), "mixed": i == 4} for i, (n, g, ca, dc, oc) in enumerate(demo, 1)]
+        return {"events": out, "plans": ["MEETING"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)

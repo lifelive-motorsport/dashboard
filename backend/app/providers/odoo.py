@@ -316,19 +316,24 @@ class OdooProvider:
         propre colonne (x_plan<id>_id). On filtre donc sur la colonne de l'axe MEETING, pas sur account_id.
         Montants signés (positif = produit, négatif = charge). Produits = comptes 7xx ; charges = comptes 6xx, dont « frais
         directs » (602/603/604).
-        Rattachement à XC ou CARS : d'abord l'axe analytique BU renseigné sur ces mêmes lignes ; à défaut, la BU des comptes
-        comptables ; sans rien d'exploitable : « NONE »."""
+        Rattachement à XC ou CARS : uniquement d'après l'axe analytique BU (obligatoire à la saisie). Une ligne sans compte BU
+        est comptée dans « bu_missing » (anomalie de saisie à corriger), jamais devinée ; un événement sans BU exploitable : « NONE »."""
         from ..bu import classify
         plans, all_plans = self._event_plans()
         columns = sorted({self._plan_column(p, all_plans) for p in plans})
         bu_plan = next((p for p in all_plans if not p.get("parent_id") and self._plain(p["name"]).strip() == self._plain(settings.BU_PLAN).strip()), None)
-        bu_col = self._plan_column(bu_plan, all_plans) if bu_plan else None
+        if not bu_plan:
+            names = ", ".join(sorted(p["name"] for p in all_plans))
+            raise LookupError(f"Axe analytique « {settings.BU_PLAN} » introuvable (plans existants : {names}). "
+                              "Indiquez le nom de l'axe des BU (variable BU_PLAN).")
+        bu_col = self._plan_column(bu_plan, all_plans)
         ev: dict[tuple[str, int], dict] = {}
         unmapped: set[str] = set()
+        missing = 0
         for col in columns:
             rows = self._call("account.analytic.line", "formatted_read_group",
                               domain=[(col, "!=", False), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
-                              groupby=[col, "general_account_id"] + ([bu_col] if bu_col else []), aggregates=["amount:sum"])
+                              groupby=[col, "general_account_id", bu_col], aggregates=["amount:sum"])
             for r in rows:
                 if not r.get(col):
                     continue
@@ -338,7 +343,7 @@ class OdooProvider:
                     continue
                 amount = float(r["amount:sum"] or 0.0)
                 e = ev.setdefault((col, aid), {"id": aid, "name": aname, "plan": col, "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0,
-                                               "axis": {"XC": 0.0, "CARS": 0.0}, "acct": {"XC": 0.0, "CARS": 0.0}})
+                                               "axis": {"XC": 0.0, "CARS": 0.0}})
                 c = classify(code, name) if len(code) == 6 else None
                 if code[0] == "7":
                     e["ca"] += amount
@@ -346,30 +351,28 @@ class OdooProvider:
                     e["direct_costs"] += -amount
                 else:
                     e["other_costs"] += -amount
-                if c and BU_GROUP.get(c.bu) in e["acct"]:
-                    e["acct"][BU_GROUP[c.bu]] += abs(amount)
-                if bu_col and r.get(bu_col):
-                    g = self._bu_group_of_axis_account(r[bu_col][1])
-                    if g:
-                        e["axis"][g] += abs(amount)
-                    else:
-                        unmapped.add(r[bu_col][1])
+                if not r.get(bu_col):
+                    missing += 1
+                    continue
+                g = self._bu_group_of_axis_account(r[bu_col][1])
+                if g:
+                    e["axis"][g] += abs(amount)
+                else:
+                    unmapped.add(r[bu_col][1])
         out = []
         for e in ev.values():
-            axis, acct = e.pop("axis"), e.pop("acct")
-            w, source = (axis, "axe BU") if any(axis.values()) else (acct, "comptes")
+            w = e.pop("axis")
             e["group"] = "NONE" if not any(w.values()) else max(w, key=w.get)
             tot_w = sum(w.values())
             e["mixed"] = bool(tot_w) and min(w.values()) / tot_w >= 0.10          # l'autre groupe pèse au moins 10 %
-            e["source"] = source if e["group"] != "NONE" else None
             e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"]
             for k in ("ca", "direct_costs", "other_costs", "result"):
                 e[k] = round(e[k])
             if e["ca"] or e["direct_costs"] or e["other_costs"]:
                 out.append(e)
         out.sort(key=lambda e: (-e["ca"], e["name"]))
-        return {"events": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"] if bu_plan else None,
-                "bu_unmapped": sorted(unmapped)}
+        return {"events": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"],
+                "bu_unmapped": sorted(unmapped), "bu_missing": missing}
 
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""

@@ -11,7 +11,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 const MENU = [
   ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['clients','Clients'], ['suppliers','Fournisseurs']]],
   ['xcvscars', 'XC vs CARS', [['ca','CA'], ['mb','MB']]],
-  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop','Par webshop'], ['events','Par événement'], ['inventory','Inventory']]],
+  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['rules','Règles de répartition']]],
   ['expenses', 'GENERAL EXPENSES', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['rules','Règles de répartition']]],
@@ -19,7 +19,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -56,7 +56,7 @@ const PLAN = {
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca');
+const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -198,6 +198,22 @@ const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTOR
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
+// Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
+function webshopPage(pick) {
+  const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
+  const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
+  return [
+    B('shops', 'Ventes du webshop', d => { const w = shop(d); return w ? `<div class="two">${kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)}</div>` : miss(d); }),
+    B('products', 'Top 15 des produits vendus', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const t = w.products_total || {value: 0, units: 0, count: 0};
+      return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
+        (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
+        .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
+    }),
+    NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
+  ];
+}
 const PAGES = {
   'overview/ca': () => [
     B('kpi', 'Chiffre d’affaires', d => `<div class="kpis">${kpi('Chiffre d’affaires', eur(d.pnl.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca)) + kpi('CA CARS', eur(grp(d,'CARS').ca))}</div>`),
@@ -246,17 +262,8 @@ const PAGES = {
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
     NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
   ],
-  'xc/webshop': () => [
-    B('shops', 'Ventes des webshops', d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>`
-      : `<div class="two">${d.webshops.map(w => kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)).join('')}</div>`),
-    B('products', 'Top 15 des produits vendus', d => d.webshops.unavailable ? '' : d.webshops.map(w => {
-      const t = w.products_total || {value: 0, units: 0, count: 0};
-      return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
-        (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
-        .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
-    }).join('')),
-    NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
-  ],
+  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name)),
+  'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name)),
   'xc/events': () => [
     B('events', 'Événements XC', d => eventsTable(d, ['XC'])),
     B('none', 'Autres événements (BU « Others » ou sans BU identifiable)', d => eventsTable(d, ['OTHERS', 'NONE'], true)),

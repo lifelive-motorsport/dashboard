@@ -37,12 +37,45 @@ def report(p, since: date, until: date) -> None:
     print("  (le reste n'est pas rattaché à un meeting : il n'apparaît pas dans les pages « Par événement »)")
 
 
+def cross_plans(p, since: date, until: date) -> None:
+    """Comment les lignes ventilées sur MEETING se répartissent sur les AUTRES axes (BU, XC, CARS, PROGRAM…)."""
+    chosen, all_plans = p._event_plans()
+    mcols = sorted({p._plan_column(c, all_plans) for c in chosen})
+    roots = [pl for pl in all_plans if not pl.get("parent_id") and p._plan_column(pl, all_plans) not in mcols]
+    print("\nRépartition des lignes MEETING sur les autres axes (produits = montants positifs, charges = montants négatifs) :")
+    for pl in sorted(roots, key=lambda x: x["name"]):
+        col = p._plan_column(pl, all_plans)
+        tot = {}
+        for sign, op in (("produits", ">"), ("charges", "<")):
+            try:
+                rows = p._call("account.analytic.line", "formatted_read_group",
+                               domain=[(mcols[0], "!=", False), ("date", ">=", since.isoformat()), ("date", "<=", until.isoformat()), ("amount", op, 0)],
+                               groupby=[col], aggregates=["amount:sum"])
+            except Exception as e:
+                tot = None
+                print(f"  - {pl['name']:<14} illisible ({type(e).__name__})")
+                break
+            for r in rows:
+                name = r[col][1] if r.get(col) else "(non renseigné)"
+                tot.setdefault(name, {"produits": 0.0, "charges": 0.0})[sign] += float(r["amount:sum"] or 0.0)
+        if tot is None:
+            continue
+        if not tot or set(tot) == {"(non renseigné)"}:
+            print(f"  - {pl['name']:<14} jamais renseigné sur les lignes MEETING")
+            continue
+        print(f"  - {pl['name']} :")
+        for name, v in sorted(tot.items(), key=lambda kv: -(abs(kv[1]["produits"]) + abs(kv[1]["charges"])))[:8]:
+            print(f"      {name[:34]:<34} produits {v['produits']:>11,.0f}  charges {v['charges']:>11,.0f}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--depuis", default=f"{date.today().year}-01-01")
     a = ap.parse_args()
     from app.providers.odoo import OdooProvider
-    report(OdooProvider(), date.fromisoformat(a.depuis), date.today())
+    prov = OdooProvider()
+    report(prov, date.fromisoformat(a.depuis), date.today())
+    cross_plans(prov, date.fromisoformat(a.depuis), date.today())
 
 
 if __name__ == "__main__":

@@ -291,43 +291,53 @@ class OdooProvider:
                     grew = True
         return [p for p in plans if p["id"] in chosen], plans
 
-    def events(self, d_from: date, d_to: date) -> dict:
-        """Résultat par événement : lignes analytiques des comptes du plan « Événements », classées par compte comptable.
+    @staticmethod
+    def _plan_column(plan: dict, plans: list[dict]) -> str:
+        """Colonne de l'axe sur les lignes analytiques : x_plan<id du plan racine>_id (Odoo crée une colonne par axe racine)."""
+        by_id = {p["id"]: p for p in plans}
+        while plan.get("parent_id") and plan["parent_id"][0] in by_id:
+            plan = by_id[plan["parent_id"][0]]
+        return f"x_plan{plan['id']}_id"
 
-        Montants analytiques signés (positif = produit, négatif = charge). Produits = comptes 7xx ; charges = comptes 6xx,
-        dont « frais directs » (602/603/604). Un événement est rattaché à XC ou à CARS selon la BU des comptes de ses
-        lignes (le groupe qui pèse le plus) ; sans ligne rattachable à une BU, il va dans « NONE »."""
+    def events(self, d_from: date, d_to: date) -> dict:
+        """Résultat par événement : lignes analytiques ventilées sur l'axe « Événements » (MEETING), classées par compte comptable.
+
+        IMPORTANT : une ligne ventilée sur plusieurs axes (BU, MEETING, PROGRAM…) ne porte qu'un compte « principal » ;
+        chaque axe a sa propre colonne (x_plan<id>_id). On filtre donc sur la colonne de l'axe MEETING, pas sur account_id.
+        Montants signés (positif = produit, négatif = charge). Produits = comptes 7xx ; charges = comptes 6xx, dont « frais
+        directs » (602/603/604). Un événement est rattaché à XC ou à CARS d'après la BU des comptes de ses lignes ; sans ligne
+        rattachable à une BU : « NONE »."""
         from ..bu import classify
-        plans, _ = self._event_plans()
-        accounts = self._call("account.analytic.account", "search_read", domain=[("plan_id", "in", [p["id"] for p in plans])],
-                              fields=["name", "plan_id"], context={"active_test": False})
-        info = {a["id"]: a for a in accounts}
-        rows = self._call("account.analytic.line", "formatted_read_group",
-                          domain=[("account_id", "in", list(info)), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
-                          groupby=["account_id", "general_account_id"], aggregates=["amount:sum"]) if info else []
-        ev: dict[int, dict] = {}
-        for r in rows:
-            aid = r["account_id"][0]
-            code, name = self._code_name((r.get("general_account_id") or [0, ""])[1])
-            if not code or code[0] not in "67":
-                continue
-            amount = float(r["amount:sum"] or 0.0)
-            e = ev.setdefault(aid, {"id": aid, "name": r["account_id"][1], "plan": (info.get(aid, {}).get("plan_id") or [0, ""])[1],
-                                    "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0, "weight": {"XC": 0.0, "CARS": 0.0}})
-            c = classify(code, name) if len(code) == 6 else None
-            if code[0] == "7":
-                e["ca"] += amount
-            elif c and c.kind == "direct_cost":
-                e["direct_costs"] += -amount
-            else:
-                e["other_costs"] += -amount
-            if c and BU_GROUP.get(c.bu) in e["weight"]:
-                e["weight"][BU_GROUP[c.bu]] += abs(amount)
+        plans, all_plans = self._event_plans()
+        columns = sorted({self._plan_column(p, all_plans) for p in plans})
+        ev: dict[tuple[str, int], dict] = {}
+        for col in columns:
+            rows = self._call("account.analytic.line", "formatted_read_group",
+                              domain=[(col, "!=", False), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
+                              groupby=[col, "general_account_id"], aggregates=["amount:sum"])
+            for r in rows:
+                if not r.get(col):
+                    continue
+                aid, aname = r[col]
+                code, name = self._code_name((r.get("general_account_id") or [0, ""])[1])
+                if not code or code[0] not in "67":
+                    continue
+                amount = float(r["amount:sum"] or 0.0)
+                e = ev.setdefault((col, aid), {"id": aid, "name": aname, "plan": col, "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0,
+                                               "weight": {"XC": 0.0, "CARS": 0.0}})
+                c = classify(code, name) if len(code) == 6 else None
+                if code[0] == "7":
+                    e["ca"] += amount
+                elif c and c.kind == "direct_cost":
+                    e["direct_costs"] += -amount
+                else:
+                    e["other_costs"] += -amount
+                if c and BU_GROUP.get(c.bu) in e["weight"]:
+                    e["weight"][BU_GROUP[c.bu]] += abs(amount)
         out = []
         for e in ev.values():
             w = e.pop("weight")
-            group = "NONE" if not any(w.values()) else max(w, key=w.get)
-            e["group"] = group
+            e["group"] = "NONE" if not any(w.values()) else max(w, key=w.get)
             e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"]
             for k in ("ca", "direct_costs", "other_costs", "result"):
                 e[k] = round(e[k])

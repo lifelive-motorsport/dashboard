@@ -53,12 +53,14 @@ class OdooProvider:
                 out[m.group(1)] = out.get(m.group(1), 0.0) + row["balance:sum"]
         return out
 
-    def _open_invoices(self, move_types: list[str], year: int) -> float:
-        """Montant restant dû (signé, devise société) des factures/avoirs validés dont la DATE COMPTABLE est dans l'année
-        de référence : même logique que « Factures à payer » d'Odoo filtré sur « Accounting Date ».
+    def _open_invoices(self, move_type: str, year: int) -> float:
+        """Montant restant dû (signé, devise société) des factures validées NON PAYÉES ou PARTIELLEMENT PAYÉES dont la
+        date comptable est dans l'année de référence. Mêmes critères que l'écran Odoo « Vendor bills to pay » filtré sur
+        « Accounting Date » : statut comptabilisé, type facture (avoirs exclus), paiement non payé / partiel.
         Les accruals (« factures à recevoir ») et les écritures hors factures sont exclus."""
         rows = self._call("account.move", "formatted_read_group",
-                          domain=[("state", "=", "posted"), ("move_type", "in", move_types),
+                          domain=[("state", "=", "posted"), ("move_type", "=", move_type),
+                                  ("payment_state", "in", ["not_paid", "partial"]),
                                   ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")],
                           groupby=[], aggregates=["amount_residual_signed:sum"])
         return float(rows[0]["amount_residual_signed:sum"] or 0.0) if rows else 0.0
@@ -68,8 +70,8 @@ class OdooProvider:
         rows = self._grouped([("parent_state", "=", "posted"),
                               ("account_id.account_type", "in", ["asset_cash", "liability_credit_card"])], [])
         return {"year": year,
-                "receivables": self._open_invoices(["out_invoice", "out_refund"], year),
-                "payables": -self._open_invoices(["in_invoice", "in_refund"], year),  # dette affichée positive
+                "receivables": self._open_invoices("out_invoice", year),
+                "payables": -self._open_invoices("in_invoice", year),  # dette affichée positive
                 "cash": rows[0]["balance:sum"] if rows else 0.0}
 
     # Regroupement de clients : étiquette de contact Odoo « regroup_client=Nom du groupe »

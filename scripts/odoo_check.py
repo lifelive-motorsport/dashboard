@@ -45,17 +45,29 @@ for label, model, method, kw in checks:
         print("    sites :", [w["name"] for w in res])
     if label.startswith("Étiquettes de regroupement") and res:
         print("    étiquettes :", sorted(t["name"] for t in res))
-# Dettes / créances : factures ouvertes (comme les écrans « Factures à payer » d'Odoo), puis détail comptable.
+# Dettes / créances : mêmes critères que « Vendor bills to pay » d'Odoo (comptabilisées, non payées/partielles, année comptable).
 Y = date.today().year
-for label, types in ((f"Dettes fournisseurs (factures ouvertes {Y})", ["in_invoice", "in_refund"]), (f"Créances clients (factures ouvertes {Y})", ["out_invoice", "out_refund"])):
-    res, err = call("account.move", "formatted_read_group",
-                    domain=[("state", "=", "posted"), ("move_type", "in", types), ("date", ">=", f"{Y}-01-01"), ("date", "<=", f"{Y}-12-31")],
-                    groupby=[], aggregates=["amount_residual_signed:sum"])
-    print(f"{'OK ' if not err else 'KO '} {label}:", err or f"{(res[0]['amount_residual_signed:sum'] or 0):,.2f} € (signé)")
-res, err = call("account.move.line", "formatted_read_group", domain=[("parent_state", "=", "posted"), ("account_id.account_type", "in", ["liability_payable"])],
-                groupby=["account_id"], aggregates=["balance:sum"])
+YEAR = [("date", ">=", f"{Y}-01-01"), ("date", "<=", f"{Y}-12-31")]
+OPEN = [("state", "=", "posted"), ("payment_state", "in", ["not_paid", "partial"])]
+for label, mt in ((f"Dettes fournisseurs (factures ouvertes {Y})", "in_invoice"), (f"Créances clients (factures ouvertes {Y})", "out_invoice")):
+    res, err = call("account.move", "formatted_read_group", domain=OPEN + [("move_type", "=", mt)] + YEAR,
+                    groupby=[], aggregates=["amount_residual_signed:sum", "__count"])
+    print(f"{'OK ' if not err else 'KO '} {label}:", err or f"{(res[0]['amount_residual_signed:sum'] or 0):,.2f} € sur {res[0]['__count']} factures")
+
+# DIAGNOSTIC : d'où vient un écart avec l'écran Odoo ? (1) répartition par type et statut de paiement, (2) mois par mois.
+res, err = call("account.move", "formatted_read_group", domain=[("state", "=", "posted")] + YEAR + [("move_type", "in", ["in_invoice", "in_refund", "in_receipt"])],
+                groupby=["move_type", "payment_state"], aggregates=["amount_residual_signed:sum", "__count"])
 if not err:
-    print("    Comptes fournisseurs (écritures, toutes dates) :", {r["account_id"][1]: round(r["balance:sum"]) for r in res})
+    print(f"    Diagnostic {Y} — fournisseurs, par type / statut de paiement (reste dû, nb) :")
+    for r in res:
+        print(f"      {r['move_type']:11} {str(r['payment_state']):12} {r['amount_residual_signed:sum']:>14,.2f} €  ({r['__count']})")
+res, err = call("account.move", "formatted_read_group", domain=OPEN + [("move_type", "=", "in_invoice")] + YEAR,
+                groupby=["invoice_date:month"], aggregates=["amount_residual_signed:sum", "__count"])
+if not err:
+    print("    Diagnostic — factures fournisseurs ouvertes par mois de facture (comparer à l'écran Odoo) :")
+    for r in res:
+        k = r.get("invoice_date:month"); k = k[1] if isinstance(k, (list, tuple)) else k
+        print(f"      {str(k):18} {r['amount_residual_signed:sum']:>14,.2f} €  ({r['__count']})")
 
 # Droits d'écriture : vérification SANS écrire (has_access ne modifie rien).
 writable = []

@@ -127,18 +127,18 @@ def test_webshop_french_falls_back_when_translation_fails_or_missing():
     assert "context" not in seen2   # aucune langue française installée : pas d'appel de traduction
 
 
-def test_balance_sheet_uses_open_invoices_not_ledger_balances():
+def test_balance_sheet_mirrors_odoo_bills_to_pay_filter():
     p = OdooProvider.__new__(OdooProvider)
-    seen = []
+    domains = []
 
     def call(model, method, **kw):
-        seen.append((model, tuple(kw["domain"][1][2])))
-        dom = kw["domain"]
+        dom = kw["domain"]; domains.append((model, dom))
+        assert ("state", "=", "posted") in dom and ("payment_state", "in", ["not_paid", "partial"]) in dom
         assert ("date", ">=", "2026-01-01") in dom and ("date", "<=", "2026-12-31") in dom   # année de référence seulement
-        types = kw["domain"][1][2]
-        return [{"amount_residual_signed:sum": -169_017.73 if "in_invoice" in types else 197_511.0}]
+        invoice = ("move_type", "=", "in_invoice") in dom
+        return [{"amount_residual_signed:sum": -169_017.73 if invoice else 197_511.0}]
     p._call = call
     p._grouped = lambda domain, groupby: [{"balance:sum": 7_895.0}]
-    bs = p.balance_sheet(2026)
-    assert bs == {"year": 2026, "receivables": 197_511.0, "payables": 169_017.73, "cash": 7_895.0}   # dette affichée positive
-    assert {m for m, _ in seen} == {"account.move"}  # plus de somme brute des comptes fournisseurs/clients
+    assert p.balance_sheet(2026) == {"year": 2026, "receivables": 197_511.0, "payables": 169_017.73, "cash": 7_895.0}
+    assert all(m == "account.move" for m, _ in domains)
+    assert not any(("move_type", "in", ["in_invoice", "in_refund"]) in d for _, d in domains)   # avoirs non mélangés

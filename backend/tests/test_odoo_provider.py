@@ -480,3 +480,21 @@ def test_webshop_optional_views_fail_independently():
     p, _ = _shop_provider()                                  # ce simulateur ne connaît pas les transactions de paiement
     (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
     assert w["payments"] is None and w["products"]       # les produits restent disponibles
+
+
+def test_vehicles_use_the_cars_plan_exactly_and_take_bu_from_the_bu_axis():
+    plans = [{"id": 1, "name": "MEETING", "parent_id": False}, {"id": 2, "name": "BU", "parent_id": False}, {"id": 5, "name": "CARS", "parent_id": False},
+             {"id": 6, "name": "XC", "parent_id": False}]
+    car = (50, "Porsche 992 Rally GT #26 EMO")
+    lines = [_aline(car, "700020 CA Modern Rally", 1000.0, col="x_plan5_id", bu="Modern Rally"), _aline(car, "602020 FRAIS Modern Rally", -400.0, col="x_plan5_id", bu="Modern Rally"),
+             _aline(car, "612000 Divers", -100.0, col="x_plan5_id", bu="Modern Rally")]
+    p, seen = _events_provider(plans=plans, lines=lines)
+    orig = p._call
+    p._call = lambda m, meth, **kw: ([{"id": 50, "name": car[1], "code": "Modern Rally", "partner_id": [9, "EMO Sport"]}] if m == "account.analytic.account"
+                                      else orig(m, meth, **kw))
+    r = p.vehicles(date(2026, 1, 1), date(2026, 10, 5))
+    q = seen["account.analytic.line"][0]
+    assert ("x_plan5_id", "!=", False) in q["domain"] and q["groupby"][0] == "x_plan5_id"            # axe CARS, pas l'axe XC
+    (v,) = r["vehicles"]
+    assert (v["name"], v["group"], v["client"], v["reference"]) == (car[1], "CARS", "EMO Sport", "Modern Rally")
+    assert (v["ca"], v["direct_costs"], v["other_costs"], v["result"]) == (1000, 400, 100, 500) and r["plans"] == ["CARS"]

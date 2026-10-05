@@ -75,6 +75,17 @@ class DemoProvider:
                 "bus": ([{"bu": "XC", "share": 1.0}] if g == "XC" else [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}] if g == "CARS" else [])} for i, (n, g, ca, dc, oc, cx) in enumerate(demo, 1)]
         return {"events": out, "plans": ["MEETING"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
+    def vehicles(self, d_from: date, d_to: date) -> dict:
+        s = _scale(d_from, d_to)
+        demo = [("Porsche 992 Rally GT #26 (démo)", "Modern Rally", "Client A", "Modern Rally", 236_000, 190_000, 8_000, 0),
+                ("BMW M3 E30 #44 (démo)", "Historic Rally", "Client B", "Historic Rally", 62_000, 41_000, 3_000, 0),
+                ("Aston Martin Vantage GT3 (démo)", "Historic Racing", "Client C", "Historic Racing / GT3", 39_000, 21_000, 2_500, 15_000)]
+        out = [{"id": i, "name": n, "plan": "CARS", "group": "CARS", "client": c, "reference": ref, "ca": round(ca * s), "direct_costs": round(dc * s),
+                "other_costs": round(oc * s), "capex": round(cx * s), "amort": round(cx * s / 12), "amort_monthly": round(cx / 60) if cx else 0,
+                "amort_months": 60 if cx else 0, "result": round((ca - dc - oc - cx) * s), "result_accounting": round((ca - dc - oc - cx / 12) * s),
+                "mixed": False, "bus": [{"bu": bu, "share": 1.0}]} for i, (n, bu, c, ref, ca, dc, oc, cx) in enumerate(demo, 1)]
+        return {"vehicles": out, "plans": ["CARS"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
+
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)
 

@@ -19,7 +19,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -29,8 +29,6 @@ const PLAN = {
     'Valider les entrepôts à inclure et la méthode de valorisation d’Odoo. L’analyse de septembre a montré que la valeur du stock varie fortement : une courbe mensuelle sera utile.'],
   'cars/events': ['CA, frais directs et marge par événement pour CARS (ex. Andalucia).',
     'La même règle d’identification des événements dans Odoo que pour XC.'],
-  'cars/vehicles': ['Rentabilité par véhicule (voiture client ou de course).',
-    'Comment le véhicule est identifié sur les factures et achats (n° de châssis, immatriculation, étiquette…).'],
   'staff/general': ['Coûts de personnel (comptes 62) : total, évolution, ventilation XC / CARS / Shared Services.',
     'Les clés de répartition (XC 60 %, clés nominatives pour CARS, Shared Services) reprises de l’analyse de septembre, à confirmer.'],
   'staff/xc': ['Part du personnel imputée à XC selon la règle de répartition.', 'La règle de répartition validée.'],
@@ -122,28 +120,28 @@ const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
 // Événements (axe analytique « MEETING ») : une ligne par événement dont le groupe BU figure dans `groups`.
 let evSort = {k: 'ca', dir: -1};                                   // tri des tableaux d'événements (défaut : CA décroissant)
-const evVal = (e, k) => k === 'margin' ? (e.ca ? e.result / e.ca : -Infinity) : k === 'bu' ? (e.bus || []).map(b => b.bu).join(' ') : e[k];
+const evVal = (e, k) => k === 'margin' ? (e.ca ? e.result / e.ca : -Infinity) : k === 'client' ? (e.client || '') : k === 'bu' ? (e.bus || []).map(b => b.bu).join(' ') : e[k];
 function capexCell(e) {
   if (!e.capex) return eur(0);
   const dur = e.amort_months ? ` sur ≈ ${e.amort_months} mois (≈ ${eur(e.amort_monthly)} / mois)` : '';
   const tip = `${eur(e.capex)} investis, comptabilisés en immobilisations et amortis${dur}. Déjà amorti sur la période : ${eur(e.amort || 0)} (non compté dans le résultat cash). Résultat comptable : ${eur(e.result_accounting)}.`;
   return `<span title="${esc(tip)}">${eur(e.capex)} <small class="na">ⓘ</small></span>`;
 }
-function eventsTable(d, groups, showBu = false) {
-  const ev = d.events;
+function eventsTable(d, groups, showBu = false, veh = false) {
+  const ev = veh ? d.vehicles : d.events, U = veh ? 'véhicule' : 'événement';
   if (!ev || ev.unavailable) return `<p class="na">${esc(ev ? ev.unavailable : 'Indisponible pour le moment.')}</p>`;
-  const list = ev.events.filter(e => groups.includes(e.group));
-  const note = `<small class="na">Événements : axe ${esc((ev.plans || []).join(', '))}. Rattachement : axe ${esc(ev.bu_axis || 'BU')}.</small>`
+  const list = (veh ? ev.vehicles : ev.events).filter(e => groups.includes(e.group));
+  const note = `<small class="na">${veh ? 'Véhicules' : 'Événements'} : axe ${esc((ev.plans || []).join(', '))}. Rattachement : axe ${esc(ev.bu_axis || 'BU')}.</small>`
     + (ev.bu_missing ? `<br><small class="neg">${ev.bu_missing} ligne(s) analytique(s) sans compte sur l’axe ${esc(ev.bu_axis || 'BU')} : à corriger dans Odoo (l’axe est censé être obligatoire).</small>` : '')
     + (ev.bu_unmapped && ev.bu_unmapped.length ? `<br><small class="neg">Comptes de l’axe BU non reconnus : ${esc(ev.bu_unmapped.join(', '))}.</small>` : '');
-  if (!list.length) return '<p class="na">Aucun événement sur la période.</p>' + note;
+  if (!list.length) return `<p class="na">Aucun ${U} sur la période.</p>` + note;
   const sum = k => list.reduce((s, e) => s + e[k], 0);
   const buText = e => (e.bus || []).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
-  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
-    ${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
+  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${veh && e.reference ? ` <small class="na">${esc(e.reference)}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
+    ${veh ? `<td class="bu">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
     <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
-  const total = {name: `Total (${list.length} événement${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
-  const cols = [['name', 'Événement']].concat(showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges'], ['capex', 'Investis*'], ['result', 'Résultat cash'], ['margin', 'Marge %']]);
+  const total = {name: `Total (${list.length} ${U}${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
+  const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges'], ['capex', 'Investis*'], ['result', 'Résultat cash'], ['margin', 'Marge %']]);
   const sorted = list.slice().sort((a, b) => {
     const x = evVal(a, evSort.k), y = evVal(b, evSort.k);
     return (typeof x === 'string' ? x.localeCompare(y, 'fr') : x - y) * evSort.dir || a.name.localeCompare(b.name, 'fr');
@@ -319,6 +317,10 @@ const PAGES = {
     B('none', 'Autres événements (BU « Others » ou sans BU identifiable)', d => eventsTable(d, ['OTHERS', 'NONE'], true)),
     EVENT_NOTE,
   ],
+  'cars/vehicles': () => [
+    B('vehicles', 'Véhicules CARS', d => eventsTable(d, ['CARS'], true, true)),
+    NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − frais directs − autres charges (hors dotations aux amortissements) − investissements ; *Investis = dépenses immobilisées (comptes INVEST), amorties ensuite — survolez le ⓘ pour le détail. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
+  ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
@@ -440,7 +442,7 @@ $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-op
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
 $('nav').onclick = e => { const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
 const sortBy = e => { const h = e.target.closest('th[data-sort]'); if (!h) return false;
-  const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' ? 1 : -1)};     // 2ᵉ clic : inverse
+  const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' || k === 'client' ? 1 : -1)};     // 2ᵉ clic : inverse
   current.blocks.filter(b => !b.static).forEach(updateBlock); return true; };
 $('page').onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && sortBy(e)) e.preventDefault(); };
 $('page').onclick = e => { if (sortBy(e)) return; if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };

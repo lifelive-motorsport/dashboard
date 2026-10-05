@@ -28,3 +28,4 @@ EVENT_PLAN = os.getenv("EVENT_PLAN", "meeting")
 
 # Axe analytique « BU » : sert à rattacher chaque événement (axe MEETING) à XC ou à CARS. Nom exact du plan, sans tenir compte de la casse.
 BU_PLAN = os.getenv("BU_PLAN", "BU")
+VEHICLE_PLAN = os.getenv("VEHICLE_PLAN", "CARS")        # axe analytique dont chaque compte est un véhicule

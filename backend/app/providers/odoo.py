@@ -272,16 +272,20 @@ class OdooProvider:
         import unicodedata
         return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
 
-    def _event_plans(self) -> tuple[list[dict], list[dict]]:
-        """(plans retenus avec leurs sous-plans, tous les plans). Lève une erreur claire si aucun plan « événements »."""
+    def _event_plans(self, setting: str | None = None, exact: bool = False, label: str = "Événements",
+                     var: str = "EVENT_PLAN") -> tuple[list[dict], list[dict]]:
+        """(plans retenus avec leurs sous-plans, tous les plans). Lève une erreur claire si aucun plan trouvé."""
         plans = self._call("account.analytic.plan", "search_read", domain=[], fields=["name", "parent_id"])
-        wanted = self._plain(settings.EVENT_PLAN).strip()
-        chosen = {p["id"] for p in plans if (wanted in self._plain(p["name"]) if wanted else
-                                             any(k in self._plain(p["name"]) for k in ("event", "evenement")))}
+        wanted = self._plain(settings.EVENT_PLAN if setting is None else setting).strip()
+        if exact:
+            chosen = {p["id"] for p in plans if self._plain(p["name"]).strip() == wanted}
+        else:
+            chosen = {p["id"] for p in plans if (wanted in self._plain(p["name"]) if wanted else
+                                                 any(k in self._plain(p["name"]) for k in ("event", "evenement")))}
         if not chosen:
             names = ", ".join(sorted(p["name"] for p in plans)) or "aucun"
-            raise LookupError(f"Aucun plan analytique « Événements » trouvé (plans existants : {names}). "
-                              "Indiquez le nom du bon plan (variable EVENT_PLAN).")
+            raise LookupError(f"Aucun plan analytique « {label} » trouvé (plans existants : {names}). "
+                              f"Indiquez le nom du bon plan (variable {var}).")
         grew = True
         while grew:                                   # ajoute les sous-plans
             grew = False
@@ -324,6 +328,31 @@ class OdooProvider:
         return None
 
     def events(self, d_from: date, d_to: date) -> dict:
+        r = self._by_axis(d_from, d_to)
+        return {**{k: v for k, v in r.items() if k != "items"}, "events": r["items"]}
+
+    def vehicles(self, d_from: date, d_to: date) -> dict:
+        """Résultat par véhicule : même logique que les événements, sur l'axe analytique « CARS » (un compte = un véhicule),
+        rattaché à une BU d'après l'axe BU ; le client et la référence viennent de la fiche du compte analytique."""
+        r = self._by_axis(d_from, d_to, settings.VEHICLE_PLAN, True, "Véhicules", "VEHICLE_PLAN")
+        items = r.pop("items")
+        ids = [e["id"] for e in items]
+        info: dict[int, dict] = {}
+        if ids:
+            try:
+                for a in self._call("account.analytic.account", "search_read", domain=[("id", "in", ids)],
+                                    fields=["name", "code", "partner_id"], context={"active_test": False}):
+                    info[a["id"]] = a
+            except Exception:
+                pass                                            # colonnes « client » / « référence » facultatives
+        for e in items:
+            a = info.get(e["id"], {})
+            e["client"] = (a.get("partner_id") or [0, ""])[1]
+            e["reference"] = a.get("code") or ""
+        return {**r, "vehicles": items}
+
+    def _by_axis(self, d_from: date, d_to: date, setting: str | None = None, exact: bool = False, label: str = "Événements",
+                 var: str = "EVENT_PLAN") -> dict:
         """Résultat par événement : lignes analytiques ventilées sur l'axe « Événements » (MEETING), classées par compte comptable.
 
         IMPORTANT : une ligne ventilée sur plusieurs axes (BU, MEETING…) ne porte qu'un compte « principal » ; chaque axe a sa
@@ -333,7 +362,7 @@ class OdooProvider:
         Rattachement à XC ou CARS : uniquement d'après l'axe analytique BU (obligatoire à la saisie). Une ligne sans compte BU
         est comptée dans « bu_missing » (anomalie de saisie à corriger), jamais devinée ; un événement sans BU exploitable : « NONE »."""
         from ..bu import classify
-        plans, all_plans = self._event_plans()
+        plans, all_plans = self._event_plans(setting, exact, label, var)
         columns = sorted({self._plan_column(p, all_plans) for p in plans})
         bu_plan = next((p for p in all_plans if not p.get("parent_id") and self._plain(p["name"]).strip() == self._plain(settings.BU_PLAN).strip()), None)
         if not bu_plan:
@@ -420,7 +449,7 @@ class OdooProvider:
             if e["ca"] or e["direct_costs"] or e["other_costs"] or e["capex"] or e["amort"]:
                 out.append(e)
         out.sort(key=lambda e: (-e["ca"], e["name"]))
-        return {"events": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"],
+        return {"items": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"],
                 "bu_unmapped": sorted(unmapped), "bu_missing": missing}
 
     def _fr_lang(self) -> str | None:

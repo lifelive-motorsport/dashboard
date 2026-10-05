@@ -85,3 +85,43 @@ def test_grouping_failure_falls_back_to_raw_names():
     rows = [_row(1, "Alpha", "700010 CA XC", 10), _row(2, "Beta", "700010 CA XC", 20)]
     r = make(rows, None).top_clients(date(2026, 1, 1), date(2026, 9, 4))
     assert [c["name"] for c in r["total"]] == ["Beta", "Alpha"] and r["_meta"]["grouping"] is False
+
+
+def _shop_provider(langs=("en_US", "fr_BE"), fail_read=False):
+    p = OdooProvider.__new__(OdooProvider)
+    seen = {}
+
+    def call(model, method, **kw):
+        if model == "sale.order":
+            return [{"website_id": [1, "Lifelive Motorsport"], "amount_untaxed:sum": 1000.0, "__count": 10}]
+        if model == "sale.order.line":
+            return [{"product_id": [i, f"[{i}] Name {i}"], "price_subtotal:sum": 100.0 * (4 - i), "product_uom_qty:sum": 2.0 * i} for i in (1, 2, 3)] \
+                + [{"product_id": False, "price_subtotal:sum": 5.0, "product_uom_qty:sum": 1.0}]
+        if model == "res.lang":
+            return [{"code": c} for c in langs]
+        if model == "product.product":
+            seen["context"] = kw.get("context")
+            if fail_read:
+                raise RuntimeError("boom")
+            return [{"id": i, "display_name": f"[{i}] Nom {i}"} for i in kw["ids"]]
+    p._call = call
+    return p, seen
+
+
+def test_webshop_top_products_in_french_with_share_and_units():
+    p, seen = _shop_provider()
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 9, 4), top=2)
+    assert seen["context"]["lang"] == "fr_BE" and seen["context"]["active_test"] is False
+    assert [x["name"] for x in w["products"]] == ["[1] Nom 1", "[2] Nom 2"]            # français, tri par valeur
+    assert [x["value"] for x in w["products"]] == [300, 200] and [x["units"] for x in w["products"]] == [2.0, 4.0]
+    assert round(w["products"][0]["share"], 4) == round(300 / 600, 4)               # part du total des produits
+    assert w["products_total"] == {"value": 600, "units": 12.0, "count": 3}
+    assert w["name"] == "Webshop XC" and w["avg_basket"] == 100.0
+
+
+def test_webshop_french_falls_back_when_translation_fails_or_missing():
+    p, _ = _shop_provider(fail_read=True)
+    assert p.webshops(date(2026, 1, 1), date(2026, 9, 4), top=1)[0]["products"][0]["name"] == "[1] Name 1"
+    p2, seen2 = _shop_provider(langs=("en_US",))
+    assert p2.webshops(date(2026, 1, 1), date(2026, 9, 4), top=1)[0]["products"][0]["name"] == "[1] Name 1"
+    assert "context" not in seen2   # aucune langue française installée : pas d'appel de traduction

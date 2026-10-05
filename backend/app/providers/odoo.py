@@ -141,8 +141,32 @@ class OdooProvider:
         out["_meta"] = meta
         return out
 
-    def webshops(self, d_from: date, d_to: date) -> list[dict]:
-        """Ventes des sites web (commandes confirmées, HT). Libellés dans settings.WEBSHOP_LABELS."""
+    def _fr_lang(self) -> str | None:
+        """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""
+        if not hasattr(self, "_lang"):
+            try:
+                codes = {l["code"] for l in self._call("res.lang", "search_read", domain=[("active", "=", True)], fields=["code"])}
+                self._lang = next((c for c in ("fr_BE", "fr_FR") if c in codes), next((c for c in sorted(codes) if c.startswith("fr")), None))
+            except Exception:
+                log.exception("Langue française indisponible : noms de produits dans la langue par défaut")
+                self._lang = None
+        return self._lang
+
+    def _product_names(self, ids: list[int], fallback: dict[int, str]) -> dict[int, str]:
+        """Nom de chaque produit, en français si possible (« [référence] Nom »)."""
+        lang = self._fr_lang()
+        if not lang or not ids:
+            return fallback
+        try:
+            rows = self._call("product.product", "read", ids=ids, fields=["display_name"],
+                              context={"lang": lang, "active_test": False})
+            return {**fallback, **{r["id"]: r["display_name"] for r in rows}}
+        except Exception:
+            log.exception("Traduction des produits indisponible")
+            return fallback
+
+    def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
+        """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
                 ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
         out = []
@@ -156,8 +180,16 @@ class OdooProvider:
                                        ("product_id.type", "!=", "service"),  # hors livraison, ports, etc.
                                        ("order_id.date_order", ">=", d_from.isoformat()),
                                        ("order_id.date_order", "<", (d_to + timedelta(days=1)).isoformat())],
-                               aggregates=["price_subtotal:sum"], order="price_subtotal:sum desc", limit=5)
+                               aggregates=["price_subtotal:sum", "product_uom_qty:sum"], order="price_subtotal:sum desc")
+            prods = [l for l in lines if l.get("product_id")]
+            total_value = sum(l["price_subtotal:sum"] for l in prods)
+            total_units = sum(l["product_uom_qty:sum"] for l in prods)
+            best = prods[:top]
+            names = self._product_names([l["product_id"][0] for l in best], {l["product_id"][0]: l["product_id"][1] for l in best})
             out.append({"name": settings.WEBSHOP_LABELS.get(wname, wname), "orders": n, "revenue": round(revenue),
                         "avg_basket": round(revenue / n, 2) if n else 0.0,
-                        "top_products": [l["product_id"][1] for l in lines if l.get("product_id")]})
+                        "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
+                                      "units": round(l["product_uom_qty:sum"], 2),
+                                      "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],
+                        "products_total": {"value": round(total_value), "units": round(total_units, 2), "count": len(prods)}})
         return sorted(out, key=lambda w: -w["revenue"])

@@ -40,7 +40,12 @@ class DemoProvider:
 
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)
-        return [{"name": "XC Cross Car", "orders": round(310 * s), "revenue": round(185_000 * s),
-                 "avg_basket": 597.0, "top_products": ["Produit 1", "Produit 2", "Produit 3"]},
-                {"name": "Goldspeed", "orders": round(95 * s), "revenue": round(42_000 * s),
-                 "avg_basket": 442.0, "top_products": ["Produit 4", "Produit 5", "Produit 6"]}]
+
+        def shop(name, orders, revenue, basket, names):
+            vals = [revenue * 0.9 * w / sum(range(1, len(names) + 1)) for w in range(len(names), 0, -1)]
+            tot = sum(vals) / 0.6  # les produits listés ≈ 60 % du total
+            return {"name": name, "orders": round(orders * s), "revenue": round(revenue * s), "avg_basket": basket,
+                    "products": [{"name": n, "value": round(v * s), "units": round(v * s / 40, 2), "share": v / tot} for n, v in zip(names, vals)],
+                    "products_total": {"value": round(tot * s), "units": round(tot * s / 40, 2), "count": 120}}
+        return [shop("Webshop XC", 345, 188_000, 545.0, [f"[6000{i}] Produit exemple {i}" for i in range(1, 16)]),
+                shop("Webshop Goldspeed", 274, 154_000, 561.0, [f"[3652{i}] Pneu exemple {i}" for i in range(1, 6)])]

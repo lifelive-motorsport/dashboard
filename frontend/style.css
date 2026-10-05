@@ -102,3 +102,6 @@ h4.sub{margin:14px 0 4px;font-size:14px}
   .tabs{margin-bottom:4px}
   footer{margin-top:14px}
 }
+
+table.prodtable th:nth-child(2),table.prodtable td:nth-child(2){text-align:left;white-space:normal;min-width:180px}
+tr.tot td{font-weight:700;border-top:2px solid var(--line)}

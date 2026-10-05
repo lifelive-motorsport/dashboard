@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const eur = n => new Intl.NumberFormat('fr-BE', {style:'currency', currency:'EUR', maximumFractionDigits:0}).format(n);
+const num = n => new Intl.NumberFormat('fr-BE', {maximumFractionDigits: 2}).format(n);
 const pct = n => (n*100).toFixed(1).replace('.', ',') + ' %';
 const cls = n => n < 0 ? 'neg' : 'pos';
 const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -108,7 +109,7 @@ function bars(items, key, opts = {}) {
     <div class="bars"><div class="bar solo ${key === 'ca' ? 'ca' : 'm' + (b[key] < 0 ? ' n' : '')}" style="width:${Math.abs(b[key]) / max * 100}%"></div></div>
     <span class="num ${key === 'margin' ? cls(b[key]) : ''}">${eur(b[key])}${opts.sub ? `<br><small class="na">${opts.sub(b)}</small>` : ''}</span></div>`).join('') + `</div>`;
 }
-const table = (head, rows) => `<div class="table-wrap"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+const table = (head, rows, cl = '') => `<div class="table-wrap"><table class="${cl}"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><td>${eur(o.direct_costs)}</td>
   <td class="${cls(o.margin)}">${eur(o.margin)}</td><td class="${cls(o.margin)}">${margin(o)}</td></tr>`;
 const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
@@ -171,9 +172,13 @@ const PAGES = {
   'xc/webshop': () => [
     B('shops', 'Ventes des webshops', d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>`
       : `<div class="two">${d.webshops.map(w => kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)).join('')}</div>`),
-    B('products', 'Produits les plus vendus', d => d.webshops.unavailable ? '' : d.webshops.map(w =>
-      `<h4 class="sub">${esc(w.name)}</h4><ol>${(w.top_products || []).map(p => `<li><span>${esc(p)}</span></li>`).join('')}</ol>`).join('')),
-    NOTE('Commandes confirmées, hors taxes, hors lignes de service (livraison…). Source : commandes Odoo par site web.'),
+    B('products', 'Top 15 des produits vendus', d => d.webshops.unavailable ? '' : d.webshops.map(w => {
+      const t = w.products_total || {value: 0, units: 0, count: 0};
+      return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
+        (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
+        .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
+    }).join('')),
+    NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
   ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),

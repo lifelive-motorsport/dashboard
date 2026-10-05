@@ -12,6 +12,7 @@ from datetime import date, timedelta
 import httpx
 
 from .. import settings
+from ..names import normalize_name
 
 log = logging.getLogger("dashboard.odoo")
 PNL_PREFIXES = ("602", "603", "604", "700")
@@ -142,7 +143,7 @@ class OdooProvider:
             for pid, v in per_partner.items():
                 agg[key_of(pid)] = agg.get(key_of(pid), 0.0) + v
             top = sorted(agg.items(), key=lambda kv: -kv[1])[:limit]
-            return [{"name": label[k], "ca": round(v)} for k, v in top if v > 0]
+            return [{"name": normalize_name(label[k]), "ca": round(v)} for k, v in top if v > 0]   # affichage uniformisé
 
         total: dict[int, float] = {}
         for per in by_bu.values():

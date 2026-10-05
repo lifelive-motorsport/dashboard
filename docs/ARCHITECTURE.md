@@ -36,3 +36,6 @@ flowchart LR
 - Sans étiquette, les contacts d'une même société sont fusionnés automatiquement (société = `commercial_partner_id`).
 - Si Odoo refuse la lecture des contacts, le classement revient aux noms tels que saisis et l'écran l'indique.
 - Contrôle : `python scripts/odoo_check.py` liste les étiquettes trouvées.
+
+## Noms de clients
+L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifier dans Odoo : mots tout en majuscules de 4 lettres et plus → majuscule initiale ; sigles de 1 à 3 lettres et formes juridiques (SL, SARL, GmbH, s.r.o.) uniformisés ; texte entre parenthèses et mots en casse mixte inchangés.

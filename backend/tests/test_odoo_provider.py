@@ -143,3 +143,9 @@ def test_balance_sheet_open_invoices_and_credit_notes_posted_only():
     assert p.balance_sheet(2026) == {"year": 2026, "receivables": 197_511.0, "payables": 150_000.0, "cash": 7_895.0}
     assert all(m == "account.move" for m, _ in domains)
     assert ("move_type", "in", ["out_invoice", "out_refund"]) in [d for _, d in domains for d in d]
+
+
+def test_client_names_are_normalized_for_display_only():
+    rows = [_row(1, "TÜRKİYE OTOMOBİL SPORLARI FEDERASYONU (TOSFED)", "700010 CA XC", 100), _row(2, "Eduardo Salorio Instalaciones sl", "700010 CA XC", 50)]
+    r = make(rows, [_partner(1, "TÜRKİYE OTOMOBİL SPORLARI FEDERASYONU (TOSFED)"), _partner(2, "Eduardo Salorio Instalaciones sl")], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    assert [c["name"] for c in r["total"]] == ["Türkiye Otomobil Sporlari Federasyonu (TOSFED)", "Eduardo Salorio Instalaciones SL"]

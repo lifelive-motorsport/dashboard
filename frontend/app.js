@@ -239,6 +239,13 @@ function webshopPage(pick) {
       return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
         : '<p class="na">Évolution indisponible pour le moment.</p>';
     }),
+    B('products', 'Top 15 des produits vendus', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const t = w.products_total || {value: 0, units: 0, count: 0};
+      return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
+        (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
+        .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
+    }),
     B('payments', 'Méthodes de paiement', d => { const w = shop(d); return w ? modeTable(w.payments, 'Méthode', 'Paiements', 'Transactions des commandes confirmées (réussies, autorisées ou en attente, ex. virement) ; % = part du nombre de paiements.', (w.errors || {}).payments) : miss(d); }),
     B('delivery', 'Modes de livraison', d => { const w = shop(d); return w ? modeTable(w.deliveries, 'Mode', 'Commandes', 'Transporteur choisi sur les commandes confirmées ; « sans livraison » = retrait, services ou produits virtuels.', (w.errors || {}).deliveries) : miss(d); }),
     B('abandon', 'Abandons de panier', d => {
@@ -248,13 +255,6 @@ function webshopPage(pick) {
       return `<div class="kpis">${kpi('Paniers abandonnés', num(a.count), '', `dont ${num(a.identified)} avec client identifié (menu Odoo « Abandoned Carts ») et ${num(a.anonymous)} visiteurs non connectés`)}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', 'abandonnés ÷ (abandonnés + commandes)')}</div>`
         + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé, avec au moins un article, après le délai d’abandon d’Odoo (visiteurs non connectés compris). Survolez un point pour le détail.`,
           v => pct(v), p => `${p.label} : ${pct(p.avg)} — ${p.abandoned} abandonné${p.abandoned > 1 ? 's' : ''} dont ${p.identified} identifié${p.identified > 1 ? 's' : ''} (${eur(p.amount)}) pour ${p.orders} commande${p.orders > 1 ? 's' : ''}`, 'moyenne');
-    }),
-    B('products', 'Top 15 des produits vendus', d => {
-      const w = shop(d); if (!w) return miss(d);
-      const t = w.products_total || {value: 0, units: 0, count: 0};
-      return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
-        (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
-        .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
     }),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
   ];

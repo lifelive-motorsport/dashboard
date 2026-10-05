@@ -694,6 +694,54 @@ class OdooProvider:
                 "incomplete": bool(first and first > d_from + timedelta(days=7)),
                 "complete_from": first.isoformat() if first else None, "rate_from": rate_from.isoformat() if rate_from else None}
 
+    def _top_customers(self, wid: int, base: list, top: int = 15) -> dict:
+        """Meilleurs clients d'un webshop sur la période : CA HT, commandes, panier moyen, part du CA du webshop, méthodes de paiement
+        et de livraison utilisées, pays, dernière commande. Regroupements comme ailleurs (société mère, étiquettes regroup_client=)."""
+        orders = self._call("sale.order", "search_read", domain=base + [("website_id", "=", wid)],
+                            fields=["partner_id", "amount_untaxed", "date_order", "carrier_id"])
+        orders = [o for o in orders if o.get("partner_id")]
+        if not orders:
+            return {"customers": [], "total_ca": 0, "total_orders": 0, "count": 0, "repeat": 0, "top_ca": 0}
+        groups = self._client_groups({o["partner_id"][0] for o in orders})
+        pay: dict[int, str] = {}
+        try:                                                           # facultatif : nécessite l'accès aux transactions de paiement
+            for t in self._call("payment.transaction", "search_read",
+                                domain=[("sale_order_ids", "in", [o["id"] for o in orders]), ("state", "in", ["done", "authorized", "pending"])],
+                                fields=["sale_order_ids", "payment_method_id", "provider_id"]):
+                name = (t.get("payment_method_id") or t.get("provider_id") or [0, ""])[1] or "Non renseigné"
+                for oid in t.get("sale_order_ids") or []:
+                    pay.setdefault(oid, name)
+        except Exception:
+            pay = {}
+        agg: dict[str, dict] = {}
+        for o in orders:
+            key, label = groups.get(o["partner_id"][0], (f"p:{o['partner_id'][0]}", o["partner_id"][1]))
+            c = agg.setdefault(key, {"key": key, "name": normalize_name(label), "ca": 0.0, "orders": 0, "last": "", "pay": {}, "ship": {}})
+            c["ca"] += float(o["amount_untaxed"] or 0.0)
+            c["orders"] += 1
+            c["last"] = max(c["last"], str(o.get("date_order") or "")[:10])
+            if o["id"] in pay:
+                c["pay"][pay[o["id"]]] = c["pay"].get(pay[o["id"]], 0) + 1
+            ship = o["carrier_id"][1] if o.get("carrier_id") else "Sans livraison"
+            c["ship"][ship] = c["ship"].get(ship, 0) + 1
+        total_ca = sum(c["ca"] for c in agg.values())
+        best = sorted(agg.values(), key=lambda c: -c["ca"])[:top]
+        com_ids = [int(c["key"][2:]) for c in best if c["key"].startswith("c:")]
+        country: dict[str, str] = {}
+        if com_ids:
+            try:
+                for r in self._call("res.partner", "read", ids=com_ids, fields=["country_id"]):
+                    if r.get("country_id"):
+                        country[f"c:{r['id']}"] = r["country_id"][1]
+            except Exception:
+                pass
+        rank = lambda d: [{"name": k, "count": v} for k, v in sorted(d.items(), key=lambda kv: -kv[1])][:3]   # noqa: E731
+        customers = [{"name": c["name"], "ca": round(c["ca"]), "orders": c["orders"], "avg_basket": round(c["ca"] / c["orders"], 2),
+                      "share": c["ca"] / total_ca if total_ca else 0.0, "country": country.get(c["key"], ""), "last_order": c["last"],
+                      "payments": rank(c["pay"]), "deliveries": rank(c["ship"])} for c in best]
+        return {"customers": customers, "total_ca": round(total_ca), "total_orders": sum(c["orders"] for c in agg.values()),
+                "count": len(agg), "repeat": sum(1 for c in agg.values() if c["orders"] >= 2), "top_ca": round(sum(c["ca"] for c in best))}
+
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
@@ -737,7 +785,7 @@ class OdooProvider:
                         "deliveries": safe("deliveries", self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
                         "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)),
                         "visits": safe("visits", self._visits, wid, vf, vt), "top_pages": safe("top_pages", self._top_pages, wid, vf, vt),
-                        "errors": errors,
+                        "customers": safe("customers", self._top_customers, wid, base), "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

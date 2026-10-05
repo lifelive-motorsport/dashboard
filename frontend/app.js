@@ -234,7 +234,7 @@ function modeTable(rows, head, countLabel, note, err) {
     .concat([`<tr class="tot"><td>Total</td><td>${num(tot)}</td><td>100,0 %</td><td>${eur(amt)}</td></tr>`]), 'prodtable') + `<small class="na">${note}</small>`;
 }
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
-function webshopPage(pick, {topPages = true} = {}) {
+function webshopPage(pick, {topPages = true, customers = false} = {}) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
@@ -251,6 +251,21 @@ function webshopPage(pick, {topPages = true} = {}) {
       return `<h4 class="sub">${esc(w.name)} <small class="na">— ${t.count} références vendues</small></h4>` + table(['#', 'Produit', 'Valeur HT', 'Unités', '% du total'],
         (w.products || []).map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.name)}</td><td>${eur(p.value)}</td><td>${num(p.units)}</td><td>${pct(p.share)}</td></tr>`)
         .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
+    }),
+    B('customers', 'Top 15 des meilleurs clients', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const c = w.customers; if (!c) return `<p class="na">Meilleurs clients indisponibles pour le moment.</p>${(w.errors || {}).customers ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.customers)}</small>` : ''}`;
+      if (!c.customers.length) return '<p class="na">Aucune commande sur la période.</p>';
+      const top = c.customers, mix = l => (l || []).map((x, i, a) => esc(x.name) + (a.length > 1 || x.count > 1 ? ` <small class="na">×${x.count}</small>` : '')).join('<br>') || '–';
+      const rows = top.map((x, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(x.name)}${x.country ? `<br><small class="na">${esc(x.country)}</small>` : ''}</td><td>${eur(x.ca)}</td><td>${pct(x.share)}</td>
+        <td>${num(x.orders)}</td><td>${eur(x.avg_basket)}</td><td class="mix">${mix(x.payments)}</td><td class="mix">${mix(x.deliveries)}</td><td>${x.last_order ? fmtDate(x.last_order) : '–'}</td></tr>`);
+      const other = c.total_ca - c.top_ca;
+      rows.push(`<tr class="tot"><td></td><td>Total des ${top.length} premiers clients</td><td>${eur(c.top_ca)}</td><td>${pct(c.total_ca ? c.top_ca / c.total_ca : 0)}</td><td colspan="5"></td></tr>`,
+        `<tr><td></td><td>Autres clients</td><td>${eur(other)}</td><td>${pct(c.total_ca ? other / c.total_ca : 0)}</td><td colspan="5"></td></tr>`,
+        `<tr class="tot"><td></td><td>Total du webshop</td><td>${eur(c.total_ca)}</td><td>100,0 %</td><td>${num(c.total_orders)}</td><td>${c.total_orders ? eur(c.total_ca / c.total_orders) : '–'}</td><td colspan="3"></td></tr>`);
+      return `<div class="kpis">${kpi('Clients distincts', num(c.count))}${kpi('Clients récurrents', pct(c.count ? c.repeat / c.count : 0), '', `${num(c.repeat)} avec 2 commandes ou plus`)}${kpi('Part du top 15', pct(c.total_ca ? c.top_ca / c.total_ca : 0), '', 'du CA HT du webshop')}</div>`
+        + table(['#', 'Client', 'CA HT', '% du CA', 'Cmd', 'Panier moyen', 'Paiement', 'Livraison', 'Dernière cmd'], rows, 'prodtable')
+        + '<small class="na">Commandes confirmées, hors taxes ; contacts d’une même société fusionnés (et étiquettes « regroup_client= » appliquées). Paiement et livraison : modes les plus utilisés par le client (×nombre de commandes).</small>';
     }),
     B('payments', 'Méthodes de paiement', d => { const w = shop(d); return w ? modeTable(w.payments, 'Méthode', 'Paiements', 'Transactions des commandes confirmées (réussies, autorisées ou en attente, ex. virement) ; % = part du nombre de paiements.', (w.errors || {}).payments) : miss(d); }),
     B('delivery', 'Modes de livraison', d => { const w = shop(d); return w ? modeTable(w.deliveries, 'Mode', 'Commandes', 'Transporteur choisi sur les commandes confirmées ; « sans livraison » = retrait, services ou produits virtuels.', (w.errors || {}).deliveries) : miss(d); }),
@@ -280,7 +295,7 @@ function webshopPage(pick, {topPages = true} = {}) {
         + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
     }, true),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
-  ].filter(b => topPages || b.id !== 'toppages');
+  ].filter(b => (topPages || b.id !== 'toppages') && (customers || b.id !== 'customers'));
 }
 const PAGES = {
   'overview/ca': () => [
@@ -332,7 +347,7 @@ const PAGES = {
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
     NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
   ],
-  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name)),
+  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name), {customers: true}),
   'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name), {topPages: false}),      // 2 produits seulement : un classement de pages n'a pas de sens
   'xc/events': () => [
     B('events', 'Événements XC', d => eventsTable(d, ['XC'])),

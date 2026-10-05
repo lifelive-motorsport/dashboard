@@ -565,3 +565,33 @@ def test_abandoned_rate_ignores_months_before_the_oldest_cart_kept_by_odoo():
         assert round(a["rate"], 3) == 0.5                                                      # taux sur la partie couverte uniquement
     finally:
         FIRST_CART[0] = "2026-01-01 00:00:00"
+
+
+def test_top_customers_merge_contacts_and_report_payment_delivery_and_share():
+    p = OdooProvider.__new__(OdooProvider)
+    orders = [{"id": 1, "partner_id": [10, "Jean (ACME)"], "amount_untaxed": 300.0, "date_order": "2026-03-01 10:00:00", "carrier_id": [5, "Express"]},
+              {"id": 2, "partner_id": [11, "Marie (ACME)"], "amount_untaxed": 100.0, "date_order": "2026-05-02 10:00:00", "carrier_id": [5, "Express"]},
+              {"id": 3, "partner_id": [20, "PIERRE SOLO"], "amount_untaxed": 100.0, "date_order": "2026-04-02 10:00:00", "carrier_id": False}]
+    partners = {10: {"id": 10, "display_name": "Jean (ACME)", "commercial_partner_id": [1, "ACME"], "category_id": []},
+                11: {"id": 11, "display_name": "Marie (ACME)", "commercial_partner_id": [1, "ACME"], "category_id": []},
+                1: {"id": 1, "display_name": "ACME SA", "commercial_partner_id": [1, "ACME"], "category_id": []},
+                20: {"id": 20, "display_name": "PIERRE SOLO", "commercial_partner_id": [20, "x"], "category_id": []}}
+
+    def call(model, method, **kw):
+        if model == "sale.order":
+            return orders
+        if model == "res.partner" and kw["fields"] == ["country_id"]:
+            return [{"id": 1, "country_id": [3, "Belgique"]}, {"id": 20, "country_id": False}]
+        if model == "res.partner":
+            return [partners[i] for i in kw["ids"] if i in partners]
+        if model == "payment.transaction":
+            return [{"sale_order_ids": [1], "payment_method_id": [1, "Carte"]}, {"sale_order_ids": [2], "payment_method_id": [1, "Carte"]},
+                    {"sale_order_ids": [3], "payment_method_id": False, "provider_id": [2, "Virement"]}]
+        return []
+    p._call = call
+    r = p._top_customers(1, [])
+    a, b = r["customers"]
+    assert (a["name"], a["ca"], a["orders"], a["avg_basket"], round(a["share"], 2), a["country"], a["last_order"]) == ("Acme SA", 400, 2, 200.0, 0.8, "Belgique", "2026-05-02")
+    assert a["payments"] == [{"name": "Carte", "count": 2}] and a["deliveries"] == [{"name": "Express", "count": 2}]
+    assert b["payments"] == [{"name": "Virement", "count": 1}] and b["deliveries"] == [{"name": "Sans livraison", "count": 1}]
+    assert (r["total_ca"], r["total_orders"], r["count"], r["repeat"], r["top_ca"]) == (500, 3, 2, 1, 500)

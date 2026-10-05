@@ -98,6 +98,11 @@ class DemoProvider:
                     "avg": round(basket + 25 * math.sin(i + len(name)), 2)} for i, (_, lbl) in enumerate(buckets)]
             return {"name": name, "orders": round(orders * s), "revenue": round(revenue * s), "avg_basket": basket,
                     "basket_series": {"granularity": gran, "points": pts},
+                    "customers": {"customers": [{"name": f"Client exemple {i}", "ca": round(revenue * s * (0.09 / i)), "orders": 6 - i // 3, "avg_basket": round(revenue * s * 0.09 / i / max(1, 6 - i // 3)),
+                                                 "share": 0.09 / i, "country": ("Belgique", "France", "Allemagne")[i % 3], "last_order": f"2026-09-{28 - i:02d}",
+                                                 "payments": [{"name": "Carte bancaire", "count": 3}, {"name": "PayPal", "count": 1}],
+                                                 "deliveries": [{"name": "Livraison standard", "count": 4}]} for i in range(1, 16)],
+                                  "total_ca": round(revenue * s), "total_orders": round(orders * s), "count": round(orders * s * 0.7), "repeat": round(orders * s * 0.15), "top_ca": round(revenue * s * 0.45)},
                     "visits": {"granularity": gran, "views": round(orders * s * 38), "visitors": round(orders * s * 11), "path": "/shop",
                                "points": [{"label": p["label"], "views": 900 + 60 * ((i * 7) % 9), "visitors": 260 + 15 * ((i * 5) % 7), "avg": float(900 + 60 * ((i * 7) % 9))} for i, p in enumerate(pts)]},
                     "top_pages": [{"label": f"Page produit exemple {i}", "path": f"/shop/produit-exemple-{i}-{100 + i}", "views": 1200 // i, "share": (1200 // i) / 3000} for i in range(1, 16)],

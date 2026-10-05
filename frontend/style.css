@@ -143,3 +143,5 @@ th.sortable{cursor:pointer;user-select:none;white-space:normal;vertical-align:bo
 .adjbtns{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}.adjbtns button,.mini{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
 .adjbtns button.primary{background:var(--red);border-color:var(--red);color:#fff}.adjbtns button:disabled{opacity:.45;cursor:default}
 @media print{.adjbtns,.mini{display:none}}
+.prodtable td.mix{text-align:left;font-size:12px;line-height:1.3}
+.prodtable td.mix small{white-space:nowrap}

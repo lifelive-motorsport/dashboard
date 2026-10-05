@@ -35,7 +35,7 @@ function render() {
     `<div class="card"><div class="l">${GROUP[g.key]}</div><div class="v">${eur(g.ca)}</div>
      <div class="l">Marge brute <b class="${cls(g.margin)}">${eur(g.margin)}</b> · ${g.ca ? pct(g.margin/g.ca) : '–'}</div></div>`).join('');
   $('bs').innerHTML = kpi('Trésorerie', eur(bs.cash), cls(bs.cash)) + kpi('Créances clients', eur(bs.receivables))
-    + kpi('Dettes fournisseurs', eur(bs.payables)) + kpi('Solde net (tréso + créances − dettes)', eur(bs.cash+bs.receivables-bs.payables), cls(bs.cash+bs.receivables-bs.payables));
+    + kpi('Dettes fournisseurs', eur(bs.payables));
   $('tabs').innerHTML = TABS.map(([k,l]) => `<button data-k="${k}" class="${k===tab?'on':''}">${l}</button>`).join('');
   const tc = data.top_clients;
   $('clients').innerHTML = tc.unavailable ? `<p class="na">${tc.unavailable}</p>`

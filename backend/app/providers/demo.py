@@ -42,6 +42,24 @@ class DemoProvider:
         out["_meta"] = {"grouping": True, "groups": 0, "open": True}
         return out
 
+    def top_suppliers(self, d_from: date, d_to: date) -> dict:
+        rnd = random.Random(11)
+        names = [f"Fournisseur {c}" for c in "ABCDEFGHIJKLMNOPQRST"]
+        s = _scale(d_from, d_to)
+
+        def board(total: float) -> list[dict]:
+            w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
+            return [{"name": n, "ca": round(total * s * 0.75 * x / sum(w)), "open": round(total * s * 0.75 * x / sum(w) * (0.0 if i % 4 == 0 else 0.1 * (i % 4)))}
+                    for i, (n, x) in enumerate(list(zip(names, w))[:15])]
+        sizes = {"XC": 1_200_000, "MODERN_RALLY": 45_000, "HISTORIC_RALLY": 90_000, "HISTORIC_RACING": 300_000,
+                 "CARS_OTHERS": 40_000, "HORS_BU": 520_000}
+        sizes = {"total": sum(sizes.values()), **sizes}                       # le total est la somme des parties
+        out = {k: board(v) for k, v in sizes.items()}
+        out["_totals"] = {k: round(v * s) for k, v in sizes.items()}
+        out["_open_totals"] = {k: round(sum(c["open"] for c in v) * 1.2) for k, v in out.items() if not k.startswith("_")}
+        out["_meta"] = {"grouping": True, "groups": 0, "open": True}
+        return out
+
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)
 

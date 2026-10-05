@@ -75,15 +75,14 @@ class OdooProvider:
                 "payables": -self._open_invoices(["in_invoice", "in_refund"], year),  # dette affichée positive, avoirs déduits
                 "cash": rows[0]["balance:sum"] if rows else 0.0}
 
-    # Regroupement de clients : étiquette de contact Odoo « regroup_client=Nom du groupe »
-    TAG = re.compile(r"^\s*regroup_client\s*=\s*(.+?)\s*$", re.IGNORECASE)
-
-    def _client_groups(self, partner_ids: set[int]) -> dict[int, tuple[str, str]]:
+    # ---- Regroupement des tiers : étiquette de contact Odoo « regroup_client=X » / « regroup_fournisseur=X » ----------------
+    def _client_groups(self, partner_ids: set[int], prefix: str = "regroup_client") -> dict[int, tuple[str, str]]:
         """partner_id -> (clé, libellé).
 
         1) les contacts d'une même société sont fusionnés (commercial_partner_id) ;
-        2) une étiquette « regroup_client=X » sur le contact ou sur sa société regroupe tout ce qui porte X.
+        2) une étiquette « <prefix>=X » sur le contact ou sur sa société regroupe tout ce qui porte X.
         """
+        tag = re.compile(rf"^\s*{re.escape(prefix)}\s*=\s*(.+?)\s*$", re.IGNORECASE)
         fields = ["display_name", "commercial_partner_id", "category_id"]
         by_id = {x["id"]: x for x in self._call("res.partner", "read", ids=sorted(partner_ids), fields=fields)}
         missing = {x["commercial_partner_id"][0] for x in by_id.values() if x.get("commercial_partner_id")} - by_id.keys()
@@ -98,34 +97,54 @@ class OdooProvider:
                 continue
             com = by_id.get(me["commercial_partner_id"][0], me) if me.get("commercial_partner_id") else me
             names = sorted({m.group(1) for t in (me.get("category_id") or []) + (com.get("category_id") or [])
-                            if (m := self.TAG.match(tags.get(t, "")))}, key=str.lower)
+                            if (m := tag.match(tags.get(t, "")))}, key=str.lower)
             if names:
                 if len(names) > 1:
-                    log.warning("Plusieurs étiquettes regroup_client sur le contact %s : %s", pid, names)
+                    log.warning("Plusieurs étiquettes %s sur le contact %s : %s", prefix, pid, names)
                 out[pid] = ("g:" + names[0].lower(), names[0])
             else:
                 out[pid] = (f"c:{com['id']}", com["display_name"])
         return out
 
-    def _open_by_bu(self, d_from: date, d_to: date) -> tuple[dict[str, dict[int, float]], dict[int, str]]:
-        """Solde encore ouvert (TTC, reste dû) des factures clients de la période, par client puis par BU.
+    @staticmethod
+    def _code_name(label: str) -> tuple[str | None, str]:
+        m = re.match(r"^\s*(\d+)\s*(.*)$", label)
+        return (m.group(1), m.group(2)) if m else (None, label)
 
-        Le reste dû d'une facture est réparti entre les BU au prorata des lignes de CA (comptes 700) de cette facture."""
+    @classmethod
+    def _bucket_revenue(cls, label: str) -> str | None:
+        """BU d'un compte de CA (700…) ; None si le compte n'est pas du CA exploitable."""
         from ..bu import classify
+        code, name = cls._code_name(label)
+        c = code and classify(code, name)
+        return c.bu if c and c.kind == "revenue" else None
+
+    @classmethod
+    def _bucket_cost(cls, label: str) -> str:
+        """BU d'un compte de charge (602/603/604 + suffixe de BU) ; sinon « HORS_BU » (frais généraux, véhicules, honoraires…)."""
+        from ..bu import classify
+        code, name = cls._code_name(label)
+        c = code and classify(code, name)
+        return c.bu if c and c.kind == "direct_cost" and c.bu != "UNASSIGNED" else "HORS_BU"
+
+    def _open_split(self, d_from: date, d_to: date, move_types: list[str], line_domain: list, bucket, line_sign: int,
+                    amount_sign: int) -> tuple[dict[str, dict[int, float]], dict[int, str]]:
+        """Solde encore ouvert (reste dû TTC) des factures/avoirs de la période, par tiers puis par BU.
+
+        Le reste dû d'une facture est réparti entre les BU au prorata de ses lignes (comptes classés par `bucket`)."""
         invs = self._call("account.move", "search_read",
-                          domain=[("state", "=", "posted"), ("move_type", "in", ["out_invoice", "out_refund"]),
+                          domain=[("state", "=", "posted"), ("move_type", "in", move_types),
                                   ("payment_state", "in", ["not_paid", "partial"]), ("partner_id", "!=", False),
                                   ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
                           fields=["partner_id", "amount_residual_signed"])
         shares: dict[int, dict[str, float]] = {}
         ids = [x["id"] for x in invs]
         for k in range(0, len(ids), 400):
-            for r in self._grouped([("move_id", "in", ids[k:k + 400]), ("account_id.code", "=like", "700%")], ["move_id", "account_id"]):
-                m = re.match(r"^\s*(\d+)", r["account_id"][1])
-                c = m and classify(m.group(1), re.sub(r"^\s*\d+\s*", "", r["account_id"][1]))
-                if c:
+            for r in self._grouped([("move_id", "in", ids[k:k + 400])] + line_domain, ["move_id", "account_id"]):
+                b = bucket(r["account_id"][1])
+                if b:
                     d = shares.setdefault(r["move_id"][0], {})
-                    d[c.bu] = d.get(c.bu, 0.0) - r["balance:sum"]
+                    d[b] = d.get(b, 0.0) + line_sign * r["balance:sum"]
         out: dict[str, dict[int, float]] = {}
         names: dict[int, str] = {}
         for inv in invs:
@@ -136,38 +155,22 @@ class OdooProvider:
             parts = {b: v / tot for b, v in sh.items()} if tot else {"UNASSIGNED": 1.0}
             for b, f in parts.items():
                 out.setdefault(b, {}).setdefault(pid, 0.0)
-                out[b][pid] += inv["amount_residual_signed"] * f
+                out[b][pid] += amount_sign * inv["amount_residual_signed"] * f
         return out, names
 
-    def top_clients(self, d_from: date, d_to: date, limit: int = 15) -> dict:
-        """Classement des clients par CA (comptes 700) : total et par BU, avec regroupement et solde ouvert. Lecture seule."""
-        from ..bu import classify
-        domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()),
-                  ("date", "<=", d_to.isoformat()), ("account_id.code", "=like", "700%"),
-                  ("partner_id", "!=", False)]
-        by_bu: dict[str, dict[int, float]] = {}
-        names: dict[int, str] = {}
-        for row in self._grouped(domain, ["partner_id", "account_id"]):
-            m = re.match(r"^\s*(\d+)", row["account_id"][1])
-            c = m and classify(m.group(1), re.sub(r"^\s*\d+\s*", "", row["account_id"][1]))
-            if not c:
-                continue
-            pid, pname = row["partner_id"]
-            names[pid] = pname
-            by_bu.setdefault(c.bu, {}).setdefault(pid, 0.0)
-            by_bu[c.bu][pid] -= row["balance:sum"]  # crédit = CA
-
+    def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int) -> dict:
+        """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre."""
         meta = {"grouping": True, "groups": 0, "open": True}
         try:
-            open_bu, open_names = self._open_by_bu(d_from, d_to)
+            open_bucket, open_names = open_fn()
             names = {**open_names, **names}
         except Exception:  # droits insuffisants, etc. : pas de solde ouvert, le reste fonctionne
-            log.exception("Solde ouvert par client indisponible")
-            open_bu, meta["open"] = {}, False
+            log.exception("Solde ouvert indisponible")
+            open_bucket, meta["open"] = {}, False
         try:
-            groups = self._client_groups(set(names))
+            groups = self._client_groups(set(names), prefix)
         except Exception:  # droits insuffisants, etc. : on garde les noms tels que saisis
-            log.exception("Regroupement de clients indisponible")
+            log.exception("Regroupement indisponible")
             groups, meta["grouping"] = {}, False
         label: dict[str, str] = {}
 
@@ -175,6 +178,13 @@ class OdooProvider:
             k, lab = groups.get(pid, (f"p:{pid}", names[pid]))
             label.setdefault(k, lab)
             return k
+
+        def merge(dicts) -> dict[int, float]:
+            out: dict[int, float] = {}
+            for d in dicts:
+                for pid, v in d.items():
+                    out[pid] = out.get(pid, 0.0) + v
+            return out
 
         def board(per_partner: dict[int, float], per_open: dict[int, float]) -> list[dict]:
             agg: dict[str, float] = {}
@@ -187,23 +197,55 @@ class OdooProvider:
             return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None}
                     for k, v in top if v > 0]   # affichage uniformisé
 
-        def merge(dicts) -> dict[int, float]:
-            out: dict[int, float] = {}
-            for d in dicts:
-                for pid, v in d.items():
-                    out[pid] = out.get(pid, 0.0) + v
-            return out
-
-        out = {"total": board(merge(by_bu.values()), merge(open_bu.values()))}
-        for bu, per in by_bu.items():
-            out[bu] = board(per, open_bu.get(bu, {}))
-        out["_open_totals"] = {"total": round(sum(sum(d.values()) for d in open_bu.values()))} if meta["open"] else {}
-        for bu, d in open_bu.items():
-            if meta["open"]:
-                out["_open_totals"][bu] = round(sum(d.values()))
+        out = {"total": board(merge(by_bucket.values()), merge(open_bucket.values()))}
+        for b, per in by_bucket.items():
+            out[b] = board(per, open_bucket.get(b, {}))
+        out["_totals"] = {"total": round(sum(sum(d.values()) for d in by_bucket.values())),
+                          **{b: round(sum(d.values())) for b, d in by_bucket.items()}}
+        out["_open_totals"] = ({"total": round(sum(sum(d.values()) for d in open_bucket.values())),
+                                **{b: round(sum(d.values())) for b, d in open_bucket.items()}} if meta["open"] else {})
         meta["groups"] = len({k for k in label if k.startswith("g:")})
         out["_meta"] = meta
         return out
+
+    def top_clients(self, d_from: date, d_to: date, limit: int = 15) -> dict:
+        """Classement des clients par CA (comptes 700) : total et par BU, avec regroupement et solde ouvert. Lecture seule."""
+        domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()),
+                  ("date", "<=", d_to.isoformat()), ("account_id.code", "=like", "700%"),
+                  ("partner_id", "!=", False)]
+        by_bu: dict[str, dict[int, float]] = {}
+        names: dict[int, str] = {}
+        for row in self._grouped(domain, ["partner_id", "account_id"]):
+            bu = self._bucket_revenue(row["account_id"][1])
+            if not bu:
+                continue
+            pid, pname = row["partner_id"]
+            names[pid] = pname
+            by_bu.setdefault(bu, {}).setdefault(pid, 0.0)
+            by_bu[bu][pid] -= row["balance:sum"]  # crédit = CA
+        return self._boards(by_bu, lambda: self._open_split(
+            d_from, d_to, ["out_invoice", "out_refund"], [("account_id.code", "=like", "700%")], self._bucket_revenue, -1, 1),
+            names, "regroup_client", limit)
+
+    def top_suppliers(self, d_from: date, d_to: date, limit: int = 15) -> dict:
+        """Classement des fournisseurs par achats HT (lignes de factures et avoirs fournisseurs comptabilisés).
+
+        Chaque ligne est rattachée à une BU d'après son compte comptable (602/603/604 + suffixe de BU) ; les autres comptes
+        (frais généraux, véhicules, honoraires…) vont dans « HORS_BU ». « total » = toutes les lignes. Lecture seule."""
+        line = [("display_type", "=", "product")]            # lignes de facture : ni TVA ni écriture de tiers
+        domain = [("parent_state", "=", "posted"), ("move_id.move_type", "in", ["in_invoice", "in_refund"]),
+                  ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()), ("partner_id", "!=", False)] + line
+        by_bucket: dict[str, dict[int, float]] = {}
+        names: dict[int, str] = {}
+        for row in self._grouped(domain, ["partner_id", "account_id"]):
+            b = self._bucket_cost(row["account_id"][1])
+            pid, pname = row["partner_id"]
+            names[pid] = pname
+            by_bucket.setdefault(b, {}).setdefault(pid, 0.0)
+            by_bucket[b][pid] += row["balance:sum"]           # débit = achat
+        return self._boards(by_bucket, lambda: self._open_split(
+            d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
+            names, "regroup_fournisseur", limit)
 
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""

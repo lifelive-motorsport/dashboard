@@ -32,10 +32,14 @@ def provider():
 
 
 def _safe(fn, *a):
+    """Un bloc secondaire (clients, fournisseurs, webshops) qui échoue ne doit pas empêcher d'afficher le reste."""
     try:
         return fn(*a)
     except NotImplementedError as e:
         return {"unavailable": str(e)}
+    except Exception:
+        log.exception("Bloc indisponible : %s", getattr(fn, "__name__", fn))
+        return {"unavailable": "Données momentanément indisponibles (voir les journaux du service)."}
 
 
 @app.middleware("http")
@@ -78,6 +82,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "pnl": aggregate(p.pnl_balances(d_from, d_to)),
             "balance_sheet": p.balance_sheet(d_to.year),
             "top_clients": _safe(p.top_clients, d_from, d_to),
+            "top_suppliers": _safe(p.top_suppliers, d_from, d_to),
             "webshops": _safe(p.webshops, d_from, d_to),
         }
     except Exception as e:  # le détail va dans les journaux, jamais vers le navigateur

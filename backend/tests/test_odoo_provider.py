@@ -194,3 +194,48 @@ def test_credit_note_reduces_open_balance():
     lines = [{"move_id": [21, "F"], "account_id": [1, "700010 CA XC"], "balance:sum": -826.45}, {"move_id": [22, "A"], "account_id": [1, "700010 CA XC"], "balance:sum": 165.29}]
     r = make(rows, [_partner(1, "Alpha")], {}, invoices, lines).top_clients(date(2026, 1, 1), date(2026, 9, 4))
     assert r["total"][0]["open"] == 800
+
+
+def _srow(pid, name, acc, amount):
+    return {"partner_id": [pid, name], "account_id": [1, acc], "balance:sum": amount}
+
+
+def test_suppliers_ranked_by_bu_from_account_of_each_invoice_line():
+    rows = [_srow(1, "Four 1", "602010 FRAIS XC Manufacturer", 300), _srow(1, "Four 1", "604040 ACH. MARCH. Historic Racing", 200),
+            _srow(1, "Four 1", "615001 Carburant Véhicules loués", 100), _srow(2, "Four 2", "604010 ACH. MARCH. XC Manufacturer", 500),
+            _srow(2, "Four 2", "604010 ACH. MARCH. XC Manufacturer", -100),                    # avoir : réduit les achats
+            _srow(3, "Four 3", "604099 FRAIS REFACTURÉS", 50)]
+    r = make(rows, [_partner(1, "Four 1"), _partner(2, "Four 2"), _partner(3, "Four 3")], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    names = lambda k: [(c["name"], c["ca"]) for c in r[k]]
+    assert names("total") == [("Four 1", 600), ("Four 2", 400), ("Four 3", 50)]
+    assert names("XC") == [("Four 2", 400), ("Four 1", 300)]
+    assert names("HISTORIC_RACING") == [("Four 1", 200)]
+    assert names("HORS_BU") == [("Four 1", 100), ("Four 3", 50)]          # 615 et 604099 : pas de BU
+    assert r["_totals"]["total"] == 1050 and r["_totals"]["XC"] == 700
+
+
+def test_suppliers_query_only_posted_bill_lines_not_taxes():
+    seen = {}
+    p = make([], [], {})
+    p._grouped = lambda domain, groupby: seen.update(domain=domain, groupby=groupby) or []
+    p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert ("display_type", "=", "product") in seen["domain"] and ("parent_state", "=", "posted") in seen["domain"]
+    assert ("move_id.move_type", "in", ["in_invoice", "in_refund"]) in seen["domain"] and seen["groupby"] == ["partner_id", "account_id"]
+
+
+def test_supplier_open_balance_is_debt_split_by_bu_of_bill_lines():
+    rows = [_srow(1, "Four 1", "602010 FRAIS XC Manufacturer", 600), _srow(1, "Four 1", "615001 Carburant", 400)]
+    invoices = [{"id": 31, "partner_id": [1, "Four 1"], "amount_residual_signed": -1210.0}]            # facture fournisseur : reste dû négatif
+    lines = [{"move_id": [31, "B1"], "account_id": [1, "602010 FRAIS XC Manufacturer"], "balance:sum": 600.0},
+             {"move_id": [31, "B1"], "account_id": [2, "615001 Carburant"], "balance:sum": 400.0}]
+    r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["total"][0]["open"] == 1210 and r["XC"][0]["open"] == 726 and r["HORS_BU"][0]["open"] == 484
+    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HORS_BU": 484}
+
+
+def test_supplier_grouping_uses_its_own_tag_prefix():
+    rows = [_srow(1, "Four 1", "604010 ACH. MARCH. XC", 100), _srow(2, "Four 2", "604010 ACH. MARCH. XC", 50)]
+    partners = [_partner(1, "Four 1", cats=[10, 12]), _partner(2, "Four 2", cats=[11])]
+    tags = {10: "regroup_fournisseur=Groupe F", 11: "regroup_fournisseur=Groupe F", 12: "regroup_client=Pas pour les fournisseurs"}
+    r = make(rows, partners, tags).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert [(c["name"], c["ca"]) for c in r["total"]] == [("Groupe F", 150)]

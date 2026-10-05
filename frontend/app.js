@@ -9,7 +9,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
-  ['overview', 'Overview', [['ca','CA'], ['mb','MB']]],
+  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['suppliers','Fournisseurs']]],
   ['xcvscars', 'XC vs CARS', [['ca','CA'], ['mb','MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop','Par webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
@@ -19,7 +19,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['overview/ca','overview/mb','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
+const LIVE = new Set(['overview/ca','overview/mb','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -55,7 +55,7 @@ const PLAN = {
     'Le périmètre exact (comptes, sponsoring) et un budget de référence.'],
 };
 
-let token = sessionStorage.getItem('idt'), tab = 'total', cfg;
+let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
 const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca');
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
@@ -120,28 +120,40 @@ const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><t
 const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
-function clients(d, allowed) {
-  const tc = d.top_clients;
-  if (tc.unavailable) return `<p class="na">${esc(tc.unavailable)}</p>`;
-  const cur = allowed.includes(tab) ? tab : allowed[0];
-  const labels = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
-  const scope = cur === 'total' ? d.pnl.total.ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre affiché
+const CLIENT_TABS = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
+const SUPPLIER_TABS = {total:'Général', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
+const ALL_SUPPLIERS = Object.keys(SUPPLIER_TABS);
+
+// Classement clients (kind 'c') ou fournisseurs (kind 's') : mêmes colonnes, mêmes totaux.
+function ranking(d, kind, allowed) {
+  const sup = kind === 's', tc = sup ? d.top_suppliers : d.top_clients, labels = sup ? SUPPLIER_TABS : CLIENT_TABS;
+  if (!tc || tc.unavailable) return `<p class="na">${esc(tc ? tc.unavailable : 'Indisponible pour le moment.')}</p>`;
+  const sel = sup ? tabS : tab, cur = allowed.includes(sel) ? sel : allowed[0];
+  const scope = sup ? ((tc._totals || {})[cur] || 0)                                   // achats HT du périmètre
+    : cur === 'total' ? d.pnl.total.ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre
   const share = v => scope > 0 ? pct(v / scope) : '–';
   const list = tc[cur] || [], shown = list.reduce((s, c) => s + c.ca, 0), other = scope - shown;
   const hasOpen = !!(tc._meta && tc._meta.open), sumOpen = list.reduce((s, c) => s + (c.open || 0), 0);
   const scopeOpen = hasOpen ? ((tc._open_totals || {})[cur] || 0) : 0;
-  const op = v => hasOpen ? `<td class="open">${v > 0 ? eur(v) : v < 0 ? eur(v) : '–'}</td>` : '';
+  const op = v => hasOpen ? `<td class="open">${v ? eur(v) : '–'}</td>` : '';
+  const T = sup ? {one: 'fournisseurs', other: 'Autres fournisseurs', scope: 'Total des achats du périmètre', head: ['#', 'Fournisseur', 'Achats HT', '% des achats'], open: 'Reste à payer'}
+                : {one: 'clients', other: 'Autres clients et ventes sans client identifié', scope: 'Total du périmètre', head: ['#', 'Client', 'CA', '% du CA'], open: 'Solde ouvert'};
   const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${op(c.open || 0)}</tr>`);
-  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers clients</td><td>${eur(shown)}</td><td>${share(shown)}</td>${op(sumOpen)}</tr>`,
-    `<tr><td></td><td>Autres clients et ventes sans client identifié</td><td>${eur(other)}</td><td>${share(other)}</td>${op(scopeOpen - sumOpen)}</tr>`,
-    `<tr class="tot"><td></td><td>Total du périmètre</td><td>${eur(scope)}</td><td>100,0 %</td>${op(scopeOpen)}</tr>`);
-  const m = tc._meta, info = !m ? '' : m.grouping
-    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.</small>`
-    : `<small class="neg">Regroupement indisponible : les clients sont affichés tels que saisis dans Odoo.</small>`;
-  const infoOpen = m && !m.open ? `<br><small class="neg">Solde ouvert indisponible pour le moment.</small>` : '';
-  return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    ${list.length ? table(['#', 'Client', 'CA', '% du CA'].concat(hasOpen ? ['Solde ouvert'] : []), rows, 'prodtable') : '<p class="na">Aucun client sur la période.</p>'}${info}${infoOpen}`;
+  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${op(sumOpen)}</tr>`,
+    `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${op(scopeOpen - sumOpen)}</tr>`,
+    `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${op(scopeOpen)}</tr>`);
+  const m = tc._meta, tag = sup ? 'regroup_fournisseur=' : 'regroup_client=';
+  const info = !m ? '' : m.grouping
+    ? `<small class="na">Regroupements d’après les étiquettes Odoo « ${tag} » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. `
+      + (sup ? 'Achats HT = lignes de factures fournisseurs (avoirs déduits), rattachées à une BU d’après le compte comptable de chaque ligne (602, 603, 604) ; « Hors BU » = frais généraux, véhicules, honoraires… <i>Reste à payer</i> = reste dû TTC des factures de la période non soldées.'
+             : 'Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.') + '</small>'
+    : `<small class="neg">Regroupement indisponible : les noms sont affichés tels que saisis dans Odoo.</small>`;
+  const infoOpen = m && !m.open ? `<br><small class="neg">${T.open} indisponible pour le moment.</small>` : '';
+  return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
+    ${list.length ? table(T.head.concat(hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoOpen}`;
 }
+const clients = (d, allowed) => ranking(d, 'c', allowed);
+const suppliers = (d, allowed) => ranking(d, 's', allowed);
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
@@ -166,6 +178,14 @@ const PAGES = {
     B('bu', 'Marge brute par BU', d => bars(busOf(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     NOTE('Marge brute = CA − frais directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
   ],
+  'overview/suppliers': () => [
+    B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = Object.keys(t).filter(k => k !== 'total' && k !== 'HORS_BU').reduce((x, k) => x + t[k], 0);
+      return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`
+        : `<div class="kpis">${kpi('Achats HT', eur(t.total || 0)) + kpi('Rattachés à une BU', eur(bu), '', pct(t.total ? bu / t.total : 0))
+          + kpi('Hors BU (frais généraux…)', eur(t.HORS_BU || 0), '', pct(t.total ? (t.HORS_BU || 0) / t.total : 0))
+          + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {}).total || 0)) : '')}</div>`; }),
+    B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),
+  ],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
       return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi('CARS', eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
@@ -181,6 +201,7 @@ const PAGES = {
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
     B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
+    B('suppliers', 'Hit-parade fournisseurs XC', d => suppliers(d, ['XC'])),
   ],
   'xc/lignes': () => [
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
@@ -204,6 +225,7 @@ const PAGES = {
   'cars/bu': () => [
     B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     B('clients', 'Hit-parade clients', d => clients(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'])),
+    B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),
   ],
 };
@@ -314,7 +336,7 @@ $('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
 $('nav').onclick = e => { const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
-$('page').onclick = e => { if (e.target.dataset.tab) { tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
+$('page').onclick = e => { if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
 $('page').onchange = e => {
   const bid = e.target.dataset.bid; if (!bid || !e.target.classList.contains('per')) return;
   const b = current.blocks.find(x => x.id === bid); periods[bkey(b)] = e.target.value; store.set('lm_periods', JSON.stringify(periods));

@@ -483,10 +483,10 @@ class OdooProvider:
             return fallback
 
     @staticmethod
-    def _buckets(d_from: date, d_to: date) -> tuple[str, list[tuple[date, str]]]:
-        """Découpage de la période : par semaine (lundi) si elle ne dépasse pas 45 jours, sinon par mois. [(début, libellé)]."""
+    def _buckets(d_from: date, d_to: date, weekly: bool | None = None) -> tuple[str, list[tuple[date, str]]]:
+        """Découpage de la période : par semaine (lundi) si elle ne dépasse pas 45 jours, sinon par mois (ou selon `weekly`)."""
         mois = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
-        if (d_to - d_from).days <= 45:
+        if (weekly if weekly is not None else (d_to - d_from).days <= 45):
             d, out = d_from - timedelta(days=d_from.weekday()), []
             while d <= d_to:
                 out.append((d, f"{d.day} {mois[d.month - 1]}"))
@@ -502,7 +502,7 @@ class OdooProvider:
         """Visites du webshop d'après le suivi des pages d'Odoo (website.track), limité aux pages du chemin WEBSHOP_PATH.
         Pages vues et visiteurs uniques par semaine/mois, et totaux de la période. Odoo ne suit que certaines pages
         (produits, pages marquées « suivre ») : ce sont des ordres de grandeur, pas une mesure d'audience exhaustive."""
-        gran, buckets = self._buckets(d_from, d_to)
+        gran, buckets = self._buckets(d_from, d_to, weekly=True)
         shop = [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%")]
 
         def span(a: date, b: date) -> list:
@@ -536,7 +536,10 @@ class OdooProvider:
         pts = [{"label": r[2], "views": v, "visitors": u, "avg": None if first and r[1] < first else float(v)}
                for r, (v, u) in zip(ranges, res[:-1])]
         views, visitors = res[-1]
-        return {"granularity": gran, "points": pts, "views": views, "visitors": visitors, "path": settings.WEBSHOP_PATH,
+        orders = self._call("sale.order", "search_count", domain=[("website_id", "=", wid), ("state", "in", ["sale", "done"]),
+                                                                  ("date_order", ">=", d_from.isoformat()), ("date_order", "<", (d_to + timedelta(days=1)).isoformat())])
+        return {"granularity": gran, "points": pts, "views": views, "visitors": visitors, "orders": orders, "path": settings.WEBSHOP_PATH,
+                "from": d_from.isoformat(), "to": d_to.isoformat(),
                 "complete_from": first.isoformat() if first else None,
                 "incomplete": bool(first and first > d_from + timedelta(days=7))}
 
@@ -674,6 +677,8 @@ class OdooProvider:
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
                 ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
         out = []
+        vt = date.today()
+        vf = vt - timedelta(days=settings.VISITS_DAYS - 1)      # visites : fenêtre fixe (Odoo n'en garde que ~60 jours), indépendante de la période
         try:
             series = self._basket_series(d_from, d_to, base)
         except Exception:                                      # le graphique est un plus : ne bloque pas le reste de la page
@@ -709,7 +714,7 @@ class OdooProvider:
                         "payments": safe("payments", self._payments, wid, order_dom),
                         "deliveries": safe("deliveries", self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
                         "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)),
-                        "visits": safe("visits", self._visits, wid, d_from, d_to), "top_pages": safe("top_pages", self._top_pages, wid, d_from, d_to),
+                        "visits": safe("visits", self._visits, wid, vf, vt), "top_pages": safe("top_pages", self._top_pages, wid, vf, vt),
                         "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),

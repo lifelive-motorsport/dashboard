@@ -1,4 +1,4 @@
-"""Test de connexion Odoo en LECTURE SEULE. Usage :
+"""Test de connexion Odoo en LECTURE SEULE (aucune écriture n'est jamais tentée). Usage :
   ODOO_URL=https://xxx.odoo.com ODOO_DB=xxx ODOO_API_KEY=xxx python scripts/odoo_check.py
 Ne contient ni n'affiche aucun secret.
 """
@@ -39,7 +39,14 @@ for label, model, method, kw in checks:
     print(f"{'OK ' if not err else 'KO '} {label}: {detail}")
     if label == "Sites web" and res:
         print("    sites :", [w["name"] for w in res])
-# la clé ne doit PAS pouvoir écrire :
-res, err = call("res.partner", "write", ids=[1], vals={"comment": "test"})
-print("OK " if err else "KO ", "Écriture refusée (attendu)" if err else "ATTENTION : la clé peut écrire !")
-sys.exit(0 if ok and err else 1)
+# Droits d'écriture : vérification SANS écrire (has_access ne modifie rien).
+writable = []
+for model in ("res.partner", "account.move", "account.move.line", "account.account", "sale.order", "product.product"):
+    res, err = call(model, "has_access", operation="write")
+    if res is True:
+        writable.append(model)
+if writable:
+    print("KO  ATTENTION : la clé a un droit d'ÉCRITURE sur :", ", ".join(writable))
+else:
+    print("OK  Aucun droit d'écriture (lecture seule)")
+sys.exit(0 if ok and not writable else 1)

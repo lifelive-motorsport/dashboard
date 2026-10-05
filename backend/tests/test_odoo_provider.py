@@ -331,7 +331,7 @@ def test_events_filter_on_the_meeting_plan_column_not_on_the_main_account():
     q = seen["account.analytic.line"][0]
     assert ("x_plan1_id", "!=", False) in q["domain"] and q["groupby"] == ["x_plan1_id", "general_account_id", "x_plan2_id"]   # colonnes MEETING puis BU
     assert not any(c[0] == "account_id" for c in q["domain"])                                                  # pas le compte principal
-    assert len(seen["account.analytic.line"]) == 1                                                            # le sous-plan partage la colonne du plan racine
+    assert len(seen["account.analytic.line"]) == 1                                                            # sans investissement : pas de requête de durée ; le sous-plan partage la colonne du plan racine
 
 
 def test_events_result_by_meeting_plan_with_signed_analytic_amounts():
@@ -419,3 +419,19 @@ def test_event_mixed_xc_and_cars_and_unrecognized_axis_account_are_reported():
 def test_event_made_only_of_old_bu_lines_does_not_appear():
     r = _events_provider(lines=[_aline(AND, "700040 CA Historic Racing", 5_000.0, bu="OLD - 2025"), _aline(AND, "604040 ACH", -2_000.0, bu="old-2025")])[0].events(date(2026, 1, 1), date(2026, 9, 4))
     assert r["events"] == [] and r["bu_unmapped"] == [] and r["bu_missing"] == 0
+
+
+def test_event_cash_result_excludes_amortisation_and_counts_capitalised_spend_with_duration():
+    lines = [_aline(AND, "700040 CA Historic Racing", 41_700.0, bu="Historic Racing"), _aline(AND, "602040 FRAIS Historic Racing", -30_466.0, bu="Historic Racing"),
+             _aline(AND, "240040 INVEST - Historic Racing", -37_510.0, bu="Historic Racing"),
+             _aline(AND, "240940 INVEST - Historic Racing (copie)", 3_840.0, bu="Historic Racing"),     # contrepartie d'amortissement : ignorée
+             _aline(AND, "630104 Dot. amortis.", -3_840.0, bu="Historic Racing")]
+    p, seen = _events_provider(lines=lines)
+    detail = [{"date": "2026-08-31", "x_plan1_id": [10, "Andalucia 2026"], "amount": -312.0}, {"date": "2026-09-30", "x_plan1_id": [10, "Andalucia 2026"], "amount": -312.585},
+              {"date": "2026-09-30", "x_plan1_id": [10, "Andalucia 2026"], "amount": -312.585}]
+    orig = p._call
+    p._call = lambda model, method, **kw: detail if method == "search_read" and model == "account.analytic.line" else orig(model, method, **kw)
+    a = p.events(date(2026, 1, 1), date(2026, 10, 5))["events"][0]
+    assert (a["ca"], a["direct_costs"], a["other_costs"], a["capex"], a["amort"]) == (41_700, 30_466, 0, 37_510, 3_840)
+    assert a["result"] == -26_276 and a["result_accounting"] == 7_394                  # cash vs comptable
+    assert a["amort_monthly"] == 625 and a["amort_months"] == 60                         # 37 510 ÷ 625,17 ≈ 60 mois

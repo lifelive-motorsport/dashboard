@@ -65,12 +65,13 @@ class DemoProvider:
 
     def events(self, d_from: date, d_to: date) -> dict:
         s = _scale(d_from, d_to)
-        demo = [("Meeting A (démo)", "XC", 180_000, 120_000, 22_000), ("Meeting B (démo)", "XC", 95_000, 80_000, 18_000),
-                ("Meeting C (démo)", "CARS", 140_000, 70_000, 30_000), ("Meeting D (démo)", "CARS", 41_500, 35_000, 33_500),
-                ("Meeting E (démo)", "OTHERS", 12_000, 0, 4_000)]
+        demo = [("Meeting A (démo)", "XC", 180_000, 120_000, 22_000, 0), ("Meeting B (démo)", "XC", 95_000, 80_000, 18_000, 0),
+                ("Meeting C (démo)", "CARS", 140_000, 70_000, 30_000, 0), ("Meeting D (démo)", "CARS", 41_500, 35_000, 3_500, 36_000),
+                ("Meeting E (démo)", "OTHERS", 12_000, 0, 4_000, 0)]
         out = [{"id": i, "name": n, "plan": "MEETING", "group": g, "ca": round(ca * s), "direct_costs": round(dc * s), "other_costs": round(oc * s),
-                "result": round((ca - dc - oc) * s), "mixed": i == 4,
-                "bus": ([{"bu": "XC", "share": 1.0}] if g == "XC" else [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}] if g == "CARS" else [])} for i, (n, g, ca, dc, oc) in enumerate(demo, 1)]
+                "capex": round(cx * s), "amort": round(cx * s / 60 * 5), "amort_monthly": round(cx / 60) if cx else 0, "amort_months": 60 if cx else 0,
+                "result": round((ca - dc - oc - cx) * s), "result_accounting": round((ca - dc - oc - cx / 12) * s), "mixed": i == 4,
+                "bus": ([{"bu": "XC", "share": 1.0}] if g == "XC" else [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}] if g == "CARS" else [])} for i, (n, g, ca, dc, oc, cx) in enumerate(demo, 1)]
         return {"events": out, "plans": ["MEETING"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
     def webshops(self, d_from: date, d_to: date) -> list[dict]:

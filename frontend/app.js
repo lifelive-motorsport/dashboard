@@ -121,6 +121,12 @@ const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
 // Événements (axe analytique « MEETING ») : une ligne par événement dont le groupe BU figure dans `groups`.
+function capexCell(e) {
+  if (!e.capex) return eur(0);
+  const dur = e.amort_months ? ` sur ≈ ${e.amort_months} mois (≈ ${eur(e.amort_monthly)} / mois)` : '';
+  const tip = `${eur(e.capex)} investis, comptabilisés en immobilisations et amortis${dur}. Déjà amorti sur la période : ${eur(e.amort || 0)} (non compté dans le résultat cash). Résultat comptable : ${eur(e.result_accounting)}.`;
+  return `<span title="${esc(tip)}">${eur(e.capex)} <small class="na">ⓘ</small></span>`;
+}
 function eventsTable(d, groups, showBu = false) {
   const ev = d.events;
   if (!ev || ev.unavailable) return `<p class="na">${esc(ev ? ev.unavailable : 'Indisponible pour le moment.')}</p>`;
@@ -132,12 +138,12 @@ function eventsTable(d, groups, showBu = false) {
   const sum = k => list.reduce((s, e) => s + e[k], 0);
   const buText = e => (e.bus || []).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
   const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
-    ${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td>
+    ${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
     <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
-  const total = {name: `Total (${list.length} événement${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), result: sum('result')};
-  return table(['Événement'].concat(showBu ? ['BU'] : [], ['CA', 'Frais directs', 'Autres charges', 'Résultat', 'Marge %']), list.map(e => row(e)).concat([row(total, 'tot')]), 'prodtable') + note;
+  const total = {name: `Total (${list.length} événement${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
+  return table(['Événement'].concat(showBu ? ['BU'] : [], ['CA', 'Frais directs', 'Autres charges', 'Investis*', 'Résultat cash', 'Marge %']), list.map(e => row(e)).concat([row(total, 'tot')]), 'prodtable') + note;
 }
-const EVENT_NOTE = NOTE('Résultat = produits (comptes 7xx) − frais directs (602, 603, 604) − autres charges (autres comptes 6xx : déplacements, hôtels, carburant, véhicules…), d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
+const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − frais directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
 const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
 const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};

@@ -353,17 +353,24 @@ class OdooProvider:
                     continue
                 aid, aname = r[col]
                 code, name = self._code_name((r.get("general_account_id") or [0, ""])[1])
-                if not code or code[0] not in "67":
+                if not code or code[0] not in "267":
                     continue
                 amount = float(r["amount:sum"] or 0.0)
+                if code[0] == "2" and amount >= 0:       # classe 2 au crédit/positif = contrepartie d'amortissement : ignorée
+                    continue
                 m = self._bu_of_axis_account(r[bu_col][1]) if r.get(bu_col) else None
                 if m and m[0] == "OLD":                    # compte « OLD … » de l'axe BU : ligne écartée (montants compris)
                     continue
                 e = ev.setdefault((col, aid), {"id": aid, "name": aname, "plan": col, "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0,
-                                               "axis": {}})
+                                               "capex": 0.0, "amort": 0.0, "axis": {}})
                 c = classify(code, name) if len(code) == 6 else None
+                if code[0] == "2":                       # dépense immobilisée (compte INVEST) : sortie de cash, amortie ensuite
+                    e["capex"] += -amount
+                    continue
                 if code[0] == "7":
                     e["ca"] += amount
+                elif code.startswith("630"):             # dotations aux amortissements : non cash
+                    e["amort"] += -amount
                 elif c and c.kind == "direct_cost":
                     e["direct_costs"] += -amount
                 else:
@@ -375,6 +382,23 @@ class OdooProvider:
                     unmapped.add(r[bu_col][1])
                 else:
                     e["axis"][m] = e["axis"].get(m, 0.0) + abs(amount)
+        monthly: dict[tuple[str, int], float] = {}                 # dotation du dernier mois, par événement
+        for col in columns:
+            ids = [aid for (c, aid), e in ev.items() if c == col and e["amort"] and e["capex"]]
+            if not ids:
+                continue
+            lines = self._call("account.analytic.line", "search_read",
+                               domain=[(col, "in", ids), ("general_account_id.code", "=like", "630%"),
+                                       ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
+                               fields=["date", col, "amount"])
+            per: dict[int, dict[str, float]] = {}
+            for l in lines:
+                if l.get(col):
+                    month = str(l["date"])[:7]
+                    d = per.setdefault(l[col][0] if isinstance(l[col], (list, tuple)) else l[col], {})
+                    d[month] = d.get(month, 0.0) - float(l["amount"] or 0.0)
+            for aid, d in per.items():
+                monthly[(col, aid)] = d[max(d)]
         out = []
         for e in ev.values():
             axis = e.pop("axis")                                   # {(clé BU, groupe): poids}
@@ -386,10 +410,14 @@ class OdooProvider:
             e["mixed"] = len(wg) > 1 and (tot_w - max(wg.values())) / tot_w >= 0.10     # un autre groupe pèse au moins 10 %
             e["bus"] = [{"bu": self.BU_AXIS_LABEL[k], "share": round(v / tot_w, 3)}
                         for (k, g), v in sorted(axis.items(), key=lambda kv: -kv[1])] if tot_w else []
-            e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"]
-            for k in ("ca", "direct_costs", "other_costs", "result"):
+            e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"] - e["capex"]      # résultat cash : hors dotations, investissements inclus
+            e["result_accounting"] = e["ca"] - e["direct_costs"] - e["other_costs"] - e["amort"]
+            e["amort_monthly"], e["amort_months"] = monthly.get((e["plan"], e["id"]), 0.0), 0
+            if e["capex"] and e["amort_monthly"]:
+                e["amort_months"] = round(e["capex"] / e["amort_monthly"])             # durée implicite (investi ÷ dotation mensuelle)
+            for k in ("ca", "direct_costs", "other_costs", "capex", "amort", "amort_monthly", "result", "result_accounting"):
                 e[k] = round(e[k])
-            if e["ca"] or e["direct_costs"] or e["other_costs"]:
+            if e["ca"] or e["direct_costs"] or e["other_costs"] or e["capex"] or e["amort"]:
                 out.append(e)
         out.sort(key=lambda e: (-e["ca"], e["name"]))
         return {"events": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"],

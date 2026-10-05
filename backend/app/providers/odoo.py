@@ -485,6 +485,18 @@ class OdooProvider:
                                   "avg": round(by[st][1] / by[st][0], 2) if st in by and by[st][0] else None} for st, lbl in buckets]}
                 for wid, by in acc.items()}
 
+    @staticmethod
+    def _why(e: Exception) -> str:
+        """Motif court d'un échec Odoo (message d'erreur renvoyé par l'API, sans données sensibles)."""
+        r = getattr(e, "response", None)
+        if r is not None:
+            try:
+                j = r.json()
+                return f"HTTP {r.status_code} — {str(j.get('message') or j.get('name') or '')[:300]}".strip(" —")
+            except Exception:
+                return f"HTTP {r.status_code}"
+        return f"{type(e).__name__}: {str(e)[:200]}"
+
     def _payments(self, wid: int, order_dom: list) -> list[dict]:
         """Méthodes de paiement des commandes confirmées d'un site web (transactions réussies, en attente ou autorisées)."""
         dom = [("sale_order_ids.website_id", "=", wid), ("sale_order_ids.state", "in", ["sale", "done"]),
@@ -559,10 +571,13 @@ class OdooProvider:
             n, revenue = g["__count"], g["amount_untaxed:sum"]
             order_dom = [("date_order", ">=", d_from.isoformat()), ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
 
-            def safe(fn, *a):                                  # chaque vue est facultative : une erreur n'empêche pas les autres
+            errors: dict[str, str] = {}
+
+            def safe(name, fn, *a):                            # chaque vue est facultative : une erreur n'empêche pas les autres
                 try:
                     return fn(*a)
-                except Exception:
+                except Exception as e:
+                    errors[name] = self._why(e)
                     return None
             lines = self._call("sale.order.line", "formatted_read_group", groupby=["product_id"],
                                domain=[("order_id.website_id", "=", wid), ("order_id.state", "in", ["sale", "done"]),
@@ -577,9 +592,9 @@ class OdooProvider:
             names = self._product_names([l["product_id"][0] for l in best], {l["product_id"][0]: l["product_id"][1] for l in best})
             out.append({"name": settings.WEBSHOP_LABELS.get(wname, wname), "orders": n, "revenue": round(revenue),
                         "avg_basket": round(revenue / n, 2) if n else 0.0, "basket_series": series.get(wid),
-                        "payments": safe(self._payments, wid, order_dom),
-                        "deliveries": safe(self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
-                        "abandoned": safe(self._abandoned, wid, d_from, d_to, series.get(wid)),
+                        "payments": safe("payments", self._payments, wid, order_dom),
+                        "deliveries": safe("deliveries", self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
+                        "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)), "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

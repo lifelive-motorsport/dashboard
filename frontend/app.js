@@ -219,8 +219,8 @@ function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => 
 }
 
 // Répartition par mode (paiement, livraison) : tableau avec part en % et barre.
-function modeTable(rows, head, countLabel, note) {
-  if (!rows) return '<p class="na">Indisponible pour le moment.</p>';
+function modeTable(rows, head, countLabel, note, err) {
+  if (!rows) return `<p class="na">Indisponible pour le moment.</p>${err ? `<small class="neg">Motif renvoyé par Odoo : ${esc(err)}</small>` : ''}`;
   if (!rows.length) return '<p class="na">Aucune donnée sur la période.</p>';
   const tot = rows.reduce((a, r) => a + r.count, 0), amt = rows.reduce((a, r) => a + r.amount, 0);
   return table([head, countLabel, '%', 'Montant HT'], rows.map(r => `<tr><td>${esc(r.name)}</td><td>${num(r.count)}</td>
@@ -239,11 +239,11 @@ function webshopPage(pick) {
       return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
         : '<p class="na">Évolution indisponible pour le moment.</p>';
     }),
-    B('payments', 'Méthodes de paiement', d => { const w = shop(d); return w ? modeTable(w.payments, 'Méthode', 'Paiements', 'Transactions des commandes confirmées (réussies, autorisées ou en attente, ex. virement) ; % = part du nombre de paiements.') : miss(d); }),
-    B('delivery', 'Modes de livraison', d => { const w = shop(d); return w ? modeTable(w.deliveries, 'Mode', 'Commandes', 'Transporteur choisi sur les commandes confirmées ; « sans livraison » = retrait, services ou produits virtuels.') : miss(d); }),
+    B('payments', 'Méthodes de paiement', d => { const w = shop(d); return w ? modeTable(w.payments, 'Méthode', 'Paiements', 'Transactions des commandes confirmées (réussies, autorisées ou en attente, ex. virement) ; % = part du nombre de paiements.', (w.errors || {}).payments) : miss(d); }),
+    B('delivery', 'Modes de livraison', d => { const w = shop(d); return w ? modeTable(w.deliveries, 'Mode', 'Commandes', 'Transporteur choisi sur les commandes confirmées ; « sans livraison » = retrait, services ou produits virtuels.', (w.errors || {}).deliveries) : miss(d); }),
     B('abandon', 'Abandons de panier', d => {
       const w = shop(d); if (!w) return miss(d);
-      const a = w.abandoned; if (!a) return '<p class="na">Abandons de panier indisponibles pour le moment.</p>';
+      const a = w.abandoned; if (!a) return `<p class="na">Abandons de panier indisponibles pour le moment.</p>${(w.errors || {}).abandoned ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.abandoned)}</small>` : ''}`;
       const bs = a.series, per = bs.granularity === 'week' ? 'semaine' : 'mois';
       return `<div class="kpis">${kpi('Paniers abandonnés', num(a.count))}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', 'abandonnés ÷ (abandonnés + commandes)')}</div>`
         + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé après le délai d’Odoo, avec un client identifié. Survolez un point pour le détail.`,

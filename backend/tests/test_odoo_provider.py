@@ -297,3 +297,57 @@ def test_clients_cars_view_aggregates_cars_bus_and_not_in_total():
     assert [(c["name"], c["ca"]) for c in r["CARS"]] == [("Alpha", 300), ("Beta", 50), ("Gamma", 30)]
     assert r["CARS"][0]["open"] == 300 and r["_open_totals"]["CARS"] == 300
     assert r["_totals"]["total"] == 780 and r["_totals"]["CARS"] == 380         # pas de double comptage
+
+
+def _events_provider(plans=None, accounts=None, lines=None):
+    p = OdooProvider.__new__(OdooProvider)
+    plans = plans if plans is not None else [{"id": 1, "name": "MEETING", "parent_id": False}, {"id": 2, "name": "Projets", "parent_id": False},
+                                              {"id": 3, "name": "Rallyes", "parent_id": [1, "MEETING"]}]
+    seen = {}
+
+    def call(model, method, **kw):
+        seen[model] = kw
+        if model == "account.analytic.plan":
+            return plans
+        if model == "account.analytic.account":
+            return accounts if accounts is not None else [{"id": 10, "name": "Andalucia 2026", "plan_id": [1, "MEETING"]},
+                                                         {"id": 11, "name": "Spa 2026", "plan_id": [3, "Rallyes"]}, {"id": 12, "name": "Vide", "plan_id": [1, "MEETING"]}]
+        return lines if lines is not None else []
+    p._call = call
+    return p, seen
+
+
+def _aline(acc, name, gen, amount):
+    return {"account_id": [acc, name], "general_account_id": [1, gen], "amount:sum": amount}
+
+
+def test_events_result_by_meeting_plan_with_signed_analytic_amounts():
+    lines = [_aline(10, "Andalucia 2026", "700040 CA Historic Racing", 41_500.0), _aline(10, "Andalucia 2026", "604040 ACH. MARCH. Historic Racing", -50_000.0),
+             _aline(10, "Andalucia 2026", "615001 Carburant", -18_500.0),
+             _aline(11, "Spa 2026", "700010 CA XC Manufacturer", 30_000.0), _aline(11, "Spa 2026", "602012 FRAIS XC Race team", -12_000.0),
+             _aline(11, "Spa 2026", "612051 Frais de représentation", -1_000.0),
+             _aline(11, "Spa 2026", "400000 Clients", 999.0)]                                    # compte de bilan : ignoré
+    p, seen = _events_provider(lines=lines)
+    r = p.events(date(2026, 1, 1), date(2026, 9, 4))
+    e = {x["name"]: x for x in r["events"]}
+    a = e["Andalucia 2026"]
+    assert (a["ca"], a["direct_costs"], a["other_costs"], a["result"], a["group"]) == (41_500, 50_000, 18_500, -27_000, "CARS")   # la perte de l'analyse de septembre
+    s = e["Spa 2026"]
+    assert (s["ca"], s["direct_costs"], s["other_costs"], s["result"], s["group"]) == (30_000, 12_000, 1_000, 17_000, "XC")
+    assert "Vide" not in e and r["plans"] == ["MEETING", "Rallyes"]                              # sous-plan inclus ; événement sans mouvement écarté
+    assert sorted(seen["account.analytic.account"]["domain"][0][2]) == [1, 3]                    # plan MEETING + son sous-plan
+
+
+def test_events_without_bu_coded_account_go_to_none():
+    lines = [_aline(10, "Andalucia 2026", "612051 Frais de représentation", -500.0), _aline(10, "Andalucia 2026", "700099 Frais refacturés", 200.0)]
+    r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["events"][0]["group"] == "NONE"
+
+
+def test_events_plan_not_found_gives_a_clear_message():
+    p, _ = _events_provider(plans=[{"id": 2, "name": "Projets", "parent_id": False}])
+    try:
+        p.events(date(2026, 1, 1), date(2026, 9, 4))
+        raise AssertionError("aurait dû échouer")
+    except LookupError as e:
+        assert "MEETING" not in str(e) and "Projets" in str(e) and "EVENT_PLAN" in str(e)

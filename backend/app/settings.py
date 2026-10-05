@@ -21,3 +21,7 @@ WEBSHOP_LABELS = {
     "Lifelive Motorsport": "Webshop XC",
     "Goldspeed XC Cross Car tires - European Championship": "Webshop Goldspeed",
 }
+
+# Plan (axe) analytique des événements : sous-chaîne de son nom, sans tenir compte des accents ni de la casse.
+# Défaut : « MEETING ». Vide = détection automatique (plan dont le nom contient « event » ou « événement »).
+EVENT_PLAN = os.getenv("EVENT_PLAN", "meeting")

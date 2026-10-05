@@ -19,7 +19,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -119,6 +119,21 @@ const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><t
   <td class="${cls(o.margin)}">${eur(o.margin)}</td><td class="${cls(o.margin)}">${margin(o)}</td></tr>`;
 const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
+
+// Événements (axe analytique « MEETING ») : une ligne par événement du groupe demandé (XC, CARS ou NONE).
+function eventsTable(d, group) {
+  const ev = d.events;
+  if (!ev || ev.unavailable) return `<p class="na">${esc(ev ? ev.unavailable : 'Indisponible pour le moment.')}</p>`;
+  const list = ev.events.filter(e => e.group === group);
+  if (!list.length) return '<p class="na">Aucun événement sur la période.</p>';
+  const sum = k => list.reduce((s, e) => s + e[k], 0);
+  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}</td><td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td>
+    <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
+  const total = {name: `Total (${list.length} événement${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), result: sum('result')};
+  return table(['Événement', 'CA', 'Frais directs', 'Autres charges', 'Résultat', 'Marge %'], list.map(e => row(e)).concat([row(total, 'tot')]), 'prodtable')
+    + `<small class="na">Axe analytique : ${esc((ev.plans || []).join(', '))}.</small>`;
+}
+const EVENT_NOTE = NOTE('Résultat = produits (comptes 7xx) − frais directs (602, 603, 604) − autres charges (autres comptes 6xx : déplacements, hôtels, carburant, véhicules…), d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché à XC ou à CARS d’après la BU des comptes de ses lignes ; sans ligne rattachable à une BU, il figure dans « Sans BU identifiable ». Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
 const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
 const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
@@ -223,6 +238,16 @@ const PAGES = {
         .concat([`<tr class="tot"><td></td><td>Total des produits vendus</td><td>${eur(t.value)}</td><td>${num(t.units)}</td><td>100,0 %</td></tr>`]), 'prodtable');
     }).join('')),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
+  ],
+  'xc/events': () => [
+    B('events', 'Événements XC', d => eventsTable(d, 'XC')),
+    B('none', 'Événements sans BU identifiable', d => eventsTable(d, 'NONE')),
+    EVENT_NOTE,
+  ],
+  'cars/events': () => [
+    B('events', 'Événements CARS', d => eventsTable(d, 'CARS')),
+    B('none', 'Événements sans BU identifiable', d => eventsTable(d, 'NONE')),
+    EVENT_NOTE,
   ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),

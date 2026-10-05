@@ -55,3 +55,8 @@ L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifie
 
 ## Menu Overview
 CA · MB · Clients (CA facturé, solde ouvert, hit-parade clients) · Fournisseurs (achats HT, hit-parade fournisseurs).
+
+## Pages « Par événement » (analytique Odoo)
+- Source : lignes analytiques (`account.analytic.line`) des comptes du plan (axe) **MEETING** et de ses sous-plans (réglable par `EVENT_PLAN`).
+- Produits = comptes 7xx ; frais directs = 602/603/604 ; autres charges = autres comptes 6xx. Un événement est rattaché à XC ou à CARS d'après la BU des comptes de ses lignes ; sans ligne rattachable à une BU : « sans BU identifiable ».
+- Seules les écritures ventilées analytiquement sur l'axe apparaissent : `scripts/odoo_analytique.py` mesure cette couverture.

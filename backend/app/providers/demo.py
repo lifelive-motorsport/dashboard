@@ -63,6 +63,15 @@ class DemoProvider:
         out["_meta"] = {"grouping": True, "groups": 0, "open": True}
         return out
 
+    def events(self, d_from: date, d_to: date) -> dict:
+        s = _scale(d_from, d_to)
+        demo = [("Meeting A (démo)", "XC", 180_000, 120_000, 22_000), ("Meeting B (démo)", "XC", 95_000, 80_000, 18_000),
+                ("Meeting C (démo)", "CARS", 140_000, 70_000, 30_000), ("Meeting D (démo)", "CARS", 41_500, 35_000, 33_500),
+                ("Meeting E (démo)", "NONE", 12_000, 0, 4_000)]
+        out = [{"id": i, "name": n, "plan": "MEETING", "group": g, "ca": round(ca * s), "direct_costs": round(dc * s), "other_costs": round(oc * s),
+                "result": round((ca - dc - oc) * s)} for i, (n, g, ca, dc, oc) in enumerate(demo, 1)]
+        return {"events": out, "plans": ["MEETING"]}
+
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)
 

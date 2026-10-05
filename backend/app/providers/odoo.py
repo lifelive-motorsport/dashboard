@@ -266,6 +266,76 @@ class OdooProvider:
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
             aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]})
 
+    # ---- Événements : comptes analytiques d'un plan « Événements » -------------------------------------------------
+    @staticmethod
+    def _plain(text: str) -> str:
+        import unicodedata
+        return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+
+    def _event_plans(self) -> tuple[list[dict], list[dict]]:
+        """(plans retenus avec leurs sous-plans, tous les plans). Lève une erreur claire si aucun plan « événements »."""
+        plans = self._call("account.analytic.plan", "search_read", domain=[], fields=["name", "parent_id"])
+        wanted = self._plain(settings.EVENT_PLAN).strip()
+        chosen = {p["id"] for p in plans if (wanted in self._plain(p["name"]) if wanted else
+                                             any(k in self._plain(p["name"]) for k in ("event", "evenement")))}
+        if not chosen:
+            names = ", ".join(sorted(p["name"] for p in plans)) or "aucun"
+            raise LookupError(f"Aucun plan analytique « Événements » trouvé (plans existants : {names}). "
+                              "Indiquez le nom du bon plan (variable EVENT_PLAN).")
+        grew = True
+        while grew:                                   # ajoute les sous-plans
+            grew = False
+            for p in plans:
+                if p["id"] not in chosen and p.get("parent_id") and p["parent_id"][0] in chosen:
+                    chosen.add(p["id"])
+                    grew = True
+        return [p for p in plans if p["id"] in chosen], plans
+
+    def events(self, d_from: date, d_to: date) -> dict:
+        """Résultat par événement : lignes analytiques des comptes du plan « Événements », classées par compte comptable.
+
+        Montants analytiques signés (positif = produit, négatif = charge). Produits = comptes 7xx ; charges = comptes 6xx,
+        dont « frais directs » (602/603/604). Un événement est rattaché à XC ou à CARS selon la BU des comptes de ses
+        lignes (le groupe qui pèse le plus) ; sans ligne rattachable à une BU, il va dans « NONE »."""
+        from ..bu import classify
+        plans, _ = self._event_plans()
+        accounts = self._call("account.analytic.account", "search_read", domain=[("plan_id", "in", [p["id"] for p in plans])],
+                              fields=["name", "plan_id"], context={"active_test": False})
+        info = {a["id"]: a for a in accounts}
+        rows = self._call("account.analytic.line", "formatted_read_group",
+                          domain=[("account_id", "in", list(info)), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
+                          groupby=["account_id", "general_account_id"], aggregates=["amount:sum"]) if info else []
+        ev: dict[int, dict] = {}
+        for r in rows:
+            aid = r["account_id"][0]
+            code, name = self._code_name((r.get("general_account_id") or [0, ""])[1])
+            if not code or code[0] not in "67":
+                continue
+            amount = float(r["amount:sum"] or 0.0)
+            e = ev.setdefault(aid, {"id": aid, "name": r["account_id"][1], "plan": (info.get(aid, {}).get("plan_id") or [0, ""])[1],
+                                    "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0, "weight": {"XC": 0.0, "CARS": 0.0}})
+            c = classify(code, name) if len(code) == 6 else None
+            if code[0] == "7":
+                e["ca"] += amount
+            elif c and c.kind == "direct_cost":
+                e["direct_costs"] += -amount
+            else:
+                e["other_costs"] += -amount
+            if c and BU_GROUP.get(c.bu) in e["weight"]:
+                e["weight"][BU_GROUP[c.bu]] += abs(amount)
+        out = []
+        for e in ev.values():
+            w = e.pop("weight")
+            group = "NONE" if not any(w.values()) else max(w, key=w.get)
+            e["group"] = group
+            e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"]
+            for k in ("ca", "direct_costs", "other_costs", "result"):
+                e[k] = round(e[k])
+            if e["ca"] or e["direct_costs"] or e["other_costs"]:
+                out.append(e)
+        out.sort(key=lambda e: (-e["ca"], e["name"]))
+        return {"events": out, "plans": [p["name"] for p in plans]}
+
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""
         if not hasattr(self, "_lang"):

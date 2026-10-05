@@ -35,7 +35,7 @@ def _safe(fn, *a):
     """Un bloc secondaire (clients, fournisseurs, webshops) qui échoue ne doit pas empêcher d'afficher le reste."""
     try:
         return fn(*a)
-    except NotImplementedError as e:
+    except (NotImplementedError, LookupError) as e:        # messages écrits pour l'utilisateur
         return {"unavailable": str(e)}
     except Exception:
         log.exception("Bloc indisponible : %s", getattr(fn, "__name__", fn))
@@ -83,6 +83,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "balance_sheet": p.balance_sheet(d_to.year),
             "top_clients": _safe(p.top_clients, d_from, d_to),
             "top_suppliers": _safe(p.top_suppliers, d_from, d_to),
+            "events": _safe(p.events, d_from, d_to),
             "webshops": _safe(p.webshops, d_from, d_to),
         }
     except Exception as e:  # le détail va dans les journaux, jamais vers le navigateur

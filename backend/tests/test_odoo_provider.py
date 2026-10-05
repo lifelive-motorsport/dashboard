@@ -451,6 +451,9 @@ def test_webshop_basket_series_by_month_with_gaps_and_by_week_for_short_periods(
     assert gran == "week" and weeks[0][0] == date(2026, 8, 31) and len(weeks) == 5                          # semaines commençant le lundi
 
 
+FIRST_CART = ['2026-01-01 00:00:00']
+
+
 def test_webshop_payments_deliveries_and_abandoned_carts():
     p, _ = _shop_provider()
     base = p._call
@@ -462,6 +465,8 @@ def test_webshop_payments_deliveries_and_abandoned_carts():
             return [{"carrier_id": False, "amount_untaxed:sum": 100.0, "__count": 1}, {"carrier_id": [5, "Express"], "amount_untaxed:sum": 900.0, "__count": 9}]
         if model == "website":
             return [{"cart_abandoned_delay": 1.0}]
+        if model == "sale.order" and method == "search_read" and ("state", "=", "draft") in kw["domain"] and kw.get("limit") == 1:
+            return [{"date_order": FIRST_CART[0]}]                                            # plus ancien panier encore conservé par Odoo
         if model == "sale.order" and method == "search_read" and ("state", "=", "draft") in kw["domain"]:
             allc = [{"id": 1, "date_order": "2026-01-15 10:00:00", "amount_untaxed": 80.0}, {"id": 2, "date_order": "2026-03-05 10:00:00", "amount_untaxed": 20.0},
                     {"id": 3, "date_order": "2026-03-06 10:00:00", "amount_untaxed": 50.0}]       # le n° 3 : visiteur non connecté
@@ -534,3 +539,27 @@ def test_webshop_visits_window_is_fixed_weekly_with_orders_and_top_pages_merge_q
     assert round(pages[0]["share"], 3) == round(50 / 75, 3)
     (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
     assert w["visits"]["to"] == date.today().isoformat() and w["visits"]["granularity"] == "week"           # fenêtre indépendante de la période
+
+
+def test_abandoned_rate_ignores_months_before_the_oldest_cart_kept_by_odoo():
+    FIRST_CART[0] = "2026-02-10 09:00:00"                    # janvier et février (partiel) : Odoo a purgé les paniers
+    try:
+        p, _ = _shop_provider()
+        base = p._call
+
+        def call(model, method, **kw):
+            if model == "website":
+                return [{"cart_abandoned_delay": 1.0}]
+            if model == "sale.order" and method == "search_read" and ("state", "=", "draft") in kw["domain"]:
+                if kw.get("limit") == 1:
+                    return [{"date_order": FIRST_CART[0]}]
+                return [{"id": 3, "date_order": "2026-03-06 10:00:00", "amount_untaxed": 50.0}]
+            return base(model, method, **kw)
+        p._call = call
+        (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
+        a = w["abandoned"]
+        assert a["incomplete"] and a["complete_from"] == "2026-02-10" and a["rate_from"] == "2026-03-01"
+        assert [x["avg"] for x in a["series"]["points"]] == [None, None, round(1 / 2, 4)]    # seul mars est entièrement couvert (1 abandon, 1 commande)
+        assert round(a["rate"], 3) == 0.5                                                      # taux sur la partie couverte uniquement
+    finally:
+        FIRST_CART[0] = "2026-01-01 00:00:00"

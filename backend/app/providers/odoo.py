@@ -660,17 +660,31 @@ class OdooProvider:
                 c[0] += 1
                 c[1] += float(o["amount_untaxed"] or 0.0)
                 c[2] += 1 if o.get("id") in known else 0
+        # Odoo semble purger les anciens paniers non confirmés : avant le plus ancien panier encore présent, le taux serait
+        # faussé (aucun abandon pour de vraies commandes). On ne calcule le taux que sur les périodes entièrement couvertes.
+        first = None
+        try:
+            f = self._call("sale.order", "search_read", domain=[("website_id", "=", wid), ("state", "=", "draft"), ("order_line", "!=", False)],
+                           fields=["date_order"], order="date_order asc", limit=1)
+            first = date.fromisoformat(str(f[0]["date_order"])[:10]) if f else None
+        except Exception:
+            first = None
         conf = {pt["label"]: pt["orders"] for pt in (confirmed or {}).get("points", [])}
-        pts = []
+        pts, cov_ab, cov_ok, rate_from = [], 0, 0, None
         for st, lbl in buckets:
             n, amt, ident = by.get(st, [0, 0.0, 0])
             ok = conf.get(lbl, 0)
+            covered = first is None or st >= first      # un mois/une semaine commençant avant le plus ancien panier est partiel : écarté
+            if covered:
+                cov_ab, cov_ok = cov_ab + n, cov_ok + ok
+                rate_from = rate_from or st
             pts.append({"label": lbl, "orders": ok, "abandoned": int(n), "identified": int(ident), "amount": round(amt),
-                        "avg": round(n / (n + ok), 4) if n + ok else None})
+                        "avg": round(n / (n + ok), 4) if covered and n + ok else None})
         n_ab, amt = len(rows), sum(float(o["amount_untaxed"] or 0.0) for o in rows)
-        n_ok = sum(conf.values())
         return {"count": n_ab, "identified": len(known), "anonymous": n_ab - len(known), "amount": round(amt),
-                "rate": n_ab / (n_ab + n_ok) if n_ab + n_ok else 0.0, "series": {"granularity": gran, "points": pts}}
+                "rate": cov_ab / (cov_ab + cov_ok) if cov_ab + cov_ok else 0.0, "series": {"granularity": gran, "points": pts},
+                "incomplete": bool(first and first > d_from + timedelta(days=7)),
+                "complete_from": first.isoformat() if first else None, "rate_from": rate_from.isoformat() if rate_from else None}
 
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""

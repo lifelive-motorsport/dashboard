@@ -121,7 +121,7 @@ const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
 const CLIENT_TABS = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
-const SUPPLIER_TABS = {total:'Général', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
+const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
 const ALL_SUPPLIERS = Object.keys(SUPPLIER_TABS);
 
 // Classement clients (kind 'c') ou fournisseurs (kind 's') : mêmes colonnes, mêmes totaux.
@@ -185,7 +185,7 @@ const PAGES = {
     NOTE('Marge brute = CA − frais directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
   ],
   'overview/suppliers': () => [
-    B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = Object.keys(t).filter(k => k !== 'total' && k !== 'HORS_BU').reduce((x, k) => x + t[k], 0);
+    B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
       return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`
         : `<div class="kpis">${kpi('Achats HT', eur(t.total || 0)) + kpi('Rattachés à une BU', eur(bu), '', pct(t.total ? bu / t.total : 0))
           + kpi('Hors BU (frais généraux…)', eur(t.HORS_BU || 0), '', pct(t.total ? (t.HORS_BU || 0) / t.total : 0))
@@ -227,11 +227,12 @@ const PAGES = {
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
+    B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),
   ],
   'cars/bu': () => [
     B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     B('clients', 'Hit-parade clients', d => clients(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'])),
-    B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
+    B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),
   ],
 };

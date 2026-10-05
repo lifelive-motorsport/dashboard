@@ -54,6 +54,7 @@ class DemoProvider:
         sizes = {"XC": 1_200_000, "MODERN_RALLY": 45_000, "HISTORIC_RALLY": 90_000, "HISTORIC_RACING": 300_000,
                  "CARS_OTHERS": 40_000, "HORS_BU": 520_000}
         sizes = {"total": sum(sizes.values()), **sizes}                       # le total est la somme des parties
+        sizes["CARS"] = sizes["MODERN_RALLY"] + sizes["HISTORIC_RALLY"] + sizes["HISTORIC_RACING"] + sizes["CARS_OTHERS"]   # vue agrégée, hors total
         out = {k: board(v) for k, v in sizes.items()}
         out["_totals"] = {k: round(v * s) for k, v in sizes.items()}
         out["_open_totals"] = {k: round(sum(c["open"] for c in v) * 1.2) for k, v in out.items() if not k.startswith("_")}

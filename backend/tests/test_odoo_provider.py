@@ -230,7 +230,7 @@ def test_supplier_open_balance_is_debt_split_by_bu_of_bill_lines():
              {"move_id": [31, "B1"], "account_id": [2, "615001 Carburant"], "balance:sum": 400.0}]
     r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert r["total"][0]["open"] == 1210 and r["XC"][0]["open"] == 726 and r["HORS_BU"][0]["open"] == 484
-    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HORS_BU": 484}
+    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HORS_BU": 484, "CARS": 0}
 
 
 def test_supplier_grouping_uses_its_own_tag_prefix():
@@ -264,4 +264,23 @@ def test_open_balance_of_mixed_bill_counts_only_its_expense_share():
     lines = [{"move_id": [41, "B"], "account_id": [1, "602010 FRAIS XC Manufacturer"], "balance:sum": 600.0},
              {"move_id": [41, "B"], "account_id": [2, "241000 Matériel"], "balance:sum": 400.0}]          # 40 % de la facture = immobilisation
     r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
-    assert r["total"][0]["open"] == 726 and r["_open_totals"] == {"total": 726, "XC": 726}
+    assert r["total"][0]["open"] == 726 and r["_open_totals"] == {"total": 726, "XC": 726, "CARS": 0}
+
+
+def test_suppliers_cars_view_aggregates_cars_bus_without_double_counting_in_total():
+    rows = [_srow(1, "Four 1", "604020 ACH. MARCH. Modern Rally", 100), _srow(1, "Four 1", "604040 ACH. MARCH. Historic Racing", 200),
+            _srow(2, "Four 2", "603030 SS TRAIT. Historic Rally", 50), _srow(2, "Four 2", "604010 ACH. MARCH. XC Manufacturer", 400),
+            _srow(3, "Four 3", "604050 ACH. MARCH. CARS", 30), _srow(3, "Four 3", "615001 Carburant", 20)]
+    r = make(rows, [_partner(i, f"Four {i}") for i in (1, 2, 3)], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert [(c["name"], c["ca"]) for c in r["CARS"]] == [("Four 1", 300), ("Four 2", 50), ("Four 3", 30)]   # MR + HR + HRacing + CARS Others
+    assert r["_totals"]["CARS"] == 380 and r["_totals"]["total"] == 800     # le total n'inclut pas la vue CARS en double
+    assert r["_totals"]["XC"] == 400 and r["_totals"]["HORS_BU"] == 20
+
+
+def test_cars_aggregate_open_balance_adds_up_its_bus():
+    rows = [_srow(1, "Four 1", "604020 ACH. MARCH. Modern Rally", 600), _srow(1, "Four 1", "604040 ACH. MARCH. Historic Racing", 400)]
+    invoices = [{"id": 51, "partner_id": [1, "Four 1"], "amount_residual_signed": -1000.0}]
+    lines = [{"move_id": [51, "B"], "account_id": [1, "604020 ACH. MARCH. Modern Rally"], "balance:sum": 600.0},
+             {"move_id": [51, "B"], "account_id": [2, "604040 ACH. MARCH. Historic Racing"], "balance:sum": 400.0}]
+    r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["CARS"][0]["open"] == 1000 and r["_open_totals"]["CARS"] == 1000 and r["_open_totals"]["total"] == 1000

@@ -12,6 +12,7 @@ from datetime import date, timedelta
 import httpx
 
 from .. import settings
+from ..bu import BU_GROUP
 from ..names import normalize_name
 
 log = logging.getLogger("dashboard.odoo")
@@ -162,8 +163,10 @@ class OdooProvider:
         return out, names
 
     def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int,
-                ignore: frozenset = frozenset()) -> dict:
-        """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre."""
+                ignore: frozenset = frozenset(), aggregates: dict[str, list[str]] | None = None) -> dict:
+        """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre.
+
+        `aggregates` ajoute des vues qui regroupent plusieurs BU (ex. « CARS ») : elles ne comptent PAS dans « total »."""
         meta = {"grouping": True, "groups": 0, "open": True}
         by_bucket = {b: v for b, v in by_bucket.items() if b not in ignore}
         try:
@@ -210,6 +213,11 @@ class OdooProvider:
                           **{b: round(sum(d.values())) for b, d in by_bucket.items()}}
         out["_open_totals"] = ({"total": round(sum(sum(d.values()) for d in open_bucket.values())),
                                 **{b: round(sum(d.values())) for b, d in open_bucket.items()}} if meta["open"] else {})
+        for name, members in (aggregates or {}).items():           # vues agrégées (calculées après, hors du total)
+            out[name] = board(merge(by_bucket.get(m, {}) for m in members), merge(open_bucket.get(m, {}) for m in members))
+            out["_totals"][name] = round(sum(sum(by_bucket.get(m, {}).values()) for m in members))
+            if meta["open"]:
+                out["_open_totals"][name] = round(sum(sum(open_bucket.get(m, {}).values()) for m in members))
         meta["groups"] = len({k for k in label if k.startswith("g:")})
         out["_meta"] = meta
         return out
@@ -255,7 +263,8 @@ class OdooProvider:
             by_bucket[b][pid] += row["balance:sum"]           # débit = achat
         return self._boards(by_bucket, lambda: self._open_split(
             d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
-            names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}))
+            names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
+            aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]})
 
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""

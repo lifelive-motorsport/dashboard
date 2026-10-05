@@ -15,7 +15,7 @@ cd dashboard
 gcloud billing accounts list        # noter l'ID du compte de facturation
 ```
 Créer d'abord le projet pour pouvoir y configurer OAuth (étape 3) :
-`gcloud projects create lifelive-dashboard-app --name="Lifelive Motorsport dashboard-app"` puis lier la facturation (le script le fait aussi).
+`gcloud projects create lifelive-dashboard-app --name="Lifelive Dashboard"` puis lier la facturation (le script le fait aussi).
 
 ## 3. Client OAuth Google (manuel, ~5 min)
 Console > projet `lifelive-dashboard-app` > API et services :

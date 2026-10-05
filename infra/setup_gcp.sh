@@ -11,7 +11,7 @@ DOMAIN="${DOMAIN:-dashboard-app.lifelive-motorsport.com}"
 ALLOWED_EMAILS="${ALLOWED_EMAILS:-}"
 SA="dashboard-run@${PROJECT_ID}.iam.gserviceaccount.com"
 
-gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Lifelive Motorsport dashboard-app"
+gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Lifelive Dashboard"
 gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" >/dev/null
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com

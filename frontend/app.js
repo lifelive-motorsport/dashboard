@@ -120,7 +120,7 @@ const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><t
 const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
-const CLIENT_TABS = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
+const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
 const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
 const ALL_SUPPLIERS = Object.keys(SUPPLIER_TABS);
 
@@ -130,7 +130,7 @@ function ranking(d, kind, allowed) {
   if (!tc || tc.unavailable) return `<p class="na">${esc(tc ? tc.unavailable : 'Indisponible pour le moment.')}</p>`;
   const sel = sup ? tabS : tab, cur = allowed.includes(sel) ? sel : allowed[0];
   const scope = sup ? ((tc._totals || {})[cur] || 0)                                   // achats HT du périmètre
-    : cur === 'total' ? d.pnl.total.ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre
+    : cur === 'total' ? d.pnl.total.ca : cur === 'CARS' ? grp(d, 'CARS').ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre
   const share = v => scope > 0 ? pct(v / scope) : '–';
   const list = tc[cur] || [], shown = list.reduce((s, c) => s + c.ca, 0), other = scope - shown;
   const hasOpen = !!(tc._meta && tc._meta.open), sumOpen = list.reduce((s, c) => s + (c.open || 0), 0);
@@ -161,7 +161,7 @@ const FINANCE = B('finance', 'Position financière (à date)', d => `<div class=
   + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
   <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`, true);
 
-const ALL_CLIENTS = ['total','XC','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'];
+const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
@@ -227,11 +227,12 @@ const PAGES = {
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
+    B('clients', 'Hit-parade clients CARS', d => clients(d, ['CARS'])),
     B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),
   ],
   'cars/bu': () => [
     B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
-    B('clients', 'Hit-parade clients', d => clients(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'])),
+    B('clients', 'Hit-parade clients', d => clients(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),
   ],

@@ -38,6 +38,8 @@ class DemoProvider:
 
         out = {"total": board(2_800_000), "XC": board(1_700_000), "MODERN_RALLY": board(160_000),
                "HISTORIC_RALLY": board(130_000), "HISTORIC_RACING": board(580_000)}
+        out["CARS"] = board(930_000)                         # vue agrégée (3 BU CARS + CARS Others)
+        out["CARS_OTHERS"] = board(40_000)
         out["_open_totals"] = {k: round(sum(c["open"] for c in v) * 1.3) for k, v in out.items()}
         out["_meta"] = {"grouping": True, "groups": 0, "open": True}
         return out

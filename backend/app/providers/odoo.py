@@ -239,7 +239,7 @@ class OdooProvider:
             by_bu[bu][pid] -= row["balance:sum"]  # crédit = CA
         return self._boards(by_bu, lambda: self._open_split(
             d_from, d_to, ["out_invoice", "out_refund"], [("account_id.code", "=like", "700%")], self._bucket_revenue, -1, 1),
-            names, "regroup_client", limit)
+            names, "regroup_client", limit, aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]})
 
     def top_suppliers(self, d_from: date, d_to: date, limit: int = 15) -> dict:
         """Classement des fournisseurs par achats HT (lignes de factures et avoirs fournisseurs comptabilisés).

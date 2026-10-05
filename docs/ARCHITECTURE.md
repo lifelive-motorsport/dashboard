@@ -44,6 +44,7 @@ L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifie
 - Pour chaque client : reste dû TTC (`amount_residual_signed`) des factures et avoirs clients comptabilisés dans la période, non payés ou partiellement payés.
 - Par BU : le reste dû d'une facture est réparti entre les BU au prorata de ses lignes de CA (comptes 700).
 - Si Odoo refuse la lecture, le classement s'affiche sans cette colonne et l'écran l'indique.
+- Onglets : Total, XC, **CARS** (agrégat des 4 BU CARS, hors total), puis chaque BU CARS (dont CARS Others).
 
 ## Hit-parade fournisseurs
 - Source : lignes de factures et avoirs fournisseurs comptabilisés (`display_type = product`, donc hors TVA et hors écriture de tiers), **sur les comptes de charges uniquement (classe 6)** ; immobilisations, stocks et comptes « old - » écartés. Par fournisseur, pour la période. Pour une facture mêlant charges et immobilisation, le « reste à payer » ne compte que la part de charges.

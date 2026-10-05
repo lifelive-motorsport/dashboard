@@ -176,7 +176,7 @@ def test_open_balance_per_client_split_by_bu_pro_rata_of_invoice_revenue():
     assert by == {"Alpha": 1210, "Beta": 0}
     assert {c["name"]: c["open"] for c in r["XC"]}["Alpha"] == 726           # 60 % du reste dû
     assert {c["name"]: c["open"] for c in r["HISTORIC_RACING"]}["Alpha"] == 484
-    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HISTORIC_RACING": 484}
+    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HISTORIC_RACING": 484, "CARS": 484}
 
 
 def test_open_balance_unavailable_does_not_break_the_ranking():
@@ -284,3 +284,16 @@ def test_cars_aggregate_open_balance_adds_up_its_bus():
              {"move_id": [51, "B"], "account_id": [2, "604040 ACH. MARCH. Historic Racing"], "balance:sum": 400.0}]
     r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert r["CARS"][0]["open"] == 1000 and r["_open_totals"]["CARS"] == 1000 and r["_open_totals"]["total"] == 1000
+
+
+def test_clients_cars_view_aggregates_cars_bus_and_not_in_total():
+    rows = [_row(1, "Alpha", "700020 CA Modern Rally", 100), _row(1, "Alpha", "700040 CA Historic Racing", 200),
+            _row(2, "Beta", "700030 CA Historic Rally", 50), _row(2, "Beta", "700010 CA XC Manufacturer", 400),
+            _row(3, "Gamma", "700050 CA CARS Others", 30)]
+    invoices = [{"id": 61, "partner_id": [1, "Alpha"], "amount_residual_signed": 300.0}]
+    lines = [{"move_id": [61, "F"], "account_id": [1, "700020 CA Modern Rally"], "balance:sum": -100.0},
+             {"move_id": [61, "F"], "account_id": [2, "700040 CA Historic Racing"], "balance:sum": -200.0}]
+    r = make(rows, [_partner(i, n) for i, n in ((1, "Alpha"), (2, "Beta"), (3, "Gamma"))], {}, invoices, lines).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    assert [(c["name"], c["ca"]) for c in r["CARS"]] == [("Alpha", 300), ("Beta", 50), ("Gamma", 30)]
+    assert r["CARS"][0]["open"] == 300 and r["_open_totals"]["CARS"] == 300
+    assert r["_totals"]["total"] == 780 and r["_totals"]["CARS"] == 380         # pas de double comptage

@@ -6,7 +6,7 @@ dès que la base Odoo.sh et la clé API de l'utilisateur technique sont disponib
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 
@@ -53,8 +53,54 @@ class OdooProvider:
         return {"receivables": total(["asset_receivable"]), "payables": -total(["liability_payable"]),
                 "cash": total(["asset_cash", "liability_credit_card"])}
 
-    def top_clients(self, d_from: date, d_to: date) -> dict:
-        raise NotImplementedError("Hit-parade clients : à implémenter (étape suivante)")
+    def top_clients(self, d_from: date, d_to: date, limit: int = 10) -> dict:
+        """Classement des clients par CA (comptes 700) : total et par BU. Lecture seule."""
+        from ..bu import classify
+        domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()),
+                  ("date", "<=", d_to.isoformat()), ("account_id.code", "=like", "700%"),
+                  ("partner_id", "!=", False)]
+        by_bu: dict[str, dict[str, float]] = {}
+        names: dict[int, str] = {}
+        for row in self._grouped(domain, ["partner_id", "account_id"]):
+            m = re.match(r"^\s*(\d+)", row["account_id"][1])
+            c = m and classify(m.group(1), re.sub(r"^\s*\d+\s*", "", row["account_id"][1]))
+            if not c:
+                continue
+            pid, pname = row["partner_id"]
+            names[pid] = pname
+            by_bu.setdefault(c.bu, {}).setdefault(pid, 0.0)
+            by_bu[c.bu][pid] -= row["balance:sum"]  # crédit = CA
+
+        def board(per_partner: dict[int, float]) -> list[dict]:
+            top = sorted(per_partner.items(), key=lambda kv: -kv[1])[:limit]
+            return [{"name": names[pid], "ca": round(v)} for pid, v in top if v > 0]
+
+        total: dict[int, float] = {}
+        for per in by_bu.values():
+            for pid, v in per.items():
+                total[pid] = total.get(pid, 0.0) + v
+        out = {"total": board(total)}
+        for bu, per in by_bu.items():
+            out[bu] = board(per)
+        return out
 
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
-        raise NotImplementedError("Webshops : à implémenter (étape suivante)")
+        """Ventes des sites web (commandes confirmées, HT). Libellés dans settings.WEBSHOP_LABELS."""
+        base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
+                ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
+        out = []
+        groups = self._call("sale.order", "formatted_read_group", domain=base + [("website_id", "!=", False)],
+                            groupby=["website_id"], aggregates=["amount_untaxed:sum", "__count"])
+        for g in groups:
+            wid, wname = g["website_id"]
+            n, revenue = g["__count"], g["amount_untaxed:sum"]
+            lines = self._call("sale.order.line", "formatted_read_group", groupby=["product_id"],
+                               domain=[("order_id.website_id", "=", wid), ("order_id.state", "in", ["sale", "done"]),
+                                       ("product_id.type", "!=", "service"),  # hors livraison, ports, etc.
+                                       ("order_id.date_order", ">=", d_from.isoformat()),
+                                       ("order_id.date_order", "<", (d_to + timedelta(days=1)).isoformat())],
+                               aggregates=["price_subtotal:sum"], order="price_subtotal:sum desc", limit=5)
+            out.append({"name": settings.WEBSHOP_LABELS.get(wname, wname), "orders": n, "revenue": round(revenue),
+                        "avg_basket": round(revenue / n, 2) if n else 0.0,
+                        "top_products": [l["product_id"][1] for l in lines if l.get("product_id")]})
+        return sorted(out, key=lambda w: -w["revenue"])

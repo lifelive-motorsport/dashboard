@@ -1,0 +1,30 @@
+# Architecture
+
+```mermaid
+flowchart LR
+  U[Smartphone / laptop<br/>PWA] -->|HTTPS + jeton Google| CR
+  subgraph GCP["Google Cloud (europe-west1)"]
+    CR[Cloud Run<br/>FastAPI + PWA]
+    SM[Secret Manager<br/>ODOO_API_KEY]
+    CR --> SM
+  end
+  CR -->|API JSON-2, lecture seule| ODOO[Odoo.sh<br/>production]
+  U -.->|Connexion| GID[Google Sign-In]
+```
+
+## Principes
+- **Odoo reste la source unique.** Aucune donnée comptable n'est stockée côté application : un cache mémoire de 5 min (30 s minimum entre deux « actualiser ») protège Odoo.
+- **Temps réel pratique** : l'écran se rafraîchit toutes les 60 s quand il est visible. Les chiffres reflètent l'état d'Odoo au moment du dernier appel.
+- **Lecture seule vérifiée** : l'utilisateur technique n'a aucun droit d'écriture (`scripts/odoo_check.py` le contrôle sans rien écrire).
+- **Un seul service** (API + PWA) pour limiter coûts et maintenance ; échelle à zéro hors usage.
+
+## Règles de calcul
+- BU = 3 derniers chiffres des comptes 602/603/604/700 ; marge brute = CA − (602+603+604) ; personnel et 615 exclus ; comptes « old - » ignorés (`backend/app/bu.py`).
+- Rapprochement avec l'analyse de septembre 2026 : CA identique à l'euro quand on ne retient que les écritures créées avant le 04/09 ; le dashboard, lui, intègre les écritures saisies après coup (ex. 39 885 € de frais tardifs).
+- Hit-parade : CA des comptes 700 par partenaire (contact tel que saisi sur la pièce).
+- Webshops : commandes confirmées (`sale`, `done`) par site web, HT, hors lignes de service (livraison). Correspondance dans `app/settings.py` (`WEBSHOP_LABELS`).
+
+## Coûts et sécurité (ordre de grandeur)
+- Cloud Run à l'échelle zéro : quelques euros par mois ou moins pour 2–10 utilisateurs ; Secret Manager < 1 €/mois.
+- Accès : jeton Google vérifié côté serveur, domaine Workspace + liste blanche d'emails (`ALLOWED_EMAILS`).
+- Aucun secret dans le dépôt ; la clé Odoo n'existe que dans Secret Manager.

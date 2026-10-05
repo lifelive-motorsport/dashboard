@@ -36,6 +36,21 @@ def _safe(fn, *a):
         return {"unavailable": str(e)}
 
 
+@app.middleware("http")
+async def security_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers.update({"X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin",
+                         "X-Frame-Options": "DENY"})
+    if request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+
 @app.get("/api/config")
 def config():
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
@@ -49,7 +64,9 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
     d_from, d_to = date_from or date(today.year, 1, 1), date_to or today
     key = (d_from, d_to)
     hit = _cache.get(key)
-    if hit and not refresh and time.time() - hit[0] < settings.CACHE_TTL:
+    age = time.time() - hit[0] if hit else None
+    # « refresh » est limité à 1 appel / 30 s par période pour ne pas surcharger Odoo
+    if hit and age < (30 if refresh else settings.CACHE_TTL):
         return hit[1]
     p = provider()
     result = {

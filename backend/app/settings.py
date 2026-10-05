@@ -15,3 +15,9 @@ AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "lifelive-motorsport.com").lower()
 ALLOWED_EMAILS = _list("ALLOWED_EMAILS")  # actionnaires hors domaine
+
+# Nom du site web dans Odoo -> libellé affiché
+WEBSHOP_LABELS = {
+    "Lifelive Motorsport": "Webshop XC",
+    "Goldspeed XC Cross Car tires - European Championship": "Webshop Goldspeed",
+}

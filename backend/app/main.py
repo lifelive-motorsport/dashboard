@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -13,6 +14,7 @@ from .auth import require_user
 from .bu import aggregate
 from .providers.demo import DemoProvider
 
+log = logging.getLogger("dashboard")
 app = FastAPI(title="Lifelive Motorsport — Dashboard")
 _provider = None
 _cache: dict[tuple, tuple[float, dict]] = {}
@@ -68,15 +70,21 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
     # « refresh » est limité à 1 appel / 30 s par période pour ne pas surcharger Odoo
     if hit and age < (30 if refresh else settings.CACHE_TTL):
         return hit[1]
-    p = provider()
-    result = {
-        "source": p.name, "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "pnl": aggregate(p.pnl_balances(d_from, d_to)),
-        "balance_sheet": p.balance_sheet(),
-        "top_clients": _safe(p.top_clients, d_from, d_to),
-        "webshops": _safe(p.webshops, d_from, d_to),
-    }
+    try:
+        p = provider()
+        result = {
+            "source": p.name, "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "pnl": aggregate(p.pnl_balances(d_from, d_to)),
+            "balance_sheet": p.balance_sheet(),
+            "top_clients": _safe(p.top_clients, d_from, d_to),
+            "webshops": _safe(p.webshops, d_from, d_to),
+        }
+    except Exception as e:  # le détail va dans les journaux, jamais vers le navigateur
+        log.exception("Échec de la lecture de la source de données")
+        if hit:  # dernières données connues plutôt qu'une page vide
+            return hit[1]
+        raise HTTPException(502, f"Source de données indisponible ({type(e).__name__})")
     _cache[key] = (time.time(), result)
     return result
 

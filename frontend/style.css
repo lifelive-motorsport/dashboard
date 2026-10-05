@@ -22,3 +22,5 @@ button{cursor:pointer}
 ol{padding-left:22px;margin:0}li{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)}
 #status{color:var(--mut);padding:8px 0;font-size:13px}#status.err{color:var(--neg)}
 footer{color:var(--mut);font-size:12px;margin-top:24px}.na{color:var(--mut);font-style:italic}
+
+#login{display:flex;justify-content:center;padding:40px 0}

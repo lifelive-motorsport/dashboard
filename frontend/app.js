@@ -54,7 +54,7 @@ async function load(force) {
   try {
     const r = await fetch(`/api/dashboard?from=${f}&to=${t}${force?'&refresh=true':''}`, {headers: token ? {Authorization: 'Bearer ' + token} : {}});
     if (r.status === 401) { sessionStorage.removeItem('idt'); token = null; return needLogin(); }
-    if (!r.ok) throw new Error(r.status === 403 ? 'Accès non autorisé pour ce compte' : 'Erreur ' + r.status);
+    if (!r.ok) throw new Error(r.status === 403 ? 'Accès non autorisé pour ce compte' : r.status === 502 ? 'Odoo est momentanément injoignable (erreur 502)' : 'Erreur ' + r.status);
     data = await r.json(); $('status').textContent = ''; $('status').className = ''; $('login').hidden = true; render();
   } catch (e) { $('status').textContent = e.message + (data ? ' — affichage des dernières données' : ''); $('status').className = 'err'; }
 }
@@ -64,7 +64,7 @@ function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
     callback: r => { token = r.credential; sessionStorage.setItem('idt', token); load(); }});
-  google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large'});
+  google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
 
 $('period').onchange = () => load();

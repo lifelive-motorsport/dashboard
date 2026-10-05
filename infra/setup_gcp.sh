@@ -16,6 +16,13 @@ gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" 
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
 
+# Projets récents : le compte de service par défaut doit pouvoir construire l'image (sinon « build failed / permission »).
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+for role in roles/cloudbuild.builds.builder roles/run.builder; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="$role" --condition=None >/dev/null 2>&1 || true
+done
+
 gcloud iam service-accounts describe "$SA" >/dev/null 2>&1 || gcloud iam service-accounts create dashboard-run --display-name="Dashboard (Cloud Run)"
 
 # Secret : saisi à l'invite (masqué), jamais dans l'historique ni dans le dépôt.

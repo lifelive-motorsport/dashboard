@@ -234,7 +234,7 @@ function modeTable(rows, head, countLabel, note, err) {
     .concat([`<tr class="tot"><td>Total</td><td>${num(tot)}</td><td>100,0 %</td><td>${eur(amt)}</td></tr>`]), 'prodtable') + `<small class="na">${note}</small>`;
 }
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
-function webshopPage(pick) {
+function webshopPage(pick, {topPages = true} = {}) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
@@ -280,7 +280,7 @@ function webshopPage(pick) {
         + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
     }, true),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
-  ];
+  ].filter(b => topPages || b.id !== 'toppages');
 }
 const PAGES = {
   'overview/ca': () => [
@@ -333,7 +333,7 @@ const PAGES = {
     NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
   ],
   'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name)),
-  'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name)),
+  'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name), {topPages: false}),      // 2 produits seulement : un classement de pages n'a pas de sens
   'xc/events': () => [
     B('events', 'Événements XC', d => eventsTable(d, ['XC'])),
     B('none', 'Autres événements (BU « Others » ou sans BU identifiable)', d => eventsTable(d, ['OTHERS', 'NONE'], true)),

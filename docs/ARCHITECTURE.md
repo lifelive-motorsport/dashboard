@@ -46,7 +46,10 @@ L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifie
 - Si Odoo refuse la lecture, le classement s'affiche sans cette colonne et l'écran l'indique.
 
 ## Hit-parade fournisseurs
-- Source : lignes de factures et avoirs fournisseurs comptabilisés (`display_type = product`, donc hors TVA et hors écriture de tiers), par fournisseur, pour la période.
+- Source : lignes de factures et avoirs fournisseurs comptabilisés (`display_type = product`, donc hors TVA et hors écriture de tiers), **sur les comptes de charges uniquement (classe 6)** ; immobilisations, stocks et comptes « old - » écartés. Par fournisseur, pour la période. Pour une facture mêlant charges et immobilisation, le « reste à payer » ne compte que la part de charges.
 - Rattachement à une BU d'après le **compte comptable de chaque ligne** : 602 / 603 / 604 + suffixe de BU (voir `bu.py`). Les autres comptes (frais généraux, véhicules, honoraires…) et 604099 vont dans « Hors BU ». L'onglet « Général » reprend toutes les lignes.
 - Regroupements : étiquette Odoo **`regroup_fournisseur=Nom`** (distincte de celle des clients) ; les contacts d'une même société sont fusionnés.
 - « Reste à payer » : reste dû TTC des factures de la période non soldées, réparti par BU au prorata des lignes de chaque facture.
+
+## Menu Overview
+CA · MB · Clients (CA facturé, solde ouvert, hit-parade clients) · Fournisseurs (achats HT, hit-parade fournisseurs).

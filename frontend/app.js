@@ -9,7 +9,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
-  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['suppliers','Fournisseurs']]],
+  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['clients','Clients'], ['suppliers','Fournisseurs']]],
   ['xcvscars', 'XC vs CARS', [['ca','CA'], ['mb','MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop','Par webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
@@ -19,7 +19,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['overview/ca','overview/mb','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
+const LIVE = new Set(['overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -170,6 +170,12 @@ const PAGES = {
     B('kpi', 'Chiffre d’affaires', d => `<div class="kpis">${kpi('Chiffre d’affaires', eur(d.pnl.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca)) + kpi('CA CARS', eur(grp(d,'CARS').ca))}</div>`),
     FINANCE,
     B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
+  ],
+  'overview/clients': () => [
+    B('kpi', 'Clients', d => { const c = d.top_clients || {}, list = c.total || [], ca = d.pnl.total.ca, top = list.reduce((x, y) => x + y.ca, 0);
+      return c.unavailable ? `<p class="na">${esc(c.unavailable)}</p>`
+        : `<div class="kpis">${kpi('CA facturé', eur(ca)) + kpi('Part des ' + list.length + ' premiers clients', pct(ca > 0 ? top / ca : 0), '', eur(top))
+          + (c._meta && c._meta.open ? kpi('Solde ouvert (période)', eur((c._open_totals || {}).total || 0)) : '')}</div>`; }),
     B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
   ],
   'overview/mb': () => [

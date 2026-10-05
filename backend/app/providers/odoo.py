@@ -121,10 +121,13 @@ class OdooProvider:
 
     @classmethod
     def _bucket_cost(cls, label: str) -> str:
-        """BU d'un compte de charge (602/603/604 + suffixe de BU) ; sinon « HORS_BU » (frais généraux, véhicules, honoraires…)."""
-        from ..bu import classify
+        """Compte de CHARGES (classe 6) : BU d'après 602/603/604 + suffixe de BU, sinon « HORS_BU » (frais généraux, véhicules,
+        honoraires…). Compte « old - … » ou hors classe 6 (immobilisations, stocks…) : « HORS_PERIMETRE », écarté des classements."""
+        from ..bu import classify, is_old
         code, name = cls._code_name(label)
-        c = code and classify(code, name)
+        if not code or not code.startswith("6") or is_old(name):
+            return "HORS_PERIMETRE"
+        c = classify(code, name)
         return c.bu if c and c.kind == "direct_cost" and c.bu != "UNASSIGNED" else "HORS_BU"
 
     def _open_split(self, d_from: date, d_to: date, move_types: list[str], line_domain: list, bucket, line_sign: int,
@@ -158,11 +161,14 @@ class OdooProvider:
                 out[b][pid] += amount_sign * inv["amount_residual_signed"] * f
         return out, names
 
-    def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int) -> dict:
+    def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int,
+                ignore: frozenset = frozenset()) -> dict:
         """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre."""
         meta = {"grouping": True, "groups": 0, "open": True}
+        by_bucket = {b: v for b, v in by_bucket.items() if b not in ignore}
         try:
             open_bucket, open_names = open_fn()
+            open_bucket = {b: v for b, v in open_bucket.items() if b not in ignore}   # ex. part d'une facture sur une immobilisation
             names = {**open_names, **names}
         except Exception:  # droits insuffisants, etc. : pas de solde ouvert, le reste fonctionne
             log.exception("Solde ouvert indisponible")
@@ -231,21 +237,25 @@ class OdooProvider:
         """Classement des fournisseurs par achats HT (lignes de factures et avoirs fournisseurs comptabilisés).
 
         Chaque ligne est rattachée à une BU d'après son compte comptable (602/603/604 + suffixe de BU) ; les autres comptes
-        (frais généraux, véhicules, honoraires…) vont dans « HORS_BU ». « total » = toutes les lignes. Lecture seule."""
+        (frais généraux, véhicules, honoraires…) vont dans « HORS_BU ». « total » = toutes les lignes de charges (classe 6 ;
+        immobilisations et stocks exclus). Lecture seule."""
         line = [("display_type", "=", "product")]            # lignes de facture : ni TVA ni écriture de tiers
         domain = [("parent_state", "=", "posted"), ("move_id.move_type", "in", ["in_invoice", "in_refund"]),
-                  ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()), ("partner_id", "!=", False)] + line
+                  ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()), ("partner_id", "!=", False),
+                  ("account_id.code", "=like", "6%")] + line   # comptes de charges uniquement
         by_bucket: dict[str, dict[int, float]] = {}
         names: dict[int, str] = {}
         for row in self._grouped(domain, ["partner_id", "account_id"]):
             b = self._bucket_cost(row["account_id"][1])
+            if b == "HORS_PERIMETRE":
+                continue
             pid, pname = row["partner_id"]
             names[pid] = pname
             by_bucket.setdefault(b, {}).setdefault(pid, 0.0)
             by_bucket[b][pid] += row["balance:sum"]           # débit = achat
         return self._boards(by_bucket, lambda: self._open_split(
             d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
-            names, "regroup_fournisseur", limit)
+            names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}))
 
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""

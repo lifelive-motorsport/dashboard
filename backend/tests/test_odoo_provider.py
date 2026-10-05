@@ -239,3 +239,29 @@ def test_supplier_grouping_uses_its_own_tag_prefix():
     tags = {10: "regroup_fournisseur=Groupe F", 11: "regroup_fournisseur=Groupe F", 12: "regroup_client=Pas pour les fournisseurs"}
     r = make(rows, partners, tags).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert [(c["name"], c["ca"]) for c in r["total"]] == [("Groupe F", 150)]
+
+
+def test_suppliers_only_expense_accounts_assets_and_old_accounts_excluded():
+    rows = [_srow(1, "Four 1", "602010 FRAIS XC Manufacturer", 300), _srow(1, "Four 1", "241000 Matériel et mobilier", 5000),   # immobilisation
+            _srow(2, "Four 2", "60400000 old - ACH. MDISES PIECES", 999), _srow(3, "Four 3", "615001 Carburant", 40),
+            _srow(4, "Four 4", "300000 Stock marchandises", 777)]
+    r = make(rows, [_partner(i, f"Four {i}") for i in range(1, 5)], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert [(c["name"], c["ca"]) for c in r["total"]] == [("Four 1", 300), ("Four 3", 40)]
+    assert r["_totals"]["total"] == 340 and "HORS_PERIMETRE" not in r
+
+
+def test_supplier_query_filters_expense_accounts_in_the_domain():
+    seen = {}
+    p = make([], [], {})
+    p._grouped = lambda domain, groupby: seen.update(domain=domain) or []
+    p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert ("account_id.code", "=like", "6%") in seen["domain"]
+
+
+def test_open_balance_of_mixed_bill_counts_only_its_expense_share():
+    rows = [_srow(1, "Four 1", "602010 FRAIS XC Manufacturer", 600)]
+    invoices = [{"id": 41, "partner_id": [1, "Four 1"], "amount_residual_signed": -1210.0}]
+    lines = [{"move_id": [41, "B"], "account_id": [1, "602010 FRAIS XC Manufacturer"], "balance:sum": 600.0},
+             {"move_id": [41, "B"], "account_id": [2, "241000 Matériel"], "balance:sum": 400.0}]          # 40 % de la facture = immobilisation
+    r = make(rows, [_partner(1, "Four 1")], {}, invoices, lines).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["total"][0]["open"] == 726 and r["_open_totals"] == {"total": 726, "XC": 726}

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # À exécuter dans Google Cloud Shell (console.cloud.google.com) par un administrateur. Idempotent : relançable.
-#   BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com ./infra/setup_gcp.sh
+#   GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com ./infra/setup_gcp.sh
 # Variables facultatives : PROJECT_ID, REGION, DOMAIN, ALLOWED_EMAILS (actionnaires hors domaine, séparés par des virgules)
 set -euo pipefail
-: "${BILLING_ACCOUNT:?compte de facturation requis (gcloud billing accounts list)}"
+BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"  # facultatif si le projet est déjà lié à la facturation
 : "${GOOGLE_CLIENT_ID:?ID client OAuth requis (voir infra/README_DEPLOY.md, étape 3)}"
 PROJECT_ID="${PROJECT_ID:-lifelive-dashboard-app}"
 REGION="${REGION:-europe-west1}"
@@ -12,7 +12,11 @@ ALLOWED_EMAILS="${ALLOWED_EMAILS:-}"
 SA="dashboard-run@${PROJECT_ID}.iam.gserviceaccount.com"
 
 gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Lifelive Dashboard"
-gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" >/dev/null
+if [ -n "$BILLING_ACCOUNT" ]; then
+  gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" >/dev/null
+else
+  echo "BILLING_ACCOUNT non fourni : la facturation du projet est supposée déjà liée."
+fi
 gcloud config set project "$PROJECT_ID" >/dev/null
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
 

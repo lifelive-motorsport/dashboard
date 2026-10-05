@@ -449,3 +449,30 @@ def test_webshop_basket_series_by_month_with_gaps_and_by_week_for_short_periods(
     assert [x["avg"] for x in bs["points"]] == [200.0, None, 50.0] and bs["points"][0]["orders"] == 2    # février sans commande : trou, pas zéro
     gran, weeks = OdooProvider._buckets(date(2026, 9, 1), date(2026, 9, 30))
     assert gran == "week" and weeks[0][0] == date(2026, 8, 31) and len(weeks) == 5                          # semaines commençant le lundi
+
+
+def test_webshop_payments_deliveries_and_abandoned_carts():
+    p, _ = _shop_provider()
+    base = p._call
+
+    def call(model, method, **kw):
+        if model == "payment.transaction":
+            return [{"payment_method_id": [1, "Carte"], "amount:sum": 600.0, "__count": 6}, {"payment_method_id": [2, "Bancontact"], "amount:sum": 400.0, "__count": 4}]
+        if model == "sale.order" and method == "formatted_read_group" and kw["groupby"] == ["carrier_id"]:
+            return [{"carrier_id": False, "amount_untaxed:sum": 100.0, "__count": 1}, {"carrier_id": [5, "Express"], "amount_untaxed:sum": 900.0, "__count": 9}]
+        if model == "sale.order" and method == "search_read" and ("is_abandoned_cart", "=", True) in kw["domain"]:
+            return [{"date_order": "2026-01-15 10:00:00", "amount_untaxed": 80.0}, {"date_order": "2026-03-05 10:00:00", "amount_untaxed": 20.0}]
+        return base(model, method, **kw)
+    p._call = call
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
+    assert [(x["name"], x["count"], round(x["share"], 2)) for x in w["payments"]] == [("Carte", 6, 0.6), ("Bancontact", 4, 0.4)]
+    assert [(x["name"], x["count"]) for x in w["deliveries"]] == [("Express", 9), ("Sans livraison (retrait, service…)", 1)]
+    a = w["abandoned"]
+    assert (a["count"], a["amount"]) == (2, 100) and round(a["rate"], 3) == round(2 / 5, 3)                # 2 abandons pour 3 commandes confirmées
+    assert [x["abandoned"] for x in a["series"]["points"]] == [1, 0, 1] and a["series"]["points"][1]["avg"] is None
+
+
+def test_webshop_optional_views_fail_independently():
+    p, _ = _shop_provider()                                  # ce simulateur ne connaît pas les transactions de paiement
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
+    assert w["payments"] is None and w["products"]       # les produits restent disponibles

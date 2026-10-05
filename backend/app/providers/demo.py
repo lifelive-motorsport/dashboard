@@ -87,6 +87,13 @@ class DemoProvider:
                     "avg": round(basket + 25 * math.sin(i + len(name)), 2)} for i, (_, lbl) in enumerate(buckets)]
             return {"name": name, "orders": round(orders * s), "revenue": round(revenue * s), "avg_basket": basket,
                     "basket_series": {"granularity": gran, "points": pts},
+                    "payments": [{"name": n, "count": round(orders * s * sh), "share": sh, "amount": round(revenue * s * sh)}
+                                 for n, sh in (("Carte bancaire", .62), ("Bancontact", .21), ("PayPal", .12), ("Virement bancaire", .05))],
+                    "deliveries": [{"name": n, "count": round(orders * s * sh), "share": sh, "amount": round(revenue * s * sh)}
+                                   for n, sh in (("Livraison standard", .58), ("Livraison express", .27), ("Retrait à l'atelier", .10), ("Sans livraison (retrait, service…)", .05))],
+                    "abandoned": {"count": round(orders * s * .8), "amount": round(revenue * s * .7), "rate": .44,
+                                  "series": {"granularity": gran, "points": [{"label": p["label"], "orders": p["orders"], "abandoned": 15 + i % 5,
+                                                                              "amount": 9000 + 800 * (i % 5), "avg": round((15 + i % 5) / (35 + i % 5 + i), 4)} for i, p in enumerate(pts)]}},
                     "products": [{"name": n, "value": round(v * s), "units": round(v * s / 40, 2), "share": v / tot} for n, v in zip(names, vals)],
                     "products_total": {"value": round(tot * s), "units": round(tot * s / 40, 2), "count": 120}}
         return [shop("Webshop XC", 345, 188_000, 545.0, [f"[6000{i}] Produit exemple {i}" for i in range(1, 16)]),

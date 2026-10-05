@@ -199,7 +199,7 @@ const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
 // Courbe d'évolution (une seule série, SVG adaptatif) : points = [{label, avg (ou null), orders}], ref = valeur de référence en pointillé.
-function lineChart(points, ref, unit) {
+function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => `${p.label} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})`, refLabel = 'moyenne') {
   const pts = points.map((p, i) => ({...p, i})), vals = pts.filter(p => p.avg != null);
   if (vals.length < 2) return '<p class="na">Pas assez de commandes sur la période pour tracer une évolution.</p>';
   const W = 640, H = 240, L = 52, R = 14, T = 14, B = 34;
@@ -208,16 +208,25 @@ function lineChart(points, ref, unit) {
   const x = i => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : .5), y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
   const ticks = [0, 1, 2, 3].map(k => lo + (hi - lo) * k / 3);
   const every = Math.ceil(pts.length / 8), path = pts.filter(p => p.avg != null).map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.avg).toFixed(1)}`).join('');
-  return `<div class="linechart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution du panier moyen">
-    ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${eur(Math.round(t))}</text>`).join('')}
-    ${ref ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/><text class="ax" x="${L + 6}" y="${y(ref) - 5}" text-anchor="start">moyenne ${eur(Math.round(ref))}</text>` : ''}
+  return `<div class="linechart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution">
+    ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${fmt(t)}</text>`).join('')}
+    ${ref ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/><text class="ax" x="${L + 6}" y="${y(ref) - 5}" text-anchor="start">${refLabel} ${fmt(ref)}</text>` : ''}
     <path class="ln" d="${path}"/>
-    ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>
-      <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>`).join('')}
+    ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>
+      <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(tip(p))}</title></circle>`).join('')}
     ${pts.map(p => p.i % every === 0 ? `<text class="ax" x="${x(p.i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
   </svg><small class="na">${unit}</small></div>`;
 }
 
+// Répartition par mode (paiement, livraison) : tableau avec part en % et barre.
+function modeTable(rows, head, countLabel, note) {
+  if (!rows) return '<p class="na">Indisponible pour le moment.</p>';
+  if (!rows.length) return '<p class="na">Aucune donnée sur la période.</p>';
+  const tot = rows.reduce((a, r) => a + r.count, 0), amt = rows.reduce((a, r) => a + r.amount, 0);
+  return table([head, countLabel, '%', 'Montant HT'], rows.map(r => `<tr><td>${esc(r.name)}</td><td>${num(r.count)}</td>
+    <td class="sharecell"><span class="sharebar" style="width:${Math.round(r.share * 100)}%"></span><span>${pct(r.share)}</span></td><td>${eur(r.amount)}</td></tr>`)
+    .concat([`<tr class="tot"><td>Total</td><td>${num(tot)}</td><td>100,0 %</td><td>${eur(amt)}</td></tr>`]), 'prodtable') + `<small class="na">${note}</small>`;
+}
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
 function webshopPage(pick) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
@@ -229,6 +238,16 @@ function webshopPage(pick) {
       const bs = w.basket_series;
       return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
         : '<p class="na">Évolution indisponible pour le moment.</p>';
+    }),
+    B('payments', 'Méthodes de paiement', d => { const w = shop(d); return w ? modeTable(w.payments, 'Méthode', 'Paiements', 'Transactions des commandes confirmées (réussies, autorisées ou en attente, ex. virement) ; % = part du nombre de paiements.') : miss(d); }),
+    B('delivery', 'Modes de livraison', d => { const w = shop(d); return w ? modeTable(w.deliveries, 'Mode', 'Commandes', 'Transporteur choisi sur les commandes confirmées ; « sans livraison » = retrait, services ou produits virtuels.') : miss(d); }),
+    B('abandon', 'Abandons de panier', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const a = w.abandoned; if (!a) return '<p class="na">Abandons de panier indisponibles pour le moment.</p>';
+      const bs = a.series, per = bs.granularity === 'week' ? 'semaine' : 'mois';
+      return `<div class="kpis">${kpi('Paniers abandonnés', num(a.count))}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', 'abandonnés ÷ (abandonnés + commandes)')}</div>`
+        + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé après le délai d’Odoo, avec un client identifié. Survolez un point pour le détail.`,
+          v => pct(v), p => `${p.label} : ${pct(p.avg)} — ${p.abandoned} abandonné${p.abandoned > 1 ? 's' : ''} (${eur(p.amount)}) pour ${p.orders} commande${p.orders > 1 ? 's' : ''}`, 'moyenne');
     }),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);

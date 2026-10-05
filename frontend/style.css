@@ -124,3 +124,5 @@ th.sortable{cursor:pointer;user-select:none;white-space:nowrap}th.sortable:hover
 .linechart svg{width:100%;height:auto;display:block}.linechart .grid{stroke:var(--line);stroke-width:1}.linechart .ax{fill:var(--mut);font-size:11px}
 .linechart .ln{fill:none;stroke:var(--red);stroke-width:2;stroke-linejoin:round}.linechart .ref{stroke:var(--mut);stroke-width:1;stroke-dasharray:4 4}
 .linechart .dot{fill:var(--red);stroke:var(--card);stroke-width:2}.linechart .hit{fill:transparent}.linechart .hit:hover{fill:rgba(214,16,63,.18)}
+
+.sharecell{position:relative;min-width:110px}.sharecell .sharebar{position:absolute;left:0;top:8px;bottom:8px;background:var(--red);opacity:.22;border-radius:3px}.sharecell span:last-child{position:relative}

@@ -485,6 +485,64 @@ class OdooProvider:
                                   "avg": round(by[st][1] / by[st][0], 2) if st in by and by[st][0] else None} for st, lbl in buckets]}
                 for wid, by in acc.items()}
 
+    def _payments(self, wid: int, order_dom: list) -> list[dict]:
+        """Méthodes de paiement des commandes confirmées d'un site web (transactions réussies, en attente ou autorisées)."""
+        dom = [("sale_order_ids.website_id", "=", wid), ("sale_order_ids.state", "in", ["sale", "done"]),
+               ("state", "in", ["done", "authorized", "pending"])] + [("sale_order_ids." + f, op, v) for f, op, v in order_dom]
+        try:
+            rows = self._call("payment.transaction", "formatted_read_group", domain=dom, groupby=["payment_method_id"],
+                              aggregates=["amount:sum", "__count"])
+            key = "payment_method_id"
+        except Exception:                                      # anciennes versions / droits : repli sur le fournisseur de paiement
+            rows = self._call("payment.transaction", "formatted_read_group", domain=dom, groupby=["provider_id"],
+                              aggregates=["amount:sum", "__count"])
+            key = "provider_id"
+        out = [{"name": (r[key][1] if r.get(key) else "Non renseigné"), "count": r["__count"], "amount": round(r["amount:sum"] or 0)} for r in rows]
+        total = sum(x["count"] for x in out)
+        for x in out:
+            x["share"] = x["count"] / total if total else 0.0
+        return sorted(out, key=lambda x: -x["count"])
+
+    def _deliveries(self, wid: int, order_dom: list) -> list[dict]:
+        """Modes de livraison des commandes confirmées d'un site web (sans transporteur = retrait, produit virtuel…)."""
+        rows = self._call("sale.order", "formatted_read_group", domain=[("website_id", "=", wid)] + order_dom,
+                          groupby=["carrier_id"], aggregates=["amount_untaxed:sum", "__count"])
+        out = [{"name": (r["carrier_id"][1] if r.get("carrier_id") else "Sans livraison (retrait, service…)"), "count": r["__count"],
+                "amount": round(r["amount_untaxed:sum"] or 0)} for r in rows]
+        total = sum(x["count"] for x in out)
+        for x in out:
+            x["share"] = x["count"] / total if total else 0.0
+        return sorted(out, key=lambda x: -x["count"])
+
+    def _abandoned(self, wid: int, d_from: date, d_to: date, confirmed: dict | None) -> dict:
+        """Paniers abandonnés (devis web non confirmés, notion « panier abandonné » d'Odoo) : total et évolution du taux d'abandon."""
+        gran, buckets = self._buckets(d_from, d_to)
+        starts = [b[0] for b in buckets]
+        rows = self._call("sale.order", "search_read",
+                          domain=[("website_id", "=", wid), ("is_abandoned_cart", "=", True), ("date_order", ">=", d_from.isoformat()),
+                                  ("date_order", "<", (d_to + timedelta(days=1)).isoformat())],
+                          fields=["date_order", "amount_untaxed"])
+        by: dict[date, list[float]] = {}
+        for o in rows:
+            if not o.get("date_order"):
+                continue
+            d = date.fromisoformat(str(o["date_order"])[:10])
+            key = max((st for st in starts if st <= d), default=None)
+            if key is not None:
+                c = by.setdefault(key, [0, 0.0])
+                c[0] += 1
+                c[1] += float(o["amount_untaxed"] or 0.0)
+        conf = {pt["label"]: pt["orders"] for pt in (confirmed or {}).get("points", [])}
+        pts = []
+        for st, lbl in buckets:
+            n, amt = by.get(st, [0, 0.0])
+            ok = conf.get(lbl, 0)
+            pts.append({"label": lbl, "orders": ok, "abandoned": int(n), "amount": round(amt), "avg": round(n / (n + ok), 4) if n + ok else None})
+        n_ab, amt = len(rows), sum(float(o["amount_untaxed"] or 0.0) for o in rows)
+        n_ok = sum(conf.values())
+        return {"count": n_ab, "amount": round(amt), "rate": n_ab / (n_ab + n_ok) if n_ab + n_ok else 0.0,
+                "series": {"granularity": gran, "points": pts}}
+
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
@@ -499,6 +557,13 @@ class OdooProvider:
         for g in groups:
             wid, wname = g["website_id"]
             n, revenue = g["__count"], g["amount_untaxed:sum"]
+            order_dom = [("date_order", ">=", d_from.isoformat()), ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
+
+            def safe(fn, *a):                                  # chaque vue est facultative : une erreur n'empêche pas les autres
+                try:
+                    return fn(*a)
+                except Exception:
+                    return None
             lines = self._call("sale.order.line", "formatted_read_group", groupby=["product_id"],
                                domain=[("order_id.website_id", "=", wid), ("order_id.state", "in", ["sale", "done"]),
                                        ("product_id.type", "!=", "service"),  # hors livraison, ports, etc.
@@ -512,6 +577,9 @@ class OdooProvider:
             names = self._product_names([l["product_id"][0] for l in best], {l["product_id"][0]: l["product_id"][1] for l in best})
             out.append({"name": settings.WEBSHOP_LABELS.get(wname, wname), "orders": n, "revenue": round(revenue),
                         "avg_basket": round(revenue / n, 2) if n else 0.0, "basket_series": series.get(wid),
+                        "payments": safe(self._payments, wid, order_dom),
+                        "deliveries": safe(self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
+                        "abandoned": safe(self._abandoned, wid, d_from, d_to, series.get(wid)),
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

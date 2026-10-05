@@ -38,6 +38,6 @@ Qui accède : tout `@lifelive-motorsport.com` **et** les adresses de `ALLOWED_EM
 2. Le script affiche l'enregistrement à créer (CNAME `dashboard-app` → `ghs.googlehosted.com.`). Le certificat HTTPS est émis automatiquement (quelques minutes à 1 h).
 
 ## 6. Contrôles
-- `https://dashboard-app.lifelive-motorsport.com/healthz` répond `{"ok":true}`.
+- `https://dashboard-app.lifelive-motorsport.com/api/health` répond `{"ok":true}`.
 - Connexion avec un compte du domaine, puis avec un compte actionnaire ; un compte non listé doit être refusé (« Accès non autorisé »).
 - Installer la PWA : Chrome/Android « Ajouter à l'écran d'accueil » ; Safari/iOS « Sur l'écran d'accueil ».

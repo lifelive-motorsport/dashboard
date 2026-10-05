@@ -25,3 +25,7 @@ def test_source_failure_returns_502_not_500(monkeypatch):
     m._cache.clear()
     r = c.get("/api/dashboard?from=2020-01-01&to=2020-01-31")
     assert r.status_code == 502 and "secret" not in r.text
+
+
+def test_health_endpoint():
+    assert c.get("/api/health").json() == {"ok": True}  # « /healthz » est réservé par Cloud Run

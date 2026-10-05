@@ -24,3 +24,4 @@ ol{padding-left:22px;margin:0}li{display:flex;justify-content:space-between;padd
 footer{color:var(--mut);font-size:12px;margin-top:24px}.na{color:var(--mut);font-style:italic}
 
 #login{display:flex;justify-content:center;padding:40px 0}
+#login[hidden],#app[hidden]{display:none}

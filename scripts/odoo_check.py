@@ -30,6 +30,10 @@ checks = [
                 ("account_id.code", "=like", "700%")], groupby=["account_id"], aggregates=["balance:sum"])),
     ("Commandes website", "sale.order", "search_count", dict(domain=[("website_id", "!=", False)])),
     ("Sites web", "website", "search_read", dict(domain=[], fields=["name"])),
+    ("Lecture des contacts (société, étiquettes)", "res.partner", "search_read",
+     dict(domain=[], fields=["commercial_partner_id", "category_id"], limit=1)),
+    ("Étiquettes de regroupement clients", "res.partner.category", "search_read",
+     dict(domain=[("name", "=ilike", "regroup_client%")], fields=["name"])),
 ]
 ok = True
 for label, model, method, kw in checks:
@@ -39,6 +43,8 @@ for label, model, method, kw in checks:
     print(f"{'OK ' if not err else 'KO '} {label}: {detail}")
     if label == "Sites web" and res:
         print("    sites :", [w["name"] for w in res])
+    if label.startswith("Étiquettes de regroupement") and res:
+        print("    étiquettes :", sorted(t["name"] for t in res))
 # Droits d'écriture : vérification SANS écrire (has_access ne modifie rien).
 writable = []
 for model in ("res.partner", "account.move", "account.move.line", "account.account", "sale.order", "product.product"):

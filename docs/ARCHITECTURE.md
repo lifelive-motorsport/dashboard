@@ -28,3 +28,10 @@ flowchart LR
 - Cloud Run à l'échelle zéro : quelques euros par mois ou moins pour 2–10 utilisateurs ; Secret Manager < 1 €/mois.
 - Accès : jeton Google vérifié côté serveur, domaine Workspace + liste blanche d'emails (`ALLOWED_EMAILS`).
 - Aucun secret dans le dépôt ; la clé Odoo n'existe que dans Secret Manager.
+
+## Regroupement de clients (hit-parade)
+- Dans Odoo, ajouter au contact (ou à sa société) l'étiquette **`regroup_client=Nom du groupe`** (casse et espaces autour du « = » sans importance).
+- Tous les contacts qui portent le même nom de groupe sont additionnés dans le classement.
+- Sans étiquette, les contacts d'une même société sont fusionnés automatiquement (société = `commercial_partner_id`).
+- Si Odoo refuse la lecture des contacts, le classement revient aux noms tels que saisis et l'écran l'indique.
+- Contrôle : `python scripts/odoo_check.py` liste les étiquettes trouvées.

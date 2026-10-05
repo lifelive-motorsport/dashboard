@@ -119,8 +119,11 @@ function clients(d, allowed) {
   if (tc.unavailable) return `<p class="na">${esc(tc.unavailable)}</p>`;
   const cur = allowed.includes(tab) ? tab : allowed[0];
   const labels = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
+  const m = tc._meta, info = !m ? '' : m.grouping
+    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}.</small>`
+    : `<small class="neg">Regroupement indisponible : les clients sont affichés tels que saisis dans Odoo.</small>`;
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    <ol>${(tc[cur] || []).map(c => `<li><span>${esc(c.name)}</span><b>${eur(c.ca)}</b></li>`).join('')}</ol>`;
+    <ol>${(tc[cur] || []).map(c => `<li><span>${esc(c.name)}</span><b>${eur(c.ca)}</b></li>`).join('')}</ol>${info}`;
 }
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).

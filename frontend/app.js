@@ -54,26 +54,53 @@ const PLAN = {
     'Le périmètre exact (comptes, sponsoring) et un budget de référence.'],
 };
 
-let token = sessionStorage.getItem('idt'), data = null, tab = 'total', cfg;
+let token = sessionStorage.getItem('idt'), tab = 'total', cfg;
 const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca');
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
-function range() {
-  const t = new Date(), y = t.getFullYear(), f = d => d.toISOString().slice(0,10);
-  switch ($('period').value) {
-    case 'month': return [f(new Date(Date.UTC(y, t.getMonth(), 1))), f(t)];
-    case 'prev': return [`${y-1}-01-01`, `${y-1}-12-31`];
-    case '12m': return [f(new Date(Date.UTC(y-1, t.getMonth(), t.getDate()+1))), f(t)];
-    default: return [`${y}-01-01`, f(t)];
-  }
+// ---- Périodes : chaque tableau a la sienne ---------------------------------------------------
+const PERIODS = [['ytd','Année en cours'], ['6m','6 derniers mois'], ['3m','3 derniers mois'], ['lm','Mois dernier']];
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function monthsAgo(t, n) {           // même jour il y a n mois (ramené à la fin du mois si besoin)
+  const d = new Date(t.getFullYear(), t.getMonth() - n, 1);
+  d.setDate(Math.min(t.getDate(), new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return d;
 }
+function periodRange(p) {
+  const t = new Date();
+  if (p === 'lm') return [ymd(new Date(t.getFullYear(), t.getMonth() - 1, 1)), ymd(new Date(t.getFullYear(), t.getMonth(), 0))];
+  if (p === '6' || p === '6m' || p === '3m') { const d = monthsAgo(t, p === '3m' ? 3 : 6); d.setDate(d.getDate() + 1); return [ymd(d), ymd(t)]; }
+  return [`${t.getFullYear()}-01-01`, ymd(t)];                       // ytd
+}
+const fmtDate = s => s.split('-').reverse().join('/');
+let periods = {}; try { periods = JSON.parse(store.get('lm_periods') || '{}'); } catch {}
+const periodOf = bid => PERIODS.some(p => p[0] === periods[bid]) ? periods[bid] : 'ytd';
 
-// ---- Composants -----------------------------------------------------------------------------
+// Données par période (clé = dates réelles, donc renouvelée chaque jour)
+const cache = new Map();   // "from|to" -> {data, at}
+const inflight = new Map();
+async function getData(p, force) {
+  const [f, t] = periodRange(p), key = f + '|' + t, hit = cache.get(key);
+  if (hit && !force && Date.now() - hit.at < 60000) return hit.data;
+  if (inflight.has(key) && !force) return inflight.get(key);
+  const job = (async () => {
+    const r = await fetch(`/api/dashboard?from=${f}&to=${t}${force ? '&refresh=true' : ''}`, {headers: token ? {Authorization: 'Bearer ' + token} : {}});
+    if (r.status === 401) { sessionStorage.removeItem('idt'); token = null; needLogin(); throw new Error('Connexion requise'); }
+    if (!r.ok) throw new Error(r.status === 403 ? 'Accès non autorisé pour ce compte' : r.status === 502 ? 'Odoo est momentanément injoignable (erreur 502)' : 'Erreur ' + r.status);
+    const data = await r.json(); cache.set(key, {data, at: Date.now()}); return data;
+  })().finally(() => inflight.delete(key));
+  inflight.set(key, job); return job;
+}
+const entry = p => { const [f, t] = periodRange(p); return cache.get(f + '|' + t); };
+const cached = p => { const h = entry(p); return h && h.data; };
+const fresh = p => { const h = entry(p); return !!h && Date.now() - h.at < 60000; };
+const anyData = () => { for (const h of cache.values()) return h.data; return null; };
+
+// ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
 const kpi = (l, v, c='', sub='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
-const note = t => `<div class="note">${t}</div>`;
-const section = (t, html) => `<h3>${esc(t)}</h3>${html}`;
 const margin = o => o.ca ? pct(o.margin / o.ca) : '–';
+const grp = (d, k) => d.pnl.groups.find(g => g.key === k) || {ca: 0, direct_costs: 0, margin: 0};
+const busOf = d => d.pnl.bus.filter(b => b.ca || b.direct_costs);
 
 function bars(items, key, opts = {}) {
   const max = Math.max(...items.map(b => Math.abs(b[key])), 1);
@@ -81,90 +108,79 @@ function bars(items, key, opts = {}) {
     <div class="bars"><div class="bar solo ${key === 'ca' ? 'ca' : 'm' + (b[key] < 0 ? ' n' : '')}" style="width:${Math.abs(b[key]) / max * 100}%"></div></div>
     <span class="num ${key === 'margin' ? cls(b[key]) : ''}">${eur(b[key])}${opts.sub ? `<br><small class="na">${opts.sub(b)}</small>` : ''}</span></div>`).join('') + `</div>`;
 }
-
-function table(head, rows) {
-  return `<div class="table-wrap"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
-}
+const table = (head, rows) => `<div class="table-wrap"><table><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><td>${eur(o.direct_costs)}</td>
   <td class="${cls(o.margin)}">${eur(o.margin)}</td><td class="${cls(o.margin)}">${margin(o)}</td></tr>`;
 const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
+const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
-function financeStrip() {
-  const bs = data.balance_sheet;
-  return section('Position financière', `<div class="kpis">${kpi('Trésorerie', eur(bs.cash), cls(bs.cash))
-    + kpi('Créances clients', eur(bs.receivables)) + kpi('Dettes fournisseurs', eur(bs.payables))}</div>`);
-}
-
-function clients(allowed) {
-  const tc = data.top_clients;
+function clients(d, allowed) {
+  const tc = d.top_clients;
   if (tc.unavailable) return `<p class="na">${esc(tc.unavailable)}</p>`;
-  const tabs = allowed.includes(tab) ? tab : allowed[0];
+  const cur = allowed.includes(tab) ? tab : allowed[0];
   const labels = {total:'Total', XC:'XC', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing'};
-  return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === tabs ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    <ol>${(tc[tabs] || []).map(c => `<li><span>${esc(c.name)}</span><b>${eur(c.ca)}</b></li>`).join('')}</ol>`;
+  return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
+    <ol>${(tc[cur] || []).map(c => `<li><span>${esc(c.name)}</span><b>${eur(c.ca)}</b></li>`).join('')}</ol>`;
 }
 
-const bus = () => data.pnl.bus.filter(b => b.ca || b.direct_costs);
-const grp = k => data.pnl.groups.find(g => g.key === k) || {ca: 0, direct_costs: 0, margin: 0};
+// Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
+const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
+const FINANCE = B('finance', 'Position financière (à date)', d => `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
+  + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>`, true);
+
+const ALL_CLIENTS = ['total','XC','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
-// ---- Pages -------------------------------------------------------------------------------------
+// ---- Pages = listes de blocs --------------------------------------------------------------------
 const PAGES = {
-  'overview/ca'() {
-    const t = data.pnl.total;
-    return `<div class="kpis">${kpi('Chiffre d’affaires', eur(t.ca)) + kpi('CA XC', eur(grp('XC').ca)) + kpi('CA CARS', eur(grp('CARS').ca))}</div>`
-      + financeStrip() + section('CA par BU', bars(bus(), 'ca', {sub: b => t.ca ? pct(b.ca / t.ca) + ' du CA' : ''}))
-      + section('Hit-parade clients', clients(['total','XC','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING']));
-  },
-  'overview/mb'() {
-    const t = data.pnl.total;
-    return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin))
-      + kpi('Frais directs', eur(t.direct_costs))}</div>` + financeStrip()
-      + section('Marge brute par BU', bars(bus(), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)}))
-      + note('Marge brute = CA − frais directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.');
-  },
-  'xcvscars/ca'() {
-    const x = grp('XC'), c = grp('CARS'), tot = x.ca + c.ca || 1;
-    return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi('CARS', eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
+  'overview/ca': () => [
+    B('kpi', 'Chiffre d’affaires', d => `<div class="kpis">${kpi('Chiffre d’affaires', eur(d.pnl.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca)) + kpi('CA CARS', eur(grp(d,'CARS').ca))}</div>`),
+    FINANCE,
+    B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
+    B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
+  ],
+  'overview/mb': () => [
+    B('kpi', 'Marge brute', d => { const t = d.pnl.total; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Frais directs', eur(t.direct_costs))}</div>`; }),
+    FINANCE,
+    B('bu', 'Marge brute par BU', d => bars(busOf(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
+    NOTE('Marge brute = CA − frais directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
+  ],
+  'xcvscars/ca': () => [
+    B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
+      return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi('CARS', eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
       <div class="stack"><div style="width:${x.ca / tot * 100}%;background:var(--red)"></div><div style="width:${c.ca / tot * 100}%;background:var(--mut)"></div></div>
-      <small class="na">Rouge : XC — gris : CARS (hors « Non affecté », ${eur(grp('OTHER').ca)})</small>`;
-  },
-  'xcvscars/mb'() {
-    const x = grp('XC'), c = grp('CARS');
-    return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi('CARS', eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
-      + section('Détail', table(HEAD, [lineRow('XC Cross Car', x), lineRow('CARS', c)]));
-  },
-  'xc/general'() {
-    const x = grp('XC');
-    return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin))
-      + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`
-      + note('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».')
-      + section('Hit-parade clients XC', clients(['XC']));
-  },
-  'xc/lignes'() {
-    const xc = data.pnl.bus.find(b => b.key === 'XC');
-    return table(HEAD, xc.lines.map(l => lineRow(l.line, l)))
-      + note('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.');
-  },
-  'xc/webshop'() {
-    const ws = data.webshops;
-    if (ws.unavailable) return `<p class="na">${esc(ws.unavailable)}</p>`;
-    return `<div class="two">${ws.map(w => kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)).join('')}</div>`
-      + ws.map(w => section('Produits les plus vendus — ' + w.name, `<ol>${(w.top_products || []).map(p => `<li><span>${esc(p)}</span></li>`).join('')}</ol>`)).join('')
-      + note('Commandes confirmées, hors taxes, hors lignes de service (livraison…). Source : commandes Odoo par site web.');
-  },
-  'cars/general'() {
-    const c = grp('CARS');
-    return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin))
-      + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`
-      + section('Par BU', table(HEAD, data.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b))));
-  },
-  'cars/bu'() {
-    const list = data.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs));
-    return section('Marge brute par BU', bars(list, 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)}))
-      + section('Hit-parade clients', clients(['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING']))
-      + note('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.');
-  },
+      <small class="na">Rouge : XC — gris : CARS (hors « Non affecté », ${eur(grp(d,'OTHER').ca)})</small>`; }),
+  ],
+  'xcvscars/mb': () => [
+    B('cmp', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS');
+      return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi('CARS', eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`; }),
+    B('detail', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
+  ],
+  'xc/general': () => [
+    B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
+    NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
+    B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
+  ],
+  'xc/lignes': () => [
+    B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
+    NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
+  ],
+  'xc/webshop': () => [
+    B('shops', 'Ventes des webshops', d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>`
+      : `<div class="two">${d.webshops.map(w => kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)).join('')}</div>`),
+    B('products', 'Produits les plus vendus', d => d.webshops.unavailable ? '' : d.webshops.map(w =>
+      `<h4 class="sub">${esc(w.name)}</h4><ol>${(w.top_products || []).map(p => `<li><span>${esc(p)}</span></li>`).join('')}</ol>`).join('')),
+    NOTE('Commandes confirmées, hors taxes, hors lignes de service (livraison…). Source : commandes Odoo par site web.'),
+  ],
+  'cars/general': () => [
+    B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
+    B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
+  ],
+  'cars/bu': () => [
+    B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
+    B('clients', 'Hit-parade clients', d => clients(d, ['MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'])),
+    NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),
+  ],
 };
 
 function soon(key) {
@@ -183,44 +199,80 @@ function renderNav(key) {
       return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`).join('');
 }
 
-function render() {
+let current = {key: null, blocks: []};
+const bkey = b => current.key + ':' + b.id;
+const selectHTML = (b, p) => `<select class="per" data-bid="${b.id}" aria-label="Période — ${esc(b.title)}">${PERIODS.map(([v, l]) => `<option value="${v}"${v === p ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+
+function blockHTML(b) {
+  if (b.static) return b.static;
+  const p = periodOf(bkey(b)), d = b.fixed ? (anyData() || cached('ytd')) : cached(p), [f, t] = periodRange(p);
+  const dates = b.fixed ? 'à date' : `${fmtDate(f)} → ${fmtDate(t)}`;
+  return `<section class="block" data-bid="${b.id}"><div class="block-head"><h3>${esc(b.title)}</h3>
+    <span class="per-wrap">${b.fixed ? '' : selectHTML(b, p)}<small class="per-dates">${dates}</small></span></div>
+    <div class="block-body">${d ? b.render(d) : '<p class="na">Chargement…</p>'}</div></section>`;
+}
+
+function updateBlock(b) {   // ne redessine que ce bloc (conserve le défilement)
+  const el = $('page').querySelector(`.block[data-bid="${b.id}"]`); if (!el) return;
+  el.outerHTML = blockHTML(b);
+}
+
+async function fillBlock(b, force) {
+  if (b.static) return;
+  const p = b.fixed ? 'ytd' : periodOf(bkey(b));
+  try { await getData(p, force); $('status').textContent = ''; $('status').className = ''; $('login').hidden = true; }
+  catch (e) { if (e.message === 'Connexion requise') return;
+    $('status').textContent = e.message + (anyData() ? ' — affichage des dernières données' : ''); $('status').className = 'err'; return; }
+  if (current.blocks.includes(b)) updateBlock(b);
+  const d = anyData(); if (d) $('foot').textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+}
+
+function render(force) {
   let key = route(); if (!item(key)) key = 'overview/ca';
   const {grp: g, it} = item(key);
   renderNav(key);
   $('page-title').innerHTML = `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
-  $('page').innerHTML = data ? (PAGES[key] ? PAGES[key]() : soon(key)) : '<p class="na">Chargement…</p>';
-  if (data) { const d = new Date(data.generated_at);
-    $('foot').textContent = `Source : ${data.source}${data.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — période ${data.period.from} → ${data.period.to} — mis à jour ${d.toLocaleString('fr-BE')}`; }
+  const blocks = PAGES[key] ? PAGES[key]() : [];
+  current = {key, blocks};
+  $('page').innerHTML = PAGES[key] ? blocks.map(blockHTML).join('') : soon(key);
+  blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
-  $('app').hidden = false;
-}
-
-async function load(force) {
-  const [f, t] = range();
-  try {
-    const r = await fetch(`/api/dashboard?from=${f}&to=${t}${force ? '&refresh=true' : ''}`, {headers: token ? {Authorization: 'Bearer ' + token} : {}});
-    if (r.status === 401) { sessionStorage.removeItem('idt'); token = null; return needLogin(); }
-    if (!r.ok) throw new Error(r.status === 403 ? 'Accès non autorisé pour ce compte' : r.status === 502 ? 'Odoo est momentanément injoignable (erreur 502)' : 'Erreur ' + r.status);
-    data = await r.json(); $('status').textContent = ''; $('status').className = ''; $('login').hidden = true; render();
-  } catch (e) { $('status').textContent = e.message + (data ? ' — affichage des dernières données' : ''); $('status').className = 'err'; }
+  $('app').hidden = false; $('login').hidden = true;
 }
 
 function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
-    callback: r => { token = r.credential; sessionStorage.setItem('idt', token); load(); }});
+    callback: r => { token = r.credential; sessionStorage.setItem('idt', token); render(); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
 
-$('period').onchange = () => load();
-$('refresh').onclick = () => load(true);
+// ---- Export PDF : impression navigateur avec feuille de style dédiée ------------------------------
+function exportPdf() {
+  const {grp: g, it} = item(current.key) || {grp: ['', ''], it: ['', '']};
+  const stamp = new Date().toLocaleString('fr-BE');
+  $('print-title').textContent = `${g[1]} › ${it[1]}`;
+  $('print-meta').textContent = `Rapport généré le ${stamp}`;
+  const old = document.title; document.title = `Lifelive – ${g[1]} – ${it[1]} – ${ymd(new Date())}`;
+  const restore = () => { document.title = old; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore); window.print();
+}
+
+$('refresh').onclick = () => render(true);
+$('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
 $('nav').onclick = e => { const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
-$('page').onclick = e => { if (e.target.dataset.tab) { tab = e.target.dataset.tab; render(); } };
-window.addEventListener('hashchange', () => { if ($('login').hidden) render(); window.scrollTo(0, 0); });
-setInterval(() => document.visibilityState === 'visible' && load(), 60000);
-document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && load());
+$('page').onclick = e => { if (e.target.dataset.tab) { tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
+$('page').onchange = e => {
+  const bid = e.target.dataset.bid; if (!bid || !e.target.classList.contains('per')) return;
+  const b = current.blocks.find(x => x.id === bid); periods[bkey(b)] = e.target.value; store.set('lm_periods', JSON.stringify(periods));
+  updateBlock(b); fillBlock(b);
+};
+window.addEventListener('hashchange', () => { if ($('login').hidden) { render(); window.scrollTo(0, 0); } });
+const tick = () => { if (document.visibilityState === 'visible' && $('login').hidden) render(); };
+setInterval(tick, 5 * 60000);   // l'API met déjà ses réponses en cache 5 min
+document.addEventListener('visibilitychange', tick);
 
 (async () => {
   cfg = await (await fetch('/api/config')).json();
@@ -228,6 +280,6 @@ document.addEventListener('visibilitychange', () => document.visibilityState ===
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
     if (!token) return needLogin();
   }
-  load();
+  render();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

@@ -15,12 +15,7 @@
   <button id="menu-btn" aria-label="Menu" aria-expanded="false">☰</button>
   <h1><img class="logo logo-on-dark" src="logo-light.png" alt="Lifelive" width="160" height="20"><img class="logo logo-on-light" src="logo-dark.png" alt="Lifelive" width="160" height="20"><span>Dashboard</span></h1>
   <div class="controls">
-    <select id="period" aria-label="Période">
-      <option value="ytd">Année en cours</option>
-      <option value="month">Mois en cours</option>
-      <option value="prev">Année précédente</option>
-      <option value="12m">12 derniers mois</option>
-    </select>
+    <button id="pdf" title="Exporter cette vue en PDF" aria-label="Exporter cette vue en PDF">PDF ⤓</button>
     <button id="refresh" title="Actualiser" aria-label="Actualiser">↻</button>
   </div>
 </header>
@@ -30,6 +25,7 @@
   <nav id="nav" aria-label="Rubriques"></nav>
   <div id="backdrop"></div>
   <main>
+    <div id="print-head"><img src="logo-dark.png" alt="Lifelive" width="160" height="20"><div><strong id="print-title"></strong><br><span id="print-meta"></span></div></div>
     <h2 id="page-title"></h2>
     <div id="page"></div>
     <footer id="foot"></footer>

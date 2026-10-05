@@ -68,6 +68,37 @@ footer{color:var(--mut);font-size:12px;margin-top:28px}.na{color:var(--mut);font
   h1 span{display:none}
   header{gap:8px;padding:10px 12px}
   h1{min-width:0;flex:1 1 auto}.logo{height:15px;max-width:100%}
-  .controls{min-width:0;flex-shrink:0}.controls select{max-width:108px;padding:8px 4px;font-size:13px}.controls button{padding:8px}
+  .controls{min-width:0;flex-shrink:0}.controls button{padding:8px}
   #menu-btn{padding:6px 9px}
+}
+
+/* Blocs avec sélecteur de période */
+.block{margin:0 0 22px}
+.block-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:26px 0 10px}
+.block-head h3{margin:0}
+.per-wrap{display:flex;align-items:center;gap:8px}
+.per-wrap select{padding:5px 8px;font-size:13px}
+.per-dates{color:var(--mut);font-size:12px;white-space:nowrap}
+h4.sub{margin:14px 0 4px;font-size:14px}
+#print-head{display:none}
+#pdf{font-size:13px;white-space:nowrap}
+
+/* Impression / export PDF : tout en clair, sans menu ni boutons */
+@media print{
+  :root{--bg:#fff;--card:#fff;--fg:#111;--mut:#555;--line:#ddd;--nav:#fff;--grn:#1f8a4c;--neg:#c62f34}
+  @page{size:A4;margin:14mm}
+  body{background:#fff;color:#111;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  header,#nav,#backdrop,#status,#login,#menu-btn,.per-wrap select,.tabs button:not(.on),#refresh,#pdf{display:none!important}
+  #app{display:block!important}
+  main{max-width:none;padding:0}
+  #print-head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #d6103f;padding-bottom:8px;margin-bottom:10px}
+  #print-head img{height:18px;width:auto}
+  #print-head span{color:#555;font-size:11px}
+  .card,.note,.soon-box{border:1px solid #ddd;box-shadow:none}
+  .block,.card,.note,tr,li{break-inside:avoid}
+  .block-head{margin-top:14px}
+  .per-dates{font-size:11px;color:#333}
+  .table-wrap{overflow:visible}
+  .tabs{margin-bottom:4px}
+  footer{margin-top:14px}
 }

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 import httpx
 
@@ -527,13 +527,20 @@ class OdooProvider:
         return sorted(out, key=lambda x: -x["count"])
 
     def _abandoned(self, wid: int, d_from: date, d_to: date, confirmed: dict | None) -> dict:
-        """Paniers abandonnés (devis web non confirmés, notion « panier abandonné » d'Odoo) : total et évolution du taux d'abandon."""
+        """Paniers abandonnés d'un site web : devis web non confirmés, contenant au moins un article, plus anciens que le délai
+        d'abandon du site. « Identifiés » = notion d'Odoo (menu Paniers abandonnés : client connecté) ; « anonymes » = visiteurs
+        non connectés. Évolution du taux d'abandon = abandonnés ÷ (abandonnés + commandes confirmées)."""
         gran, buckets = self._buckets(d_from, d_to)
         starts = [b[0] for b in buckets]
-        rows = self._call("sale.order", "search_read",
-                          domain=[("website_id", "=", wid), ("is_abandoned_cart", "=", True), ("date_order", ">=", d_from.isoformat()),
-                                  ("date_order", "<", (d_to + timedelta(days=1)).isoformat())],
-                          fields=["date_order", "amount_untaxed"])
+        try:
+            delay = float(self._call("website", "read", ids=[wid], fields=["cart_abandoned_delay"])[0]["cart_abandoned_delay"] or 1.0)
+        except Exception:
+            delay = 1.0                                              # délai par défaut d'Odoo : 1 heure
+        limit = min(datetime.utcnow() - timedelta(hours=delay), datetime.combine(d_to + timedelta(days=1), datetime.min.time()))
+        dom = [("website_id", "=", wid), ("state", "=", "draft"), ("order_line", "!=", False), ("date_order", ">=", d_from.isoformat()),
+               ("date_order", "<", limit.strftime("%Y-%m-%d %H:%M:%S"))]
+        rows = self._call("sale.order", "search_read", domain=dom, fields=["date_order", "amount_untaxed"])
+        known = {r["id"] for r in self._call("sale.order", "search_read", domain=dom + [("is_abandoned_cart", "=", True)], fields=["id"])}
         by: dict[date, list[float]] = {}
         for o in rows:
             if not o.get("date_order"):
@@ -541,19 +548,21 @@ class OdooProvider:
             d = date.fromisoformat(str(o["date_order"])[:10])
             key = max((st for st in starts if st <= d), default=None)
             if key is not None:
-                c = by.setdefault(key, [0, 0.0])
+                c = by.setdefault(key, [0, 0.0, 0])
                 c[0] += 1
                 c[1] += float(o["amount_untaxed"] or 0.0)
+                c[2] += 1 if o.get("id") in known else 0
         conf = {pt["label"]: pt["orders"] for pt in (confirmed or {}).get("points", [])}
         pts = []
         for st, lbl in buckets:
-            n, amt = by.get(st, [0, 0.0])
+            n, amt, ident = by.get(st, [0, 0.0, 0])
             ok = conf.get(lbl, 0)
-            pts.append({"label": lbl, "orders": ok, "abandoned": int(n), "amount": round(amt), "avg": round(n / (n + ok), 4) if n + ok else None})
+            pts.append({"label": lbl, "orders": ok, "abandoned": int(n), "identified": int(ident), "amount": round(amt),
+                        "avg": round(n / (n + ok), 4) if n + ok else None})
         n_ab, amt = len(rows), sum(float(o["amount_untaxed"] or 0.0) for o in rows)
         n_ok = sum(conf.values())
-        return {"count": n_ab, "amount": round(amt), "rate": n_ab / (n_ab + n_ok) if n_ab + n_ok else 0.0,
-                "series": {"granularity": gran, "points": pts}}
+        return {"count": n_ab, "identified": len(known), "anonymous": n_ab - len(known), "amount": round(amt),
+                "rate": n_ab / (n_ab + n_ok) if n_ab + n_ok else 0.0, "series": {"granularity": gran, "points": pts}}
 
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""

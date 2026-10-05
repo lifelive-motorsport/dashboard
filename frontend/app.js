@@ -245,9 +245,9 @@ function webshopPage(pick) {
       const w = shop(d); if (!w) return miss(d);
       const a = w.abandoned; if (!a) return `<p class="na">Abandons de panier indisponibles pour le moment.</p>${(w.errors || {}).abandoned ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.abandoned)}</small>` : ''}`;
       const bs = a.series, per = bs.granularity === 'week' ? 'semaine' : 'mois';
-      return `<div class="kpis">${kpi('Paniers abandonnés', num(a.count))}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', 'abandonnés ÷ (abandonnés + commandes)')}</div>`
-        + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé après le délai d’Odoo, avec un client identifié. Survolez un point pour le détail.`,
-          v => pct(v), p => `${p.label} : ${pct(p.avg)} — ${p.abandoned} abandonné${p.abandoned > 1 ? 's' : ''} (${eur(p.amount)}) pour ${p.orders} commande${p.orders > 1 ? 's' : ''}`, 'moyenne');
+      return `<div class="kpis">${kpi('Paniers abandonnés', num(a.count), '', `dont ${num(a.identified)} avec client identifié (menu Odoo « Abandoned Carts ») et ${num(a.anonymous)} visiteurs non connectés`)}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', 'abandonnés ÷ (abandonnés + commandes)')}</div>`
+        + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé, avec au moins un article, après le délai d’abandon d’Odoo (visiteurs non connectés compris). Survolez un point pour le détail.`,
+          v => pct(v), p => `${p.label} : ${pct(p.avg)} — ${p.abandoned} abandonné${p.abandoned > 1 ? 's' : ''} dont ${p.identified} identifié${p.identified > 1 ? 's' : ''} (${eur(p.amount)}) pour ${p.orders} commande${p.orders > 1 ? 's' : ''}`, 'moyenne');
     }),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);

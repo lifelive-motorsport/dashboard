@@ -121,6 +121,13 @@ const NOTE = t => ({static: `<div class="note">${t}</div>`});
 // Événements (axe analytique « MEETING ») : une ligne par événement dont le groupe BU figure dans `groups`.
 let evSort = {k: 'ca', dir: -1};                                   // tri des tableaux d'événements (défaut : CA décroissant)
 const evVal = (e, k) => k === 'margin' ? (e.ca ? e.result / e.ca : -Infinity) : k === 'client' ? (e.client || '') : k === 'bu' ? (e.bus || []).map(b => b.bu).join(' ') : e[k];
+// Véhicules : pas de colonne « Investis » ; le détail (investi, amorti, durée) est dans l'infobulle du résultat cash.
+function resultCell(e) {
+  if (!e.capex) return eur(e.result);
+  const dur = e.amort_months ? ` sur ≈ ${e.amort_months} mois (≈ ${eur(e.amort_monthly)} / mois)` : '';
+  const tip = `Résultat cash après ${eur(e.capex)} investis (immobilisés puis amortis${dur}). Déjà amorti sur la période : ${eur(e.amort || 0)} (non compté). Résultat comptable : ${eur(e.result_accounting)}.`;
+  return `<span title="${esc(tip)}">${eur(e.result)} <small class="na">ⓘ</small></span>`;
+}
 function capexCell(e) {
   if (!e.capex) return eur(0);
   const dur = e.amort_months ? ` sur ≈ ${e.amort_months} mois (≈ ${eur(e.amort_monthly)} / mois)` : '';
@@ -140,10 +147,10 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   const buText = e => (e.bus || []).filter(b => b.share >= .005).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
   const refText = e => { const r = e.reference || ''; return r.includes('/') ? r.split('/').slice(1).join('/').trim() : /^(modern rally|historic rally|historic racing)$/i.test(r.trim()) ? '' : r; };   // la BU a sa colonne
   const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${veh && refText(e) ? ` <small class="na">${esc(refText(e))}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
-    ${veh ? `<td class="client">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
-    <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
+    ${veh ? `<td class="client">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td>${veh ? '' : `<td>${capexCell(e)}</td>`}
+    <td class="${cls(e.result)}">${veh ? resultCell(e) : eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
   const total = {name: `Total (${list.length} ${U}${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
-  const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges'], ['capex', 'Investis*'], ['result', 'Résultat cash'], ['margin', 'Marge %']]);
+  const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges']].concat(veh ? [] : [['capex', 'Investis*']], [['result', 'Résultat cash'], ['margin', 'Marge %']]));
   const sorted = list.slice().sort((a, b) => {
     const x = evVal(a, evSort.k), y = evVal(b, evSort.k);
     return (typeof x === 'string' ? x.localeCompare(y, 'fr') : x - y) * evSort.dir || a.name.localeCompare(b.name, 'fr');
@@ -321,7 +328,7 @@ const PAGES = {
   ],
   'cars/vehicles': () => [
     B('vehicles', 'Véhicules CARS', d => eventsTable(d, ['CARS'], true, true)),
-    NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − frais directs − autres charges (hors dotations aux amortissements) − investissements ; *Investis = dépenses immobilisées (comptes INVEST), amorties ensuite — survolez le ⓘ pour le détail. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
+    NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − frais directs − autres charges (hors dotations aux amortissements) − investissements (dépenses immobilisées sur les comptes INVEST, amorties ensuite) ; survolez le ⓘ à côté du résultat pour le montant investi, la durée d’amortissement et le résultat comptable. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
   ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),

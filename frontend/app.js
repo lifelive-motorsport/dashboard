@@ -239,6 +239,21 @@ function webshopPage(pick) {
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
     B('shops', 'Ventes du webshop', d => { const w = shop(d); return w ? `<div class="two">${kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)}</div>` : miss(d); }),
+    B('visits', 'Évolution des visites', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const v = w.visits; if (!v) return `<p class="na">Visites indisponibles pour le moment.</p>${(w.errors || {}).visits ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.visits)}</small>` : ''}`;
+      const conv = v.visitors ? w.orders / v.visitors : null;
+      return `<div class="kpis">${kpi('Pages vues', num(v.views))}${kpi('Visiteurs uniques', v.visitors == null ? '–' : num(v.visitors))}${kpi('Taux de conversion', conv == null ? '–' : pct(conv), '', 'commandes ÷ visiteurs uniques')}</div>`
+        + lineChart(v.points, null, `Pages vues par ${v.granularity === 'week' ? 'semaine' : 'mois'}, limitées aux pages « ${esc(v.path)} » suivies par Odoo. Survolez un point pour le détail. Odoo ne suit que certaines pages (produits, pages marquées « suivre ») et exclut une partie des robots : ce sont des ordres de grandeur, à comparer plutôt qu’à lire en valeur absolue.`,
+          x => num(Math.round(x)), p => `${p.label} : ${num(p.views)} pages vues${p.visitors == null ? '' : ', ' + num(p.visitors) + ' visiteurs'}`, '');
+    }),
+    B('toppages', 'Pages les plus visitées', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const t = w.top_pages; if (!t || t.unavailable) return `<p class="na">Pages les plus visitées indisponibles pour le moment.</p>${(w.errors || {}).top_pages ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.top_pages)}</small>` : ''}`;
+      if (!t.length) return '<p class="na">Aucune page suivie sur la période.</p>';
+      return table(['#', 'Page', 'Vues', '% des vues'], t.map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.label)}<br><small class="na">${esc(p.path)}</small></td><td>${num(p.views)}</td><td>${pct(p.share)}</td></tr>`), 'prodtable')
+        + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
+    }),
     B('basket', 'Évolution du panier moyen', d => {
       const w = shop(d); if (!w) return miss(d);
       const bs = w.basket_series;

@@ -33,3 +33,6 @@ VEHICLE_PLAN = os.getenv("VEHICLE_PLAN", "CARS")        # axe analytique dont ch
 # Ajustements de marge brute : édition réservée à ces adresses ; stockage « firestore » (production) ou « memory » (démo/essais)
 ADMIN_EMAILS = _list("ADMIN_EMAILS")
 ADJUSTMENTS_STORE = os.getenv("ADJUSTMENTS_STORE", "memory" if PROVIDER == "demo" else "firestore")
+
+# Chemin des pages du webshop dans le suivi des visites d'Odoo (visites et pages les plus vues ne comptent que ces pages)
+WEBSHOP_PATH = os.getenv("WEBSHOP_PATH", "/shop")

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta, datetime
+from urllib.parse import unquote, urlsplit
 
 import httpx
 
@@ -496,6 +498,64 @@ class OdooProvider:
             y, m = (y + 1, 1) if m == 12 else (y, m + 1)
         return "month", out
 
+    def _visits(self, wid: int, d_from: date, d_to: date) -> dict:
+        """Visites du webshop d'après le suivi des pages d'Odoo (website.track), limité aux pages du chemin WEBSHOP_PATH.
+        Pages vues et visiteurs uniques par semaine/mois, et totaux de la période. Odoo ne suit que certaines pages
+        (produits, pages marquées « suivre ») : ce sont des ordres de grandeur, pas une mesure d'audience exhaustive."""
+        gran, buckets = self._buckets(d_from, d_to)
+        shop = [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%")]
+
+        def span(a: date, b: date) -> list:
+            return shop + [("visit_datetime", ">=", a.isoformat()), ("visit_datetime", "<", (b + timedelta(days=1)).isoformat())]
+
+        def count(a: date, b: date) -> tuple[int, int | None]:
+            try:
+                r = self._call("website.track", "formatted_read_group", domain=span(a, b), groupby=[],
+                               aggregates=["__count", "visitor_id:count_distinct"])
+                return (int(r[0]["__count"]), int(r[0]["visitor_id:count_distinct"])) if r else (0, 0)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code in (401, 403):
+                    raise
+                return self._call("website.track", "search_count", domain=span(a, b)), None     # repli : sans visiteurs uniques
+
+        ranges = []
+        for i, (st, lbl) in enumerate(buckets):
+            end = (buckets[i + 1][0] - timedelta(days=1)) if i + 1 < len(buckets) else d_to
+            ranges.append((max(st, d_from), min(end, d_to), lbl))
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            res = list(pool.map(lambda r: count(r[0], r[1]), ranges + [(d_from, d_to, "")]))
+        pts = [{"label": r[2], "views": v, "visitors": u, "avg": float(v)} for r, (v, u) in zip(ranges, res[:-1])]
+        views, visitors = res[-1]
+        return {"granularity": gran, "points": pts, "views": views, "visitors": visitors, "path": settings.WEBSHOP_PATH}
+
+    @staticmethod
+    def _page_label(url: str) -> tuple[str, str]:
+        """(libellé lisible, chemin) d'une URL suivie : « /shop/pneu-cross-car-1234?x=1 » -> (« Pneu cross car », « /shop/pneu-cross-car-1234 »)."""
+        path = unquote(urlsplit(url or "").path) or "/"
+        slug = path.rstrip("/").rsplit("/", 1)[-1]
+        slug = re.sub(r"-\d+$", "", slug)                       # Odoo suffixe le slug avec l'identifiant du produit
+        label = slug.replace("-", " ").strip().capitalize() if slug and slug.lower() != settings.WEBSHOP_PATH.strip("/").lower() else "Page d'accueil du shop"
+        return label or path, path
+
+    def _top_pages(self, wid: int, d_from: date, d_to: date, top: int = 15) -> list[dict]:
+        """Pages les plus vues du webshop (adresses regroupées sans leurs paramètres)."""
+        dom = [("visitor_id.website_id", "=", wid), ("url", "like", f"%{settings.WEBSHOP_PATH}%"),
+               ("visit_datetime", ">=", d_from.isoformat()), ("visit_datetime", "<", (d_to + timedelta(days=1)).isoformat())]
+        rows = self._call("website.track", "formatted_read_group", domain=dom, groupby=["url"], aggregates=["__count"],
+                          order="__count desc", limit=300)
+        merged: dict[str, dict] = {}
+        for r in rows:
+            if not r.get("url"):
+                continue
+            label, path = self._page_label(r["url"])
+            m = merged.setdefault(path, {"label": label, "path": path, "views": 0})
+            m["views"] += int(r["__count"])
+        pages = sorted(merged.values(), key=lambda m: -m["views"])[:top]
+        total = sum(m["views"] for m in merged.values())
+        for m in pages:
+            m["share"] = m["views"] / total if total else 0.0
+        return pages
+
     def _basket_series(self, d_from: date, d_to: date, base: list) -> dict[int, dict]:
         """Panier moyen (HT) par semaine/mois et par site web : {website_id: {granularity, points[{label, orders, revenue, avg}]}}."""
         gran, buckets = self._buckets(d_from, d_to)
@@ -636,7 +696,9 @@ class OdooProvider:
                         "avg_basket": round(revenue / n, 2) if n else 0.0, "basket_series": series.get(wid),
                         "payments": safe("payments", self._payments, wid, order_dom),
                         "deliveries": safe("deliveries", self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
-                        "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)), "errors": errors,
+                        "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)),
+                        "visits": safe("visits", self._visits, wid, d_from, d_to), "top_pages": safe("top_pages", self._top_pages, wid, d_from, d_to),
+                        "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

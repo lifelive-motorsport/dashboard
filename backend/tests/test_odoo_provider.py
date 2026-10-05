@@ -504,3 +504,29 @@ def test_missing_bu_lines_are_listed_with_item_account_and_amount():
     lines = [_aline(AND, "700040 CA Historic Racing", 100.0, bu="Historic Racing"), {**_aline(AND, "612000 Divers", -166.0, bu=""), "__count": 2}]
     r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 10, 5))
     assert r["bu_missing"] == 1 and r["bu_missing_detail"] == [{"item": "Andalucia 2026", "account": "612000 Divers", "amount": -166.0, "lines": 2}]
+
+
+def test_webshop_visits_by_month_and_top_pages_merge_query_strings():
+    p, _ = _shop_provider()
+    base = p._call
+    seen = []
+
+    def call(model, method, **kw):
+        if model == "website.track" and method == "formatted_read_group":
+            seen.append(kw)
+            if kw["groupby"] == ["url"]:
+                return [{"url": "/shop/pneu-cross-car-1234", "__count": 40}, {"url": "/shop/pneu-cross-car-1234?order=asc", "__count": 10},
+                        {"url": "/fr/shop", "__count": 25}, {"url": False, "__count": 5}]
+            start, end = kw["domain"][2][2], kw["domain"][3][2]
+            n = 100 if (start, end) == ("2026-01-01", "2026-04-01") else {"2026-01": 30, "2026-02": 20, "2026-03": 50}[start[:7]]   # totaux : période entière
+            return [{"__count": n, "visitor_id:count_distinct": 10}]
+        return base(model, method, **kw)
+    p._call = call
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
+    v = w["visits"]
+    assert v["granularity"] == "month" and [x["label"] for x in v["points"]] == ["janv. 2026", "févr. 2026", "mars 2026"]
+    assert [x["views"] for x in v["points"]] == [30, 20, 50] and v["views"] == 100 and v["visitors"] == 10
+    assert ("url", "like", "%/shop%") in seen[0]["domain"] and ("visitor_id.website_id", "=", 1) in seen[0]["domain"]
+    pages = w["top_pages"]
+    assert [(x["label"], x["path"], x["views"]) for x in pages] == [("Pneu cross car", "/shop/pneu-cross-car-1234", 50), ("Page d'accueil du shop", "/fr/shop", 25)]
+    assert round(pages[0]["share"], 3) == round(50 / 75, 3)

@@ -118,3 +118,5 @@ tr.tot td.open{font-weight:600}
 
 table.prodtable td.bu{text-align:left;white-space:normal;color:var(--mut);font-size:13px}
 table.prodtable.ev th:nth-child(2){text-align:left}
+
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap}th.sortable:hover,th.sorted{color:var(--fg,#fff)}th .arrow{font-size:10px}

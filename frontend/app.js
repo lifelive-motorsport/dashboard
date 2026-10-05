@@ -121,6 +121,8 @@ const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
 // Événements (axe analytique « MEETING ») : une ligne par événement dont le groupe BU figure dans `groups`.
+let evSort = {k: 'ca', dir: -1};                                   // tri des tableaux d'événements (défaut : CA décroissant)
+const evVal = (e, k) => k === 'margin' ? (e.ca ? e.result / e.ca : -Infinity) : k === 'bu' ? (e.bus || []).map(b => b.bu).join(' ') : e[k];
 function capexCell(e) {
   if (!e.capex) return eur(0);
   const dur = e.amort_months ? ` sur ≈ ${e.amort_months} mois (≈ ${eur(e.amort_monthly)} / mois)` : '';
@@ -141,7 +143,13 @@ function eventsTable(d, groups, showBu = false) {
     ${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
     <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
   const total = {name: `Total (${list.length} événement${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
-  return table(['Événement'].concat(showBu ? ['BU'] : [], ['CA', 'Frais directs', 'Autres charges', 'Investis*', 'Résultat cash', 'Marge %']), list.map(e => row(e)).concat([row(total, 'tot')]), 'prodtable') + note;
+  const cols = [['name', 'Événement']].concat(showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges'], ['capex', 'Investis*'], ['result', 'Résultat cash'], ['margin', 'Marge %']]);
+  const sorted = list.slice().sort((a, b) => {
+    const x = evVal(a, evSort.k), y = evVal(b, evSort.k);
+    return (typeof x === 'string' ? x.localeCompare(y, 'fr') : x - y) * evSort.dir || a.name.localeCompare(b.name, 'fr');
+  });
+  const th = ([k, l]) => `<th class="sortable${evSort.k === k ? ' sorted' : ''}" data-sort="${k}" role="button" tabindex="0" aria-sort="${evSort.k === k ? (evSort.dir > 0 ? 'ascending' : 'descending') : 'none'}">${esc(l)}<span class="arrow">${evSort.k === k ? (evSort.dir > 0 ? ' ▲' : ' ▼') : ''}</span></th>`;
+  return `<div class="table-wrap"><table class="prodtable"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${sorted.map(e => row(e)).concat([row(total, 'tot')]).join('')}</tbody></table></div>` + note;
 }
 const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − frais directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
@@ -379,7 +387,11 @@ $('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
 $('nav').onclick = e => { const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
-$('page').onclick = e => { if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
+const sortBy = e => { const h = e.target.closest('th[data-sort]'); if (!h) return false;
+  const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' ? 1 : -1)};     // 2ᵉ clic : inverse
+  current.blocks.filter(b => !b.static).forEach(updateBlock); return true; };
+$('page').onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && sortBy(e)) e.preventDefault(); };
+$('page').onclick = e => { if (sortBy(e)) return; if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
 $('page').onchange = e => {
   const bid = e.target.dataset.bid; if (!bid || !e.target.classList.contains('per')) return;
   const b = current.blocks.find(x => x.id === bid); periods[bkey(b)] = e.target.value; store.set('lm_periods', JSON.stringify(periods));

@@ -46,7 +46,7 @@ read -rp "ODOO_DB : " ODOO_DB
 gcloud run deploy dashboard --source=. --region="$REGION" --service-account="$SA" \
   --allow-unauthenticated --min-instances=0 --max-instances=2 --memory=512Mi --timeout=60 \
   --set-secrets=ODOO_API_KEY=ODOO_API_KEY:latest \
-  --set-env-vars="^@^DATA_PROVIDER=odoo@ODOO_URL=${ODOO_URL}@ODOO_DB=${ODOO_DB}@AUTH_ENABLED=true@GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}@ALLOWED_DOMAIN=lifelive-motorsport.com@ALLOWED_EMAILS=${ALLOWED_EMAILS}"
+  --set-env-vars="^#^DATA_PROVIDER=odoo#ODOO_URL=${ODOO_URL}#ODOO_DB=${ODOO_DB}#AUTH_ENABLED=true#GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}#ALLOWED_DOMAIN=lifelive-motorsport.com#ALLOWED_EMAILS=${ALLOWED_EMAILS}"  # séparateur « # » : les e-mails contiennent « @ » et « , »
 # --allow-unauthenticated : le service est public, mais /api/* exige un jeton Google valide
 # (domaine Workspace ou email de la liste blanche) vérifié côté serveur.
 

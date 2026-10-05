@@ -45,6 +45,16 @@ for label, model, method, kw in checks:
         print("    sites :", [w["name"] for w in res])
     if label.startswith("Étiquettes de regroupement") and res:
         print("    étiquettes :", sorted(t["name"] for t in res))
+# Dettes / créances : factures ouvertes (comme les écrans « Factures à payer » d'Odoo), puis détail comptable.
+for label, types in (("Dettes fournisseurs (factures ouvertes)", ["in_invoice", "in_refund"]), ("Créances clients (factures ouvertes)", ["out_invoice", "out_refund"])):
+    res, err = call("account.move", "formatted_read_group", domain=[("state", "=", "posted"), ("move_type", "in", types)],
+                    groupby=[], aggregates=["amount_residual_signed:sum"])
+    print(f"{'OK ' if not err else 'KO '} {label}:", err or f"{(res[0]['amount_residual_signed:sum'] or 0):,.2f} € (signé)")
+res, err = call("account.move.line", "formatted_read_group", domain=[("parent_state", "=", "posted"), ("account_id.account_type", "in", ["liability_payable"])],
+                groupby=["account_id"], aggregates=["balance:sum"])
+if not err:
+    print("    Comptes fournisseurs (écritures, toutes dates) :", {r["account_id"][1]: round(r["balance:sum"]) for r in res})
+
 # Droits d'écriture : vérification SANS écrire (has_access ne modifie rien).
 writable = []
 for model in ("res.partner", "account.move", "account.move.line", "account.account", "sale.order", "product.product"):

@@ -130,7 +130,8 @@ function clients(d, allowed) {
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
 const FINANCE = B('finance', 'Position financière (à date)', d => `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
-  + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>`, true);
+  + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
+  <small class="na">Créances et dettes = montant restant dû des factures validées (comme « Factures à payer » dans Odoo), toutes dates confondues.</small>`, true);
 
 const ALL_CLIENTS = ['total','XC','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};

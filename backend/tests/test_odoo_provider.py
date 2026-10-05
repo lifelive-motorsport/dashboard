@@ -125,3 +125,18 @@ def test_webshop_french_falls_back_when_translation_fails_or_missing():
     p2, seen2 = _shop_provider(langs=("en_US",))
     assert p2.webshops(date(2026, 1, 1), date(2026, 9, 4), top=1)[0]["products"][0]["name"] == "[1] Name 1"
     assert "context" not in seen2   # aucune langue française installée : pas d'appel de traduction
+
+
+def test_balance_sheet_uses_open_invoices_not_ledger_balances():
+    p = OdooProvider.__new__(OdooProvider)
+    seen = []
+
+    def call(model, method, **kw):
+        seen.append((model, tuple(kw["domain"][1][2])))
+        types = kw["domain"][1][2]
+        return [{"amount_residual_signed:sum": -169_017.73 if "in_invoice" in types else 197_511.0}]
+    p._call = call
+    p._grouped = lambda domain, groupby: [{"balance:sum": 7_895.0}]
+    bs = p.balance_sheet()
+    assert bs == {"receivables": 197_511.0, "payables": 169_017.73, "cash": 7_895.0}   # dette affichée positive
+    assert {m for m, _ in seen} == {"account.move"}  # plus de somme brute des comptes fournisseurs/clients

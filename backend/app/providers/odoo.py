@@ -53,12 +53,21 @@ class OdooProvider:
                 out[m.group(1)] = out.get(m.group(1), 0.0) + row["balance:sum"]
         return out
 
+    def _open_invoices(self, move_types: list[str]) -> float:
+        """Montant restant dû (signé, devise société) des factures/avoirs validés : même logique que les écrans
+        « Factures à payer » d'Odoo. Les accruals (« factures à recevoir ») et écritures hors factures sont exclus."""
+        rows = self._call("account.move", "formatted_read_group",
+                          domain=[("state", "=", "posted"), ("move_type", "in", move_types)],
+                          groupby=[], aggregates=["amount_residual_signed:sum"])
+        return float(rows[0]["amount_residual_signed:sum"] or 0.0) if rows else 0.0
+
     def balance_sheet(self) -> dict[str, float]:
-        def total(types: list[str]) -> float:
-            rows = self._grouped([("parent_state", "=", "posted"), ("account_id.account_type", "in", types)], [])
-            return rows[0]["balance:sum"] if rows else 0.0
-        return {"receivables": total(["asset_receivable"]), "payables": -total(["liability_payable"]),
-                "cash": total(["asset_cash", "liability_credit_card"])}
+        """Créances et dettes = factures ouvertes (montant restant dû) ; trésorerie = soldes des comptes bancaires/caisse/cartes."""
+        rows = self._grouped([("parent_state", "=", "posted"),
+                              ("account_id.account_type", "in", ["asset_cash", "liability_credit_card"])], [])
+        return {"receivables": self._open_invoices(["out_invoice", "out_refund"]),
+                "payables": -self._open_invoices(["in_invoice", "in_refund"]),  # dette affichée positive
+                "cash": rows[0]["balance:sum"] if rows else 0.0}
 
     # Regroupement de clients : étiquette de contact Odoo « regroup_client=Nom du groupe »
     TAG = re.compile(r"^\s*regroup_client\s*=\s*(.+?)\s*$", re.IGNORECASE)

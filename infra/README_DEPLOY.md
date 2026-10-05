@@ -41,3 +41,20 @@ Qui accède : tout `@lifelive-motorsport.com` **et** les adresses de `ALLOWED_EM
 - `https://dashboard-app.lifelive-motorsport.com/api/health` répond `{"ok":true}`.
 - Connexion avec un compte du domaine, puis avec un compte actionnaire ; un compte non listé doit être refusé (« Accès non autorisé »).
 - Installer la PWA : Chrome/Android « Ajouter à l'écran d'accueil » ; Safari/iOS « Sur l'écran d'accueil ».
+
+
+## Ajustements de marge brute (Firestore)
+
+Les ajustements saisis dans « Overview › Ajustements MB » sont enregistrés dans Firestore (un document partagé). Pour un service déjà déployé :
+
+```
+gcloud config set project lifelive-dashboard-app
+gcloud services enable firestore.googleapis.com
+gcloud firestore databases create --database='(default)' --location=europe-west1 --type=firestore-native
+gcloud projects add-iam-policy-binding lifelive-dashboard-app \
+  --member="serviceAccount:dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com" --role=roles/datastore.user --condition=None
+gcloud run services update dashboard --region=europe-west1 \
+  --update-env-vars="^#^ADMIN_EMAILS=adresse1@lifelive-motorsport.com,adresse2@lifelive-motorsport.com"
+```
+
+`ADMIN_EMAILS` : seules ces adresses peuvent modifier les ajustements ; les autres utilisateurs les voient en lecture seule.

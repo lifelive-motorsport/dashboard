@@ -9,7 +9,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
-  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs']]],
+  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['rules','Règles de répartition']]],
@@ -18,7 +18,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -292,6 +292,7 @@ const PAGES = {
           + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {}).total || 0)) : '')}</div>`; }),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),
   ],
+  'overview/adjustments': () => adjPageBlocks(),
   'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
@@ -366,7 +367,9 @@ const selectHTML = (b, p) => `<select class="per" data-bid="${b.id}" aria-label=
 
 function blockHTML(b) {
   if (b.static) return b.static;
-  const p = periodOf(bkey(b)), d = b.fixed ? (anyData() || cached('ytd')) : cached(p), [f, t] = periodRange(p);
+  const p = periodOf(bkey(b)), [f, t] = periodRange(p);
+  let d = b.fixed ? (anyData() || cached('ytd')) : cached(p);
+  if (d && adjOn && !b.raw) d = adjustedData(d);          // MB ajustée (sauf sur le bloc de rapprochement, qui compare les deux)
   const dates = b.fixed ? 'à date' : `${fmtDate(f)} → ${fmtDate(t)}`;
   return `<section class="block" data-bid="${b.id}"><div class="block-head"><h3>${esc(b.title)}</h3>
     <span class="per-wrap">${b.fixed ? '' : selectHTML(b, p)}<small class="per-dates">${dates}</small></span></div>
@@ -385,6 +388,7 @@ async function fillBlock(b, force) {
   catch (e) { if (e.message === 'Connexion requise') return;
     $('status').textContent = e.message + (anyData() ? ' — affichage des dernières données' : ''); $('status').className = 'err'; return; }
   if (current.blocks.includes(b)) updateBlock(b);
+  if ($('adj-editor')) drawAdjEditor();                    // les listes d'événements / véhicules viennent d'arriver
   renderFooter();
 }
 
@@ -394,9 +398,11 @@ function render(force) {
   renderNav(key);
   $('page-title').innerHTML = `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
   const blocks = PAGES[key] ? PAGES[key]() : [];
+  const bar = adjBar(key); if (bar) blocks.unshift(bar);
   current = {key, blocks};
   $('page').innerHTML = PAGES[key] ? blocks.map(blockHTML).join('') : soon(key);
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
+  if (key === 'overview/adjustments') drawAdjEditor();
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;
 }
@@ -404,7 +410,7 @@ function render(force) {
 function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
-    callback: r => { token = r.credential; sessionStorage.setItem('idt', token); render(); }});
+    callback: r => { token = r.credential; sessionStorage.setItem('idt', token); loadAdj().then(() => render()); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
 
@@ -461,7 +467,7 @@ $('page').onchange = e => {
   updateBlock(b); fillBlock(b);
 };
 window.addEventListener('hashchange', () => { if ($('login').hidden) { render(); window.scrollTo(0, 0); } });
-const tick = () => { if (document.visibilityState === 'visible' && $('login').hidden) render(); };
+const tick = () => { if (document.visibilityState === 'visible' && $('login').hidden) loadAdj().finally(() => render()); };
 setInterval(tick, 5 * 60000);   // l'API met déjà ses réponses en cache 5 min
 document.addEventListener('visibilitychange', tick);
 
@@ -471,6 +477,7 @@ document.addEventListener('visibilitychange', tick);
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
     if (!token) return needLogin();
   }
+  await loadAdj();
   render();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

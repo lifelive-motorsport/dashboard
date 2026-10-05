@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import settings
+from . import adjustments, settings
 from .auth import require_user
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -61,6 +61,32 @@ def healthz():
 def config():
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
             "source": settings.PROVIDER}
+
+
+@app.get("/api/adjustments")
+def get_adjustments(user: str = Depends(require_user)):
+    try:
+        doc = adjustments.store().get()
+    except Exception:
+        log.exception("Lecture des ajustements impossible")
+        return {"items": [], "updated_at": None, "updated_by": None, "can_edit": adjustments.can_edit(user),
+                "error": "Ajustements indisponibles (stockage non configuré ou inaccessible)."}
+    return {**doc, "can_edit": adjustments.can_edit(user)}
+
+
+@app.put("/api/adjustments")
+def put_adjustments(payload: adjustments.Payload, user: str = Depends(require_user)):
+    if not adjustments.can_edit(user):
+        raise HTTPException(403, "Modification réservée aux administrateurs du dashboard")
+    ids = [i.id for i in payload.items]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(422, "Identifiants d'ajustement en double")
+    try:
+        doc = adjustments.store().put([i.model_dump() for i in payload.items], user)
+    except Exception:
+        log.exception("Enregistrement des ajustements impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    return {**doc, "can_edit": True}
 
 
 @app.get("/api/dashboard")

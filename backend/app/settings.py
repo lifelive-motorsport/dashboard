@@ -29,3 +29,7 @@ EVENT_PLAN = os.getenv("EVENT_PLAN", "meeting")
 # Axe analytique « BU » : sert à rattacher chaque événement (axe MEETING) à XC ou à CARS. Nom exact du plan, sans tenir compte de la casse.
 BU_PLAN = os.getenv("BU_PLAN", "BU")
 VEHICLE_PLAN = os.getenv("VEHICLE_PLAN", "CARS")        # axe analytique dont chaque compte est un véhicule
+
+# Ajustements de marge brute : édition réservée à ces adresses ; stockage « firestore » (production) ou « memory » (démo/essais)
+ADMIN_EMAILS = _list("ADMIN_EMAILS")
+ADJUSTMENTS_STORE = os.getenv("ADJUSTMENTS_STORE", "memory" if PROVIDER == "demo" else "firestore")

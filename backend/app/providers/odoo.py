@@ -19,9 +19,14 @@ class OdooProvider:
     name = "odoo"
 
     def __init__(self) -> None:
+        key, db = settings.ODOO_API_KEY.strip(), settings.ODOO_DB.strip()
+        if not key or not key.isascii() or not key.isprintable() or " " in key or len(key) > 128:
+            # Sans jamais afficher la valeur : seule sa forme est décrite.
+            raise RuntimeError(f"ODOO_API_KEY invalide (longueur {len(key)}, ASCII={key.isascii()}) : "
+                               "elle doit être une seule ligne de lettres/chiffres, sans espace ni accent")
         self._http = httpx.Client(
-            base_url=settings.ODOO_URL.rstrip("/"),
-            headers={"Authorization": f"bearer {settings.ODOO_API_KEY}", "X-Odoo-Database": settings.ODOO_DB},
+            base_url=settings.ODOO_URL.strip().rstrip("/"),
+            headers={"Authorization": f"bearer {key}", "X-Odoo-Database": db},
             timeout=30,
         )
 

@@ -22,3 +22,21 @@ def test_top_clients_by_bu_and_total():
     assert r["XC"][0] == {"name": "B", "ca": 120}
     assert r["HISTORIC_RACING"] == [{"name": "A", "ca": 50}]
     assert all(c["name"] != "C" for board in r.values() for c in board)
+
+
+import pytest
+from app import settings
+
+
+@pytest.mark.parametrize("bad", ["", "clé avec accent", "deux mots", "x" * 300, "ligne1\nligne2"])
+def test_invalid_api_key_is_rejected_without_leaking_it(monkeypatch, bad):
+    monkeypatch.setattr(settings, "ODOO_API_KEY", bad)
+    with pytest.raises(RuntimeError) as e:
+        OdooProvider()
+    assert bad.strip() == "" or bad.strip() not in str(e.value)
+
+
+def test_valid_api_key_is_accepted_and_stripped(monkeypatch):
+    monkeypatch.setattr(settings, "ODOO_API_KEY", "abc123def456\n")
+    monkeypatch.setattr(settings, "ODOO_URL", "https://x.odoo.com")
+    assert OdooProvider()._http.headers["authorization"] == "bearer abc123def456"

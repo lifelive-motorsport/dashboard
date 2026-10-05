@@ -46,8 +46,10 @@ for label, model, method, kw in checks:
     if label.startswith("Étiquettes de regroupement") and res:
         print("    étiquettes :", sorted(t["name"] for t in res))
 # Dettes / créances : factures ouvertes (comme les écrans « Factures à payer » d'Odoo), puis détail comptable.
-for label, types in (("Dettes fournisseurs (factures ouvertes)", ["in_invoice", "in_refund"]), ("Créances clients (factures ouvertes)", ["out_invoice", "out_refund"])):
-    res, err = call("account.move", "formatted_read_group", domain=[("state", "=", "posted"), ("move_type", "in", types)],
+Y = date.today().year
+for label, types in ((f"Dettes fournisseurs (factures ouvertes {Y})", ["in_invoice", "in_refund"]), (f"Créances clients (factures ouvertes {Y})", ["out_invoice", "out_refund"])):
+    res, err = call("account.move", "formatted_read_group",
+                    domain=[("state", "=", "posted"), ("move_type", "in", types), ("date", ">=", f"{Y}-01-01"), ("date", "<=", f"{Y}-12-31")],
                     groupby=[], aggregates=["amount_residual_signed:sum"])
     print(f"{'OK ' if not err else 'KO '} {label}:", err or f"{(res[0]['amount_residual_signed:sum'] or 0):,.2f} € (signé)")
 res, err = call("account.move.line", "formatted_read_group", domain=[("parent_state", "=", "posted"), ("account_id.account_type", "in", ["liability_payable"])],

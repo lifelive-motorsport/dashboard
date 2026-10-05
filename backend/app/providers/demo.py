@@ -23,8 +23,8 @@ class DemoProvider:
         out.update({k: v * s for k, v in cost.items()})
         return out
 
-    def balance_sheet(self) -> dict[str, float]:
-        return {"receivables": 412_000.0, "payables": 298_000.0, "cash": 187_000.0}
+    def balance_sheet(self, year: int) -> dict[str, float]:
+        return {"year": year, "receivables": 412_000.0, "payables": 298_000.0, "cash": 187_000.0}
 
     def top_clients(self, d_from: date, d_to: date) -> dict:
         rnd = random.Random(7)

@@ -21,7 +21,7 @@ flowchart LR
 ## Règles de calcul
 - BU = 3 derniers chiffres des comptes 602/603/604/700 ; marge brute = CA − (602+603+604) ; personnel et 615 exclus ; comptes « old - » ignorés (`backend/app/bu.py`).
 - Rapprochement avec l'analyse de septembre 2026 : CA identique à l'euro quand on ne retient que les écritures créées avant le 04/09 ; le dashboard, lui, intègre les écritures saisies après coup (ex. 39 885 € de frais tardifs).
-- Créances et dettes : montant restant dû (`amount_residual_signed`) des factures et avoirs validés, toutes dates — comme les écrans « Factures à payer » d'Odoo. Les accruals (« factures à recevoir ») et les écritures hors factures ne comptent pas. Trésorerie : soldes des comptes bancaires, caisse et cartes.
+- Créances et dettes : montant restant dû (`amount_residual_signed`) des factures et avoirs validés dont la date comptable est dans l'année de référence (l'année de la période affichée) — comme les écrans « Factures à payer » d'Odoo. Les accruals (« factures à recevoir ») et les écritures hors factures ne comptent pas. Trésorerie : soldes des comptes bancaires, caisse et cartes.
 - Hit-parade : CA des comptes 700 par partenaire (contact tel que saisi sur la pièce).
 - Webshops : commandes confirmées (`sale`, `done`) par site web, HT, hors lignes de service (livraison). Correspondance dans `app/settings.py` (`WEBSHOP_LABELS`).
 

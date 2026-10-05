@@ -133,10 +133,12 @@ def test_balance_sheet_uses_open_invoices_not_ledger_balances():
 
     def call(model, method, **kw):
         seen.append((model, tuple(kw["domain"][1][2])))
+        dom = kw["domain"]
+        assert ("date", ">=", "2026-01-01") in dom and ("date", "<=", "2026-12-31") in dom   # année de référence seulement
         types = kw["domain"][1][2]
         return [{"amount_residual_signed:sum": -169_017.73 if "in_invoice" in types else 197_511.0}]
     p._call = call
     p._grouped = lambda domain, groupby: [{"balance:sum": 7_895.0}]
-    bs = p.balance_sheet()
-    assert bs == {"receivables": 197_511.0, "payables": 169_017.73, "cash": 7_895.0}   # dette affichée positive
+    bs = p.balance_sheet(2026)
+    assert bs == {"year": 2026, "receivables": 197_511.0, "payables": 169_017.73, "cash": 7_895.0}   # dette affichée positive
     assert {m for m, _ in seen} == {"account.move"}  # plus de somme brute des comptes fournisseurs/clients

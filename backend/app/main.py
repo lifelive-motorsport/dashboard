@@ -76,7 +76,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "source": p.name, "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "pnl": aggregate(p.pnl_balances(d_from, d_to)),
-            "balance_sheet": p.balance_sheet(),
+            "balance_sheet": p.balance_sheet(d_to.year),
             "top_clients": _safe(p.top_clients, d_from, d_to),
             "webshops": _safe(p.webshops, d_from, d_to),
         }

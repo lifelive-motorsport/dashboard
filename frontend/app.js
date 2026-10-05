@@ -210,7 +210,7 @@ function lineChart(points, ref, unit) {
   const every = Math.ceil(pts.length / 8), path = pts.filter(p => p.avg != null).map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.avg).toFixed(1)}`).join('');
   return `<div class="linechart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution du panier moyen">
     ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${eur(Math.round(t))}</text>`).join('')}
-    ${ref ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/><text class="ax" x="${W - R}" y="${y(ref) - 5}" text-anchor="end">moyenne ${eur(Math.round(ref))}</text>` : ''}
+    ${ref ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/><text class="ax" x="${L + 6}" y="${y(ref) - 5}" text-anchor="start">moyenne ${eur(Math.round(ref))}</text>` : ''}
     <path class="ln" d="${path}"/>
     ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>
       <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>`).join('')}

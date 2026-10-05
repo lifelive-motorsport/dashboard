@@ -335,8 +335,8 @@ def test_events_filter_on_the_meeting_plan_column_not_on_the_main_account():
 
 
 def test_events_result_by_meeting_plan_with_signed_analytic_amounts():
-    lines = [_aline(AND, "700040 CA Historic Racing", 41_500.0, bu="CARS"), _aline(AND, "604040 ACH. MARCH. Historic Racing", -50_000.0, bu="CARS"),
-             _aline(AND, "615001 Carburant", -18_500.0, bu="CARS"),
+    lines = [_aline(AND, "700040 CA Historic Racing", 41_500.0, bu="Historic Racing"), _aline(AND, "604040 ACH. MARCH. Historic Racing", -50_000.0, bu="Historic Racing"),
+             _aline(AND, "615001 Carburant", -18_500.0, bu="Historic Racing"),
              _aline(SPA, "700010 CA XC Manufacturer", 30_000.0, bu="XC"), _aline(SPA, "602012 FRAIS XC Race team", -12_000.0, bu="XC"),
              _aline(SPA, "612051 Frais de représentation", -1_000.0, bu="XC"),
              _aline(SPA, "400000 Clients", 999.0, bu="XC")]                                 # compte de bilan : ignoré
@@ -365,10 +365,10 @@ def test_events_plan_not_found_gives_a_clear_message():
 
 
 def test_event_bu_comes_from_the_bu_axis_before_the_accounts():
-    # comptes XC mais axe BU = CARS : l'axe prime
-    lines = [_aline(AND, "700010 CA XC Manufacturer", 10_000.0, bu="CARS"), _aline(AND, "602012 FRAIS XC Race team", -4_000.0, bu="CARS")]
+    # comptes XC mais axe BU = Historic Rally : l'axe prime
+    lines = [_aline(AND, "700010 CA XC Manufacturer", 10_000.0, bu="Historic Rally"), _aline(AND, "602012 FRAIS XC Race team", -4_000.0, bu="Historic Rally")]
     e = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))["events"][0]
-    assert e["group"] == "CARS" and e["mixed"] is False
+    assert e["group"] == "CARS" and e["mixed"] is False and e["bus"] == [{"bu": "Historic Rally", "share": 1.0}]
 
 
 def test_event_with_empty_bu_axis_is_flagged_not_guessed_from_accounts():
@@ -387,8 +387,27 @@ def test_events_require_the_bu_axis():
         assert "BU_PLAN" in str(e) and "MEETING" in str(e)
 
 
-def test_event_mixed_flag_and_unrecognized_bu_axis_accounts_are_reported():
-    lines = [_aline(AND, "700020 CA Modern Rally", 8_000.0, bu="CARS"), _aline(AND, "700010 CA XC Manufacturer", 2_000.0, bu="XC"),
+def test_bu_axis_accounts_of_lifelive_are_all_recognized():
+    f = OdooProvider._bu_of_axis_account
+    assert f("XC") == ("XC", "XC") and f("Modern Rally") == ("MODERN_RALLY", "CARS") and f("Historic Rally") == ("HISTORIC_RALLY", "CARS")
+    assert f("Historic Racing") == ("HISTORIC_RACING", "CARS") and f("Others") == ("OTHERS", "OTHERS")
+    assert f("OLD - 2025") == ("OLD", None)                                   # ancien exercice : reconnu mais écarté
+    assert f("Truc inconnu") is None and f("  historic   racing ") == ("HISTORIC_RACING", "CARS")
+
+
+def test_event_with_cars_bus_shows_the_split_and_old_and_others_are_handled():
+    lines = [_aline(AND, "700040 CA Historic Racing", 7_000.0, bu="Historic Racing"), _aline(AND, "700020 CA Modern Rally", 3_000.0, bu="Modern Rally"),
+             _aline(AND, "612051 Frais", -500.0, bu="OLD - 2025"),                                   # écarté, sans alerte
+             _aline(SPA, "700016 CA XC Others", 1_000.0, bu="Others")]
+    r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
+    e = {x["name"]: x for x in r["events"]}
+    assert e["Andalucia 2026"]["group"] == "CARS" and e["Andalucia 2026"]["bus"] == [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}]
+    assert e["Andalucia 2026"]["mixed"] is False                               # deux BU, mais un seul groupe (CARS)
+    assert e["Spa 2026"]["group"] == "OTHERS" and r["bu_unmapped"] == [] and r["bu_missing"] == 0
+
+
+def test_event_mixed_xc_and_cars_and_unrecognized_axis_account_are_reported():
+    lines = [_aline(AND, "700020 CA Modern Rally", 8_000.0, bu="Modern Rally"), _aline(AND, "700010 CA XC Manufacturer", 2_000.0, bu="XC"),
              _aline(AND, "612051 Frais", -100.0, bu="Autre chose")]
     r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
     e = r["events"][0]

@@ -299,14 +299,28 @@ class OdooProvider:
             plan = by_id[plan["parent_id"][0]]
         return f"x_plan{plan['id']}_id"
 
+    BU_AXIS_LABEL = {"XC": "XC", "MODERN_RALLY": "Modern Rally", "HISTORIC_RALLY": "Historic Rally", "HISTORIC_RACING": "Historic Racing",
+                     "OTHERS": "Others"}
+
     @classmethod
-    def _bu_group_of_axis_account(cls, name: str) -> str | None:
-        """Groupe (XC / CARS) d'après le nom d'un compte de l'axe BU (« XC », « CARS », ou le nom d'une BU CARS)."""
-        n = cls._plain(name)
-        if "xc" in n or "cross" in n:
-            return "XC"
-        if any(k in n for k in ("cars", "rally", "racing", "modern", "historic")):
-            return "CARS"
+    def _bu_of_axis_account(cls, name: str) -> tuple[str, str | None] | None:
+        """Compte de l'axe BU -> (clé de BU, groupe).
+
+        Comptes attendus : XC, Modern Rally, Historic Rally, Historic Racing, Others. Un compte « OLD … » (ancien exercice) est
+        reconnu mais écarté (clé « OLD », sans groupe). Tout autre nom : None (signalé à l'écran)."""
+        n = re.sub(r"\s+", " ", cls._plain(name)).strip()
+        if re.match(r"^old\b", n):
+            return "OLD", None
+        if n == "xc" or n.startswith("xc "):
+            return "XC", "XC"
+        if n == "modern rally":
+            return "MODERN_RALLY", "CARS"
+        if n == "historic rally":
+            return "HISTORIC_RALLY", "CARS"
+        if n == "historic racing":
+            return "HISTORIC_RACING", "CARS"
+        if n in ("others", "other", "autres"):
+            return "OTHERS", "OTHERS"
         return None
 
     def events(self, d_from: date, d_to: date) -> dict:
@@ -343,7 +357,7 @@ class OdooProvider:
                     continue
                 amount = float(r["amount:sum"] or 0.0)
                 e = ev.setdefault((col, aid), {"id": aid, "name": aname, "plan": col, "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0,
-                                               "axis": {"XC": 0.0, "CARS": 0.0}})
+                                               "axis": {}})
                 c = classify(code, name) if len(code) == 6 else None
                 if code[0] == "7":
                     e["ca"] += amount
@@ -354,17 +368,22 @@ class OdooProvider:
                 if not r.get(bu_col):
                     missing += 1
                     continue
-                g = self._bu_group_of_axis_account(r[bu_col][1])
-                if g:
-                    e["axis"][g] += abs(amount)
-                else:
+                m = self._bu_of_axis_account(r[bu_col][1])
+                if m is None:
                     unmapped.add(r[bu_col][1])
+                elif m[1]:                                  # compte OLD : écarté sans alerte
+                    e["axis"][m] = e["axis"].get(m, 0.0) + abs(amount)
         out = []
         for e in ev.values():
-            w = e.pop("axis")
-            e["group"] = "NONE" if not any(w.values()) else max(w, key=w.get)
-            tot_w = sum(w.values())
-            e["mixed"] = bool(tot_w) and min(w.values()) / tot_w >= 0.10          # l'autre groupe pèse au moins 10 %
+            axis = e.pop("axis")                                   # {(clé BU, groupe): poids}
+            wg: dict[str, float] = {}
+            for (_, g), v in axis.items():
+                wg[g] = wg.get(g, 0.0) + v
+            e["group"] = "NONE" if not wg else max(wg, key=wg.get)
+            tot_w = sum(wg.values())
+            e["mixed"] = len(wg) > 1 and (tot_w - max(wg.values())) / tot_w >= 0.10     # un autre groupe pèse au moins 10 %
+            e["bus"] = [{"bu": self.BU_AXIS_LABEL[k], "share": round(v / tot_w, 3)}
+                        for (k, g), v in sorted(axis.items(), key=lambda kv: -kv[1])] if tot_w else []
             e["result"] = e["ca"] - e["direct_costs"] - e["other_costs"]
             for k in ("ca", "direct_costs", "other_costs", "result"):
                 e[k] = round(e[k])

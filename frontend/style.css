@@ -115,3 +115,6 @@ tr.tot td{font-weight:700;border-top:2px solid var(--line)}
 
 td.open{font-style:italic;color:var(--mut)}
 tr.tot td.open{font-weight:600}
+
+table.prodtable td.bu{text-align:left;white-space:normal;color:var(--mut);font-size:13px}
+table.prodtable.ev th:nth-child(2){text-align:left}

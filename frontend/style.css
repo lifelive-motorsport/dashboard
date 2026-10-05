@@ -3,7 +3,7 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif;padding-top:env(safe-area-inset-top)}
 header{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
-h1{font-size:13px;margin:0;letter-spacing:.14em;text-transform:uppercase;display:flex;align-items:center;gap:12px}h1 span{color:var(--red);font-weight:700}
+h1{font-size:13px;margin:0;letter-spacing:.14em;text-transform:uppercase}h1 a{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none}h1 span{color:var(--red);font-weight:700}
 .controls{margin-left:auto;display:flex;gap:6px}
 .logo{height:20px;width:auto;display:block}.logo-on-light{display:none}
 @media (prefers-color-scheme:light){.logo-on-dark{display:none}.logo-on-light{display:block}}
@@ -105,3 +105,10 @@ h4.sub{margin:14px 0 4px;font-size:14px}
 
 table.prodtable th:nth-child(2),table.prodtable td:nth-child(2){text-align:left;white-space:normal;min-width:180px}
 tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+
+/* Actualiser : retour visuel */
+#refresh span{display:inline-block}
+#refresh.spin span{animation:turn .8s linear infinite}
+#refresh:disabled{opacity:.7;cursor:progress}
+@keyframes turn{to{transform:rotate(360deg)}}
+#status.ok{color:var(--grn)}

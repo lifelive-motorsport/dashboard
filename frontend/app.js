@@ -96,6 +96,11 @@ const entry = p => { const [f, t] = periodRange(p); return cache.get(f + '|' + t
 const cached = p => { const h = entry(p); return h && h.data; };
 const fresh = p => { const h = entry(p); return !!h && Date.now() - h.at < 60000; };
 const anyData = () => { for (const h of cache.values()) return h.data; return null; };
+const latestData = () => [...cache.values()].map(h => h.data).sort((x, y) => (y.generated_at > x.generated_at) - (y.generated_at < x.generated_at))[0] || null;
+function renderFooter() {
+  const d = latestData(); if (!d) return;
+  $('foot').textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+}
 
 // ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
 const kpi = (l, v, c='', sub='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
@@ -233,7 +238,7 @@ async function fillBlock(b, force) {
   catch (e) { if (e.message === 'Connexion requise') return;
     $('status').textContent = e.message + (anyData() ? ' — affichage des dernières données' : ''); $('status').className = 'err'; return; }
   if (current.blocks.includes(b)) updateBlock(b);
-  const d = anyData(); if (d) $('foot').textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+  renderFooter();
 }
 
 function render(force) {
@@ -245,7 +250,7 @@ function render(force) {
   current = {key, blocks};
   $('page').innerHTML = PAGES[key] ? blocks.map(blockHTML).join('') : soon(key);
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
-  store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
+  renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;
 }
 
@@ -267,7 +272,33 @@ function exportPdf() {
   window.addEventListener('afterprint', restore); window.print();
 }
 
-$('refresh').onclick = () => render(true);
+$('home').onclick = e => {                    // le logo ramène à l'accueil (Overview › CA)
+  e.preventDefault(); document.body.classList.remove('nav-open');
+  if (route() === 'overview/ca') window.scrollTo({top: 0}); else location.hash = '#/overview/ca';
+};
+
+let statusTimer;
+function flash(text, kind = 'ok') {            // message temporaire sous l'en-tête
+  $('status').textContent = text; $('status').className = kind; clearTimeout(statusTimer);
+  statusTimer = setTimeout(() => { if ($('status').textContent === text) { $('status').textContent = ''; $('status').className = ''; } }, 6000);
+}
+async function refresh() {
+  const btn = $('refresh'); if (btn.disabled) return;
+  btn.disabled = true; btn.classList.add('spin'); flash('Actualisation en cours…', '');
+  const periodsUsed = [...new Set(current.blocks.filter(b => !b.static).map(b => b.fixed ? 'ytd' : periodOf(bkey(b))))];
+  const before = new Set([...cache.values()].map(h => h.data.generated_at));
+  try {
+    await Promise.all(periodsUsed.map(p => getData(p, true)));   // une seule demande par période
+    render();
+    const fresh = periodsUsed.some(p => !before.has((cached(p) || {}).generated_at));
+    const at = new Date().toLocaleTimeString('fr-BE');
+    if (fresh) flash(`Données actualisées à ${at}.`);
+    else { const last = new Date(Math.max(...periodsUsed.map(p => +new Date((cached(p) || {}).generated_at || 0)))).toLocaleTimeString('fr-BE');
+           flash(`Déjà à jour : Odoo a été lu à ${last} (nouvelle lecture possible après 30 secondes).`); }
+  } catch (e) { if (e.message !== 'Connexion requise') flash(e.message, 'err'); }
+  finally { btn.disabled = false; btn.classList.remove('spin'); }
+}
+$('refresh').onclick = refresh;
 $('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');

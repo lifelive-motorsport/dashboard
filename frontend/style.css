@@ -120,3 +120,7 @@ table.prodtable td.bu{text-align:left;white-space:normal;color:var(--mut);font-s
 table.prodtable.ev th:nth-child(2){text-align:left}
 
 th.sortable{cursor:pointer;user-select:none;white-space:nowrap}th.sortable:hover,th.sorted{color:var(--fg,#fff)}th .arrow{font-size:10px}
+
+.linechart svg{width:100%;height:auto;display:block}.linechart .grid{stroke:var(--line);stroke-width:1}.linechart .ax{fill:var(--mut);font-size:11px}
+.linechart .ln{fill:none;stroke:var(--red);stroke-width:2;stroke-linejoin:round}.linechart .ref{stroke:var(--mut);stroke-width:1;stroke-dasharray:4 4}
+.linechart .dot{fill:var(--red);stroke:var(--card);stroke-width:2}.linechart .hit{fill:transparent}.linechart .hit:hover{fill:rgba(214,16,63,.18)}

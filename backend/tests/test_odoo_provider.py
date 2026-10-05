@@ -98,6 +98,10 @@ def _shop_provider(langs=("en_US", "fr_BE"), fail_read=False):
     seen = {}
 
     def call(model, method, **kw):
+        if model == "sale.order" and method == "search_read":
+            return [{"website_id": [1, "Lifelive Motorsport"], "date_order": "2026-01-10 09:00:00", "amount_untaxed": 100.0},
+                    {"website_id": [1, "Lifelive Motorsport"], "date_order": "2026-01-20 09:00:00", "amount_untaxed": 300.0},
+                    {"website_id": [1, "Lifelive Motorsport"], "date_order": "2026-03-02 09:00:00", "amount_untaxed": 50.0}]
         if model == "sale.order":
             return [{"website_id": [1, "Lifelive Motorsport"], "amount_untaxed:sum": 1000.0, "__count": 10}]
         if model == "sale.order.line":
@@ -435,3 +439,13 @@ def test_event_cash_result_excludes_amortisation_and_counts_capitalised_spend_wi
     assert (a["ca"], a["direct_costs"], a["other_costs"], a["capex"], a["amort"]) == (41_700, 30_466, 0, 37_510, 3_840)
     assert a["result"] == -26_276 and a["result_accounting"] == 7_394                  # cash vs comptable
     assert a["amort_monthly"] == 625 and a["amort_months"] == 60                         # 37 510 ÷ 625,17 ≈ 60 mois
+
+
+def test_webshop_basket_series_by_month_with_gaps_and_by_week_for_short_periods():
+    p, _ = _shop_provider()
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
+    bs = w["basket_series"]
+    assert bs["granularity"] == "month" and [x["label"] for x in bs["points"]] == ["janv. 2026", "févr. 2026", "mars 2026"]
+    assert [x["avg"] for x in bs["points"]] == [200.0, None, 50.0] and bs["points"][0]["orders"] == 2    # février sans commande : trou, pas zéro
+    gran, weeks = OdooProvider._buckets(date(2026, 9, 1), date(2026, 9, 30))
+    assert gran == "week" and weeks[0][0] == date(2026, 8, 31) and len(weeks) == 5                          # semaines commençant le lundi

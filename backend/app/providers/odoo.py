@@ -447,11 +447,53 @@ class OdooProvider:
             log.exception("Traduction des produits indisponible")
             return fallback
 
+    @staticmethod
+    def _buckets(d_from: date, d_to: date) -> tuple[str, list[tuple[date, str]]]:
+        """Découpage de la période : par semaine (lundi) si elle ne dépasse pas 45 jours, sinon par mois. [(début, libellé)]."""
+        mois = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+        if (d_to - d_from).days <= 45:
+            d, out = d_from - timedelta(days=d_from.weekday()), []
+            while d <= d_to:
+                out.append((d, f"{d.day} {mois[d.month - 1]}"))
+                d += timedelta(days=7)
+            return "week", out
+        y, m, out = d_from.year, d_from.month, []
+        while (y, m) <= (d_to.year, d_to.month):
+            out.append((date(y, m, 1), f"{mois[m - 1]} {y}"))
+            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+        return "month", out
+
+    def _basket_series(self, d_from: date, d_to: date, base: list) -> dict[int, dict]:
+        """Panier moyen (HT) par semaine/mois et par site web : {website_id: {granularity, points[{label, orders, revenue, avg}]}}."""
+        gran, buckets = self._buckets(d_from, d_to)
+        starts = [b[0] for b in buckets]
+        acc: dict[int, dict[date, list[float]]] = {}
+        orders = self._call("sale.order", "search_read", domain=base + [("website_id", "!=", False)],
+                            fields=["website_id", "date_order", "amount_untaxed"])
+        for o in orders:
+            if not o.get("website_id") or not o.get("date_order"):
+                continue
+            d = date.fromisoformat(str(o["date_order"])[:10])
+            key = max((st for st in starts if st <= d), default=None)
+            if key is None:
+                continue
+            c = acc.setdefault(o["website_id"][0], {}).setdefault(key, [0, 0.0])
+            c[0] += 1
+            c[1] += float(o["amount_untaxed"] or 0.0)
+        return {wid: {"granularity": gran,
+                      "points": [{"label": lbl, "orders": int(by.get(st, [0, 0.0])[0]), "revenue": round(by.get(st, [0, 0.0])[1]),
+                                  "avg": round(by[st][1] / by[st][0], 2) if st in by and by[st][0] else None} for st, lbl in buckets]}
+                for wid, by in acc.items()}
+
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
                 ("date_order", "<", (d_to + timedelta(days=1)).isoformat())]
         out = []
+        try:
+            series = self._basket_series(d_from, d_to, base)
+        except Exception:                                      # le graphique est un plus : ne bloque pas le reste de la page
+            series = {}
         groups = self._call("sale.order", "formatted_read_group", domain=base + [("website_id", "!=", False)],
                             groupby=["website_id"], aggregates=["amount_untaxed:sum", "__count"])
         for g in groups:
@@ -469,7 +511,7 @@ class OdooProvider:
             best = prods[:top]
             names = self._product_names([l["product_id"][0] for l in best], {l["product_id"][0]: l["product_id"][1] for l in best})
             out.append({"name": settings.WEBSHOP_LABELS.get(wname, wname), "orders": n, "revenue": round(revenue),
-                        "avg_basket": round(revenue / n, 2) if n else 0.0,
+                        "avg_basket": round(revenue / n, 2) if n else 0.0, "basket_series": series.get(wid),
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

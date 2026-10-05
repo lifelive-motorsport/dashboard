@@ -198,12 +198,38 @@ const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTOR
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
+// Courbe d'évolution (une seule série, SVG adaptatif) : points = [{label, avg (ou null), orders}], ref = valeur de référence en pointillé.
+function lineChart(points, ref, unit) {
+  const pts = points.map((p, i) => ({...p, i})), vals = pts.filter(p => p.avg != null);
+  if (vals.length < 2) return '<p class="na">Pas assez de commandes sur la période pour tracer une évolution.</p>';
+  const W = 640, H = 240, L = 52, R = 14, T = 14, B = 34;
+  const lo0 = Math.min(...vals.map(p => p.avg), ref || Infinity), hi0 = Math.max(...vals.map(p => p.avg), ref || 0);
+  const span = (hi0 - lo0) || hi0 || 1, lo = Math.max(0, lo0 - span * .15), hi = hi0 + span * .15;
+  const x = i => L + (W - L - R) * (pts.length > 1 ? i / (pts.length - 1) : .5), y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const ticks = [0, 1, 2, 3].map(k => lo + (hi - lo) * k / 3);
+  const every = Math.ceil(pts.length / 8), path = pts.filter(p => p.avg != null).map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${y(p.avg).toFixed(1)}`).join('');
+  return `<div class="linechart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution du panier moyen">
+    ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${eur(Math.round(t))}</text>`).join('')}
+    ${ref ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/><text class="ax" x="${W - R}" y="${y(ref) - 5}" text-anchor="end">moyenne ${eur(Math.round(ref))}</text>` : ''}
+    <path class="ln" d="${path}"/>
+    ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>
+      <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(p.label)} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})</title></circle>`).join('')}
+    ${pts.map(p => p.i % every === 0 ? `<text class="ax" x="${x(p.i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
+  </svg><small class="na">${unit}</small></div>`;
+}
+
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
 function webshopPage(pick) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
     B('shops', 'Ventes du webshop', d => { const w = shop(d); return w ? `<div class="two">${kpi(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`)}</div>` : miss(d); }),
+    B('basket', 'Évolution du panier moyen', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const bs = w.basket_series;
+      return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
+        : '<p class="na">Évolution indisponible pour le moment.</p>';
+    }),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);
       const t = w.products_total || {value: 0, units: 0, count: 0};

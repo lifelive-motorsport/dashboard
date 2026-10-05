@@ -132,7 +132,8 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   if (!ev || ev.unavailable) return `<p class="na">${esc(ev ? ev.unavailable : 'Indisponible pour le moment.')}</p>`;
   const list = (veh ? ev.vehicles : ev.events).filter(e => groups.includes(e.group));
   const note = `<small class="na">${veh ? 'Véhicules' : 'Événements'} : axe ${esc((ev.plans || []).join(', '))}. Rattachement : axe ${esc(ev.bu_axis || 'BU')}.</small>`
-    + (ev.bu_missing ? `<br><small class="neg">${ev.bu_missing} ligne(s) analytique(s) sans compte sur l’axe ${esc(ev.bu_axis || 'BU')} : à corriger dans Odoo (l’axe est censé être obligatoire).</small>` : '')
+    + (ev.bu_missing ? `<br><small class="neg">${ev.bu_missing} regroupement(s) de lignes analytiques sans compte sur l’axe ${esc(ev.bu_axis || 'BU')} : à corriger dans Odoo (l’axe est censé être obligatoire).</small>`
+      + (ev.bu_missing_detail || []).map(m => `<br><small class="neg">→ ${esc(m.item)} · compte ${esc(m.account)} · ${eur(m.amount)} (${m.lines} ligne${m.lines > 1 ? 's' : ''})</small>`).join('') : '')
     + (ev.bu_unmapped && ev.bu_unmapped.length ? `<br><small class="neg">Comptes de l’axe BU non reconnus : ${esc(ev.bu_unmapped.join(', '))}.</small>` : '');
   if (!list.length) return `<p class="na">Aucun ${U} sur la période.</p>` + note;
   const sum = k => list.reduce((s, e) => s + e[k], 0);

@@ -374,10 +374,11 @@ class OdooProvider:
         ev: dict[tuple[str, int], dict] = {}
         unmapped: set[str] = set()
         missing = 0
+        missing_detail: list[dict] = []
         for col in columns:
             rows = self._call("account.analytic.line", "formatted_read_group",
                               domain=[(col, "!=", False), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
-                              groupby=[col, "general_account_id", bu_col], aggregates=["amount:sum"])
+                              groupby=[col, "general_account_id", bu_col], aggregates=["amount:sum", "__count"])
             for r in rows:
                 if not r.get(col):
                     continue
@@ -407,6 +408,7 @@ class OdooProvider:
                     e["other_costs"] += -amount
                 if not r.get(bu_col):
                     missing += 1
+                    missing_detail.append({"item": aname, "account": f"{code} {name}".strip(), "amount": round(amount, 2), "lines": int(r.get("__count") or 0)})
                     continue
                 if m is None:
                     unmapped.add(r[bu_col][1])
@@ -451,7 +453,8 @@ class OdooProvider:
                 out.append(e)
         out.sort(key=lambda e: (-e["ca"], e["name"]))
         return {"items": out, "plans": [p["name"] for p in plans], "bu_axis": bu_plan["name"],
-                "bu_unmapped": sorted(unmapped), "bu_missing": missing}
+                "bu_unmapped": sorted(unmapped), "bu_missing": missing,
+                "bu_missing_detail": sorted(missing_detail, key=lambda m: -abs(m["amount"]))[:20]}
 
     def _fr_lang(self) -> str | None:
         """Code de la langue française installée dans Odoo (fr_BE de préférence), sinon None."""

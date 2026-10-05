@@ -498,3 +498,9 @@ def test_vehicles_use_the_cars_plan_exactly_and_take_bu_from_the_bu_axis():
     (v,) = r["vehicles"]
     assert (v["name"], v["group"], v["client"], v["reference"]) == ("Porsche 992 Rally GT #26 EMO", "CARS", "EMO Sport", "Modern Rally")
     assert (v["ca"], v["direct_costs"], v["other_costs"], v["result"]) == (1000, 400, 100, 500) and r["plans"] == ["CARS"]
+
+
+def test_missing_bu_lines_are_listed_with_item_account_and_amount():
+    lines = [_aline(AND, "700040 CA Historic Racing", 100.0, bu="Historic Racing"), {**_aline(AND, "612000 Divers", -166.0, bu=""), "__count": 2}]
+    r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 10, 5))
+    assert r["bu_missing"] == 1 and r["bu_missing_detail"] == [{"item": "Andalucia 2026", "account": "612000 Divers", "amount": -166.0, "lines": 2}]

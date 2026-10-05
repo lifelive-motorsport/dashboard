@@ -397,12 +397,13 @@ def test_bu_axis_accounts_of_lifelive_are_all_recognized():
 
 def test_event_with_cars_bus_shows_the_split_and_old_and_others_are_handled():
     lines = [_aline(AND, "700040 CA Historic Racing", 7_000.0, bu="Historic Racing"), _aline(AND, "700020 CA Modern Rally", 3_000.0, bu="Modern Rally"),
-             _aline(AND, "612051 Frais", -500.0, bu="OLD - 2025"),                                   # écarté, sans alerte
+             _aline(AND, "612051 Frais", -500.0, bu="OLD - 2025"),                                   # écarté entièrement, sans alerte
              _aline(SPA, "700016 CA XC Others", 1_000.0, bu="Others")]
     r = _events_provider(lines=lines)[0].events(date(2026, 1, 1), date(2026, 9, 4))
     e = {x["name"]: x for x in r["events"]}
     assert e["Andalucia 2026"]["group"] == "CARS" and e["Andalucia 2026"]["bus"] == [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}]
     assert e["Andalucia 2026"]["mixed"] is False                               # deux BU, mais un seul groupe (CARS)
+    assert e["Andalucia 2026"]["other_costs"] == 0                             # la ligne « OLD - 2025 » (-500 €) n'est pas comptée
     assert e["Spa 2026"]["group"] == "OTHERS" and r["bu_unmapped"] == [] and r["bu_missing"] == 0
 
 
@@ -413,3 +414,8 @@ def test_event_mixed_xc_and_cars_and_unrecognized_axis_account_are_reported():
     e = r["events"][0]
     assert e["group"] == "CARS" and e["mixed"] is True                       # XC pèse 20 % : événement mixte
     assert r["bu_unmapped"] == ["Autre chose"] and r["bu_axis"] == "BU"
+
+
+def test_event_made_only_of_old_bu_lines_does_not_appear():
+    r = _events_provider(lines=[_aline(AND, "700040 CA Historic Racing", 5_000.0, bu="OLD - 2025"), _aline(AND, "604040 ACH", -2_000.0, bu="old-2025")])[0].events(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["events"] == [] and r["bu_unmapped"] == [] and r["bu_missing"] == 0

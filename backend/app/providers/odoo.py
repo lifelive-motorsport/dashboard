@@ -356,6 +356,9 @@ class OdooProvider:
                 if not code or code[0] not in "67":
                     continue
                 amount = float(r["amount:sum"] or 0.0)
+                m = self._bu_of_axis_account(r[bu_col][1]) if r.get(bu_col) else None
+                if m and m[0] == "OLD":                    # compte « OLD … » de l'axe BU : ligne écartée (montants compris)
+                    continue
                 e = ev.setdefault((col, aid), {"id": aid, "name": aname, "plan": col, "ca": 0.0, "direct_costs": 0.0, "other_costs": 0.0,
                                                "axis": {}})
                 c = classify(code, name) if len(code) == 6 else None
@@ -368,10 +371,9 @@ class OdooProvider:
                 if not r.get(bu_col):
                     missing += 1
                     continue
-                m = self._bu_of_axis_account(r[bu_col][1])
                 if m is None:
                     unmapped.add(r[bu_col][1])
-                elif m[1]:                                  # compte OLD : écarté sans alerte
+                else:
                     e["axis"][m] = e["axis"].get(m, 0.0) + abs(amount)
         out = []
         for e in ev.values():

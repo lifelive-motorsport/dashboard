@@ -9,8 +9,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
-  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['clients','Clients'], ['suppliers','Fournisseurs']]],
-  ['xcvscars', 'XC vs CARS', [['ca','CA'], ['mb','MB']]],
+  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['rules','Règles de répartition']]],
@@ -19,7 +18,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','xcvscars/ca','xcvscars/mb','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -54,7 +53,7 @@ const PLAN = {
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc');   // ancienne adresse
+const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -293,6 +292,7 @@ const PAGES = {
           + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {}).total || 0)) : '')}</div>`; }),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),
   ],
+  'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
       return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi('CARS', eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
@@ -300,9 +300,9 @@ const PAGES = {
       <small class="na">Rouge : XC — gris : CARS (hors « Non affecté », ${eur(grp(d,'OTHER').ca)})</small>`; }),
   ],
   'xcvscars/mb': () => [
-    B('cmp', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS');
+    B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS');
       return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi('CARS', eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`; }),
-    B('detail', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
+    B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
   ],
   'xc/general': () => [
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),

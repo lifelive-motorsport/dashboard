@@ -136,9 +136,10 @@ function eventsTable(d, groups, showBu = false, veh = false) {
     + (ev.bu_unmapped && ev.bu_unmapped.length ? `<br><small class="neg">Comptes de l’axe BU non reconnus : ${esc(ev.bu_unmapped.join(', '))}.</small>` : '');
   if (!list.length) return `<p class="na">Aucun ${U} sur la période.</p>` + note;
   const sum = k => list.reduce((s, e) => s + e[k], 0);
-  const buText = e => (e.bus || []).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
-  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${veh && e.reference ? ` <small class="na">${esc(e.reference)}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
-    ${veh ? `<td class="bu">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
+  const buText = e => (e.bus || []).filter(b => b.share >= .005).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
+  const refText = e => { const r = e.reference || ''; return r.includes('/') ? r.split('/').slice(1).join('/').trim() : /^(modern rally|historic rally|historic racing)$/i.test(r.trim()) ? '' : r; };   // la BU a sa colonne
+  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${veh && refText(e) ? ` <small class="na">${esc(refText(e))}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
+    ${veh ? `<td class="client">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td><td>${capexCell(e)}</td>
     <td class="${cls(e.result)}">${eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
   const total = {name: `Total (${list.length} ${U}${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
   const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges'], ['capex', 'Investis*'], ['result', 'Résultat cash'], ['margin', 'Marge %']]);

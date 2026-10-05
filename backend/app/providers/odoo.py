@@ -347,6 +347,7 @@ class OdooProvider:
                 pass                                            # colonnes « client » / « référence » facultatives
         for e in items:
             a = info.get(e["id"], {})
+            e["name"] = a.get("name") or re.sub(r"^\s*\[[^\]]*\]\s*", "", e["name"])        # nom seul : sans « [référence] » ni « - client »
             e["client"] = (a.get("partner_id") or [0, ""])[1]
             e["reference"] = a.get("code") or ""
         return {**r, "vehicles": items}

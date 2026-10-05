@@ -3,11 +3,17 @@ from datetime import date
 from app.providers.odoo import OdooProvider
 
 
-def make(rows, partners=None, tags=None):
+def make(rows, partners=None, tags=None, invoices=None, lines=None):
+    """Fournisseur simulé : rows = CA par client/compte ; invoices = factures ouvertes ; lines = lignes de CA de ces factures."""
     p = OdooProvider.__new__(OdooProvider)  # sans client HTTP
-    p._grouped = lambda domain, groupby: rows
+
+    def grouped(domain, groupby):
+        return (lines or []) if groupby == ["move_id", "account_id"] else rows
+    p._grouped = grouped
 
     def call(model, method, **kw):
+        if model == "account.move":
+            return invoices or []
         if partners is None:
             raise RuntimeError("accès refusé")
         src = partners if model == "res.partner" else [{"id": i, "name": n} for i, n in (tags or {}).items()]
@@ -26,9 +32,9 @@ def test_top_clients_by_bu_and_total():
     ]
     r = make(rows).top_clients(date(2026, 1, 1), date(2026, 9, 4))
     assert [c["name"] for c in r["total"]] == ["A", "B"]
-    assert r["XC"][0] == {"name": "B", "ca": 120}
-    assert r["HISTORIC_RACING"] == [{"name": "A", "ca": 50}]
-    assert all(c["name"] != "C" for k, board in r.items() if k != "_meta" for c in board)
+    assert (r["XC"][0]["name"], r["XC"][0]["ca"]) == ("B", 120)
+    assert [(c["name"], c["ca"]) for c in r["HISTORIC_RACING"]] == [("A", 50)]
+    assert all(c["name"] != "C" for k, board in r.items() if not k.startswith("_") for c in board)
 
 
 import pytest
@@ -61,24 +67,24 @@ def test_clients_regrouped_by_odoo_tag_case_insensitive():
     rows = [_row(1, "Alpha SA", "700010 CA XC", 100), _row(2, "Alpha GmbH", "700040 CA HR", 50), _row(3, "Beta", "700010 CA XC", 120)]
     partners = [_partner(1, "Alpha SA", cats=[10]), _partner(2, "Alpha GmbH", cats=[11]), _partner(3, "Beta")]
     r = make(rows, partners, {10: "regroup_client=Groupe Alpha", 11: "REGROUP_CLIENT = Groupe Alpha"}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
-    assert r["total"] == [{"name": "Groupe Alpha", "ca": 150}, {"name": "Beta", "ca": 120}]
-    assert r["_meta"] == {"grouping": True, "groups": 1}
-    assert r["HISTORIC_RACING"] == [{"name": "Groupe Alpha", "ca": 50}]
+    assert [(c["name"], c["ca"]) for c in r["total"]] == [("Groupe Alpha", 150), ("Beta", 120)]
+    assert r["_meta"] == {"grouping": True, "groups": 1, "open": True}
+    assert [(c["name"], c["ca"]) for c in r["HISTORIC_RACING"]] == [("Groupe Alpha", 50)]
 
 
 def test_contacts_of_same_company_are_merged_and_tag_on_company_applies():
     rows = [_row(1, "Alpha SA, Jean", "700010 CA XC", 30), _row(2, "Alpha SA, Marie", "700010 CA XC", 20)]
     partners = [_partner(1, "Alpha SA, Jean", com=9), _partner(2, "Alpha SA, Marie", com=9), _partner(9, "Alpha SA", cats=[10])]
     r = make(rows, partners, {10: "regroup_client=Groupe A"}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
-    assert r["total"] == [{"name": "Groupe A", "ca": 50}]
+    assert [(c["name"], c["ca"]) for c in r["total"]] == [("Groupe A", 50)]
     r2 = make(rows, [_partner(1, "x", com=9), _partner(2, "y", com=9), _partner(9, "Alpha SA")], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
-    assert r2["total"] == [{"name": "Alpha SA", "ca": 50}]  # sans étiquette : fusion par société
+    assert [(c["name"], c["ca"]) for c in r2["total"]] == [("Alpha SA", 50)]  # sans étiquette : fusion par société
 
 
 def test_other_tags_are_ignored():
     rows = [_row(1, "Alpha", "700010 CA XC", 10)]
     r = make(rows, [_partner(1, "Alpha", cats=[5])], {5: "VIP"}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
-    assert r["total"] == [{"name": "Alpha", "ca": 10}] and r["_meta"]["groups"] == 0
+    assert [(c["name"], c["ca"]) for c in r["total"]] == [("Alpha", 10)] and r["_meta"]["groups"] == 0
 
 
 def test_grouping_failure_falls_back_to_raw_names():
@@ -156,3 +162,35 @@ def test_top_clients_default_is_fifteen_and_sorted():
     r = make(rows, [_partner(i, f"Client {i:02d}") for i in range(1, 21)], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
     assert len(r["total"]) == 15 and len(r["XC"]) == 15
     assert [c["ca"] for c in r["total"]] == sorted((c["ca"] for c in r["total"]), reverse=True)
+
+
+def test_open_balance_per_client_split_by_bu_pro_rata_of_invoice_revenue():
+    rows = [_row(1, "Alpha", "700010 CA XC", 600), _row(1, "Alpha", "700040 CA HR", 400), _row(2, "Beta", "700010 CA XC", 100)]
+    invoices = [{"id": 11, "partner_id": [1, "Alpha"], "amount_residual_signed": 1210.0},      # facture TTC 1 210 €, 600 XC + 400 HR
+                {"id": 12, "partner_id": [2, "Beta"], "amount_residual_signed": 0.0}]
+    lines = [{"move_id": [11, "F1"], "account_id": [1, "700010 CA XC"], "balance:sum": -600.0},
+             {"move_id": [11, "F1"], "account_id": [2, "700040 CA HR"], "balance:sum": -400.0},
+             {"move_id": [12, "F2"], "account_id": [1, "700010 CA XC"], "balance:sum": -100.0}]
+    r = make(rows, [_partner(1, "Alpha"), _partner(2, "Beta")], {}, invoices, lines).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    by = {c["name"]: c["open"] for c in r["total"]}
+    assert by == {"Alpha": 1210, "Beta": 0}
+    assert {c["name"]: c["open"] for c in r["XC"]}["Alpha"] == 726           # 60 % du reste dû
+    assert {c["name"]: c["open"] for c in r["HISTORIC_RACING"]}["Alpha"] == 484
+    assert r["_open_totals"] == {"total": 1210, "XC": 726, "HISTORIC_RACING": 484}
+
+
+def test_open_balance_unavailable_does_not_break_the_ranking():
+    rows = [_row(1, "Alpha", "700010 CA XC", 600)]
+    p = make(rows, [_partner(1, "Alpha")], {})
+    orig = p._call
+    p._call = lambda model, method, **kw: (_ for _ in ()).throw(RuntimeError("refusé")) if model == "account.move" else orig(model, method, **kw)
+    r = p.top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["total"][0]["ca"] == 600 and r["total"][0]["open"] is None and r["_meta"]["open"] is False
+
+
+def test_credit_note_reduces_open_balance():
+    rows = [_row(1, "Alpha", "700010 CA XC", 500)]
+    invoices = [{"id": 21, "partner_id": [1, "Alpha"], "amount_residual_signed": 1000.0}, {"id": 22, "partner_id": [1, "Alpha"], "amount_residual_signed": -200.0}]
+    lines = [{"move_id": [21, "F"], "account_id": [1, "700010 CA XC"], "balance:sum": -826.45}, {"move_id": [22, "A"], "account_id": [1, "700010 CA XC"], "balance:sum": 165.29}]
+    r = make(rows, [_partner(1, "Alpha")], {}, invoices, lines).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["total"][0]["open"] == 800

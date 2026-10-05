@@ -33,10 +33,14 @@ class DemoProvider:
 
         def board(total: float) -> list[dict]:
             w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
-            return [{"name": n, "ca": round(total * s * 0.8 * x / sum(w))} for n, x in list(zip(names, w))[:15]]  # 15 premiers ≈ 80 % du CA
+            return [{"name": n, "ca": round(total * s * 0.8 * x / sum(w)), "open": round(total * s * 0.8 * x / sum(w) * (0.0 if i % 3 == 0 else 0.15 * (i % 5)))}
+                    for i, (n, x) in enumerate(list(zip(names, w))[:15])]  # 15 premiers ≈ 80 % du CA
 
-        return {"total": board(2_800_000), "XC": board(1_700_000), "MODERN_RALLY": board(160_000),
-                "HISTORIC_RALLY": board(130_000), "HISTORIC_RACING": board(580_000)}
+        out = {"total": board(2_800_000), "XC": board(1_700_000), "MODERN_RALLY": board(160_000),
+               "HISTORIC_RALLY": board(130_000), "HISTORIC_RACING": board(580_000)}
+        out["_open_totals"] = {k: round(sum(c["open"] for c in v) * 1.3) for k, v in out.items()}
+        out["_meta"] = {"grouping": True, "groups": 0, "open": True}
+        return out
 
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)

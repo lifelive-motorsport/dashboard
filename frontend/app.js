@@ -128,15 +128,19 @@ function clients(d, allowed) {
   const scope = cur === 'total' ? d.pnl.total.ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre affiché
   const share = v => scope > 0 ? pct(v / scope) : '–';
   const list = tc[cur] || [], shown = list.reduce((s, c) => s + c.ca, 0), other = scope - shown;
-  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td></tr>`);
-  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers clients</td><td>${eur(shown)}</td><td>${share(shown)}</td></tr>`,
-    `<tr><td></td><td>Autres clients et ventes sans client identifié</td><td>${eur(other)}</td><td>${share(other)}</td></tr>`,
-    `<tr class="tot"><td></td><td>CA du périmètre</td><td>${eur(scope)}</td><td>100,0 %</td></tr>`);
+  const hasOpen = !!(tc._meta && tc._meta.open), sumOpen = list.reduce((s, c) => s + (c.open || 0), 0);
+  const scopeOpen = hasOpen ? ((tc._open_totals || {})[cur] || 0) : 0;
+  const op = v => hasOpen ? `<td class="open">${v > 0 ? eur(v) : v < 0 ? eur(v) : '–'}</td>` : '';
+  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${op(c.open || 0)}</tr>`);
+  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers clients</td><td>${eur(shown)}</td><td>${share(shown)}</td>${op(sumOpen)}</tr>`,
+    `<tr><td></td><td>Autres clients et ventes sans client identifié</td><td>${eur(other)}</td><td>${share(other)}</td>${op(scopeOpen - sumOpen)}</tr>`,
+    `<tr class="tot"><td></td><td>Total du périmètre</td><td>${eur(scope)}</td><td>100,0 %</td>${op(scopeOpen)}</tr>`);
   const m = tc._meta, info = !m ? '' : m.grouping
-    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. Le « % » est la part du CA du périmètre sélectionné (comptes 700).</small>`
+    ? `<small class="na">Regroupements d’après les étiquettes Odoo « regroup_client= » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.</small>`
     : `<small class="neg">Regroupement indisponible : les clients sont affichés tels que saisis dans Odoo.</small>`;
+  const infoOpen = m && !m.open ? `<br><small class="neg">Solde ouvert indisponible pour le moment.</small>` : '';
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    ${list.length ? table(['#', 'Client', 'CA', '% du CA'], rows, 'prodtable') : '<p class="na">Aucun client sur la période.</p>'}${info}`;
+    ${list.length ? table(['#', 'Client', 'CA', '% du CA'].concat(hasOpen ? ['Solde ouvert'] : []), rows, 'prodtable') : '<p class="na">Aucun client sur la période.</p>'}${info}${infoOpen}`;
 }
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).

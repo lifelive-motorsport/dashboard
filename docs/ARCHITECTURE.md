@@ -39,3 +39,8 @@ flowchart LR
 
 ## Noms de clients
 L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifier dans Odoo : mots tout en majuscules de 4 lettres et plus → majuscule initiale ; sigles de 1 à 3 lettres et formes juridiques (SL, SARL, GmbH, s.r.o.) uniformisés ; texte entre parenthèses et mots en casse mixte inchangés.
+
+## Solde ouvert par client (hit-parade)
+- Pour chaque client : reste dû TTC (`amount_residual_signed`) des factures et avoirs clients comptabilisés dans la période, non payés ou partiellement payés.
+- Par BU : le reste dû d'une facture est réparti entre les BU au prorata de ses lignes de CA (comptes 700).
+- Si Odoo refuse la lecture, le classement s'affiche sans cette colonne et l'écran l'indique.

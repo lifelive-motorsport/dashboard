@@ -107,8 +107,40 @@ class OdooProvider:
                 out[pid] = (f"c:{com['id']}", com["display_name"])
         return out
 
+    def _open_by_bu(self, d_from: date, d_to: date) -> tuple[dict[str, dict[int, float]], dict[int, str]]:
+        """Solde encore ouvert (TTC, reste dû) des factures clients de la période, par client puis par BU.
+
+        Le reste dû d'une facture est réparti entre les BU au prorata des lignes de CA (comptes 700) de cette facture."""
+        from ..bu import classify
+        invs = self._call("account.move", "search_read",
+                          domain=[("state", "=", "posted"), ("move_type", "in", ["out_invoice", "out_refund"]),
+                                  ("payment_state", "in", ["not_paid", "partial"]), ("partner_id", "!=", False),
+                                  ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat())],
+                          fields=["partner_id", "amount_residual_signed"])
+        shares: dict[int, dict[str, float]] = {}
+        ids = [x["id"] for x in invs]
+        for k in range(0, len(ids), 400):
+            for r in self._grouped([("move_id", "in", ids[k:k + 400]), ("account_id.code", "=like", "700%")], ["move_id", "account_id"]):
+                m = re.match(r"^\s*(\d+)", r["account_id"][1])
+                c = m and classify(m.group(1), re.sub(r"^\s*\d+\s*", "", r["account_id"][1]))
+                if c:
+                    d = shares.setdefault(r["move_id"][0], {})
+                    d[c.bu] = d.get(c.bu, 0.0) - r["balance:sum"]
+        out: dict[str, dict[int, float]] = {}
+        names: dict[int, str] = {}
+        for inv in invs:
+            pid, pname = inv["partner_id"]
+            names[pid] = pname
+            sh = shares.get(inv["id"]) or {}
+            tot = sum(sh.values())
+            parts = {b: v / tot for b, v in sh.items()} if tot else {"UNASSIGNED": 1.0}
+            for b, f in parts.items():
+                out.setdefault(b, {}).setdefault(pid, 0.0)
+                out[b][pid] += inv["amount_residual_signed"] * f
+        return out, names
+
     def top_clients(self, d_from: date, d_to: date, limit: int = 15) -> dict:
-        """Classement des clients par CA (comptes 700) : total et par BU, avec regroupement. Lecture seule."""
+        """Classement des clients par CA (comptes 700) : total et par BU, avec regroupement et solde ouvert. Lecture seule."""
         from ..bu import classify
         domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()),
                   ("date", "<=", d_to.isoformat()), ("account_id.code", "=like", "700%"),
@@ -125,7 +157,13 @@ class OdooProvider:
             by_bu.setdefault(c.bu, {}).setdefault(pid, 0.0)
             by_bu[c.bu][pid] -= row["balance:sum"]  # crédit = CA
 
-        meta = {"grouping": True, "groups": 0}
+        meta = {"grouping": True, "groups": 0, "open": True}
+        try:
+            open_bu, open_names = self._open_by_bu(d_from, d_to)
+            names = {**open_names, **names}
+        except Exception:  # droits insuffisants, etc. : pas de solde ouvert, le reste fonctionne
+            log.exception("Solde ouvert par client indisponible")
+            open_bu, meta["open"] = {}, False
         try:
             groups = self._client_groups(set(names))
         except Exception:  # droits insuffisants, etc. : on garde les noms tels que saisis
@@ -138,20 +176,31 @@ class OdooProvider:
             label.setdefault(k, lab)
             return k
 
-        def board(per_partner: dict[int, float]) -> list[dict]:
+        def board(per_partner: dict[int, float], per_open: dict[int, float]) -> list[dict]:
             agg: dict[str, float] = {}
+            opn: dict[str, float] = {}
             for pid, v in per_partner.items():
                 agg[key_of(pid)] = agg.get(key_of(pid), 0.0) + v
+            for pid, v in per_open.items():
+                opn[key_of(pid)] = opn.get(key_of(pid), 0.0) + v
             top = sorted(agg.items(), key=lambda kv: -kv[1])[:limit]
-            return [{"name": normalize_name(label[k]), "ca": round(v)} for k, v in top if v > 0]   # affichage uniformisé
+            return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None}
+                    for k, v in top if v > 0]   # affichage uniformisé
 
-        total: dict[int, float] = {}
-        for per in by_bu.values():
-            for pid, v in per.items():
-                total[pid] = total.get(pid, 0.0) + v
-        out = {"total": board(total)}
+        def merge(dicts) -> dict[int, float]:
+            out: dict[int, float] = {}
+            for d in dicts:
+                for pid, v in d.items():
+                    out[pid] = out.get(pid, 0.0) + v
+            return out
+
+        out = {"total": board(merge(by_bu.values()), merge(open_bu.values()))}
         for bu, per in by_bu.items():
-            out[bu] = board(per)
+            out[bu] = board(per, open_bu.get(bu, {}))
+        out["_open_totals"] = {"total": round(sum(sum(d.values()) for d in open_bu.values()))} if meta["open"] else {}
+        for bu, d in open_bu.items():
+            if meta["open"]:
+                out["_open_totals"][bu] = round(sum(d.values()))
         meta["groups"] = len({k for k in label if k.startswith("g:")})
         out["_meta"] = meta
         return out

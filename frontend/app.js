@@ -141,6 +141,9 @@ function capexCell(e) {
   const tip = `${eur(e.capex)} investis, comptabilisés en immobilisations et amortis${dur}. Déjà amorti sur la période : ${eur(e.amort || 0)} (non compté dans le résultat cash). Résultat comptable : ${eur(e.result_accounting)}.`;
   return `<span title="${esc(tip)}">${eur(e.capex)} <small class="na">ⓘ</small></span>`;
 }
+// Libellé d'un événement / véhicule : lien vers son compte analytique dans Odoo (nouvel onglet) quand l'adresse d'Odoo est connue.
+const nameLink = e => (cfg && cfg.analytic_link && e.id)
+  ? `<a class="olink" href="${esc(cfg.analytic_link.replace('{id}', encodeURIComponent(e.id)))}" target="_blank" rel="noopener noreferrer" title="Ouvrir dans Odoo">${esc(e.name)}</a>` : esc(e.name);
 function eventsTable(d, groups, showBu = false, veh = false) {
   const ev = veh ? d.vehicles : d.events, U = veh ? 'véhicule' : 'événement';
   if (!ev || ev.unavailable) return `<p class="na">${esc(ev ? ev.unavailable : 'Indisponible pour le moment.')}</p>`;
@@ -153,7 +156,7 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   const sum = k => list.reduce((s, e) => s + e[k], 0);
   const buText = e => (e.bus || []).filter(b => b.share >= .005).map((b, i, all) => all.length > 1 ? `${b.bu} ${Math.round(b.share * 100)} %` : b.bu).join(' · ');
   const refText = e => { const r = e.reference || ''; return r.includes('/') ? r.split('/').slice(1).join('/').trim() : /^(modern rally|historic rally|historic racing)$/i.test(r.trim()) ? '' : r; };   // la BU a sa colonne
-  const row = (e, cl = '') => `<tr class="${cl}"><td>${esc(e.name)}${veh && refText(e) ? ` <small class="na">${esc(refText(e))}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
+  const row = (e, cl = '') => `<tr class="${cl}"><td>${nameLink(e)}${veh && refText(e) ? ` <small class="na">${esc(refText(e))}</small>` : ''}${e.mixed ? ' <small class="na" title="Une part notable de cet événement relève d’un autre groupe (XC / CARS / Others)">(mixte)</small>' : ''}</td>
     ${veh ? `<td class="client">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td>${veh ? '' : `<td>${capexCell(e)}</td>`}
     <td class="${cls(e.result)}">${veh ? resultCell(e) : eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
   const total = {name: `Total (${list.length} ${U}${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};

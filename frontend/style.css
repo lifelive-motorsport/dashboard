@@ -152,3 +152,5 @@ th.sortable{cursor:pointer;user-select:none;white-space:normal;vertical-align:bo
 .stock td:nth-child(2),.stock td:nth-child(3),.stock th:nth-child(2),.stock th:nth-child(3){text-align:left}
 #logout{color:var(--mut);text-decoration:underline;text-underline-offset:2px}#logout:hover{color:var(--red)}
 @media print{#logout{display:none}}
+a.olink{color:inherit;text-decoration:none;border-bottom:1px dotted var(--mut)}a.olink:hover{color:var(--red);border-bottom-color:var(--red)}
+@media print{a.olink{border:0}}

@@ -97,7 +97,7 @@ def close_session(response: Response):
 
 @app.get("/api/tags")
 def tags(_user: str = Depends(require_user)):
-    """Étiquettes Odoo utilisées par le dashboard et leur présence (page Paramétrage › Tags Odoo)."""
+    """Étiquettes Odoo utilisées par le dashboard et leur présence (page Settings › Tags Odoo)."""
     try:
         return provider().tags_overview()
     except Exception:

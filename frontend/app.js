@@ -17,7 +17,7 @@ const MENU = [
   ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
-  ['others', 'Paramétrage', [['tags','Tags Odoo']]],
+  ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
 const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 

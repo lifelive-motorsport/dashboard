@@ -1,4 +1,4 @@
-// Paramétrage › Tags Odoo : aide-mémoire des étiquettes et conventions Odoo qui pilotent le dashboard (+ présence réelle des étiquettes).
+// Settings › Tags Odoo : aide-mémoire des étiquettes et conventions Odoo qui pilotent le dashboard (+ présence réelle des étiquettes).
 // Chargé avant app.js ; utilise ses fonctions (esc, num, table) au moment de l'appel.
 let tagsState = {data: null, error: null};
 

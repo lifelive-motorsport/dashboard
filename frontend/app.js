@@ -16,9 +16,9 @@ const MENU = [
   ['expenses', 'GENERAL EXPENSES', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['rules','Règles de répartition']]],
   ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
-  ['others', 'Others', [['marketing','Marketing']]],
+  ['marketing', 'Marketing', [['site','Site internet']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','others/marketing','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -48,12 +48,10 @@ const PLAN = {
   'racecars/listing': ['Liste des voitures de course (état, lieu, propriétaire, prochaines échéances).',
     'Où ces voitures sont gérées dans Odoo (stock, produits, flotte…) et les champs à afficher.'],
   'racecars/alerts': ['Alertes : échéances (homologation, entretien…), stock bas, etc.', 'La liste des alertes voulues et leur source.'],
-  'others/marketing': ['Dépenses marketing (comptes 6120xx), éventuellement sponsoring et budget.',
-    'Le périmètre exact (comptes, sponsoring) et un budget de référence.'],
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars');   // ancienne adresse
+const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -377,7 +375,7 @@ const PAGES = {
   ],
   'overview/adjustments': () => adjPageBlocks(),
   'xc/inventory': () => stockBlocks(),
-  'others/marketing': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
+  'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
   'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;

@@ -95,6 +95,16 @@ def close_session(response: Response):
     return {"session": False}
 
 
+@app.get("/api/tags")
+def tags(_user: str = Depends(require_user)):
+    """Étiquettes Odoo utilisées par le dashboard et leur présence (page Others › Tags Odoo)."""
+    try:
+        return provider().tags_overview()
+    except Exception:
+        log.exception("Étiquettes indisponibles")
+        return {"tags": [], "unavailable": "Liste des étiquettes momentanément indisponible."}
+
+
 _stock_cache: dict[str, tuple[float, dict]] = {}
 
 

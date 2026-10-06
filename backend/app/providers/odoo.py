@@ -382,10 +382,18 @@ class OdooProvider:
         facture : montant, factures, amortissement déjà passé et dotation mensuelle (donc durée = investi ÷ dotation)."""
         y0 = date(d_to.year, 1, 1).isoformat()
         base = [("parent_state", "=", "posted"), ("date", ">=", y0), ("date", "<=", d_to.isoformat())]
-        inv = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "in", settings.MARKETING_INVEST_ACCOUNTS), ("debit", ">", 0)],
-                         fields=["name", "balance", "date", "partner_id", "move_id"])
-        kw = settings.MARKETING_INVEST_KEYWORDS          # le compte INVEST contient aussi du matériel (ponts, sols…) : on ne garde que le marketing
-        inv = [ln for ln in inv if any(k in (ln.get("name") or "").lower() for k in kw)]
+        dom = base + [("account_id.code", "in", settings.MARKETING_INVEST_ACCOUNTS), ("debit", ">", 0)]
+        tag = settings.MARKETING_INVEST_TAG.strip().lower()
+        tag_ids = [c["id"] for c in self._call("res.partner.category", "search_read", domain=[("name", "ilike", tag)], fields=["name"])
+                   if (c.get("name") or "").strip().lower() == tag] if tag else []
+        partners = self._call("res.partner", "search_read", domain=[("category_id", "in", tag_ids)], fields=["id"]) if tag_ids else []
+        if partners:                                    # règle principale : fournisseurs (et leurs contacts) portant l'étiquette « invest marketing »
+            inv = self._call("account.move.line", "search_read", domain=dom + [("partner_id", "child_of", [p["id"] for p in partners])],
+                             fields=["name", "balance", "date", "partner_id", "move_id"])
+        else:                                           # étiquette absente ou sans contact : repli sur des mots-clés dans le libellé
+            inv = self._call("account.move.line", "search_read", domain=dom, fields=["name", "balance", "date", "partner_id", "move_id"])
+            kw = settings.MARKETING_INVEST_KEYWORDS
+            inv = [ln for ln in inv if any(k in (ln.get("name") or "").lower() for k in kw)]
         if not inv:
             return None
         am = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "=like", "630%"), ("name", "ilike", "amortissement")],
@@ -414,6 +422,23 @@ class OdooProvider:
         total_monthly = sum(c["amort_monthly"] for c in out)
         return {"year": d_to.year, "total": sum(c["capex"] for c in out), "amort": sum(c["amort"] for c in out), "amort_monthly": round(total_monthly, 2),
                 "items": out, "accounts": settings.MARKETING_INVEST_ACCOUNTS}
+
+    def tags_overview(self) -> dict:
+        """Étiquettes de contact utilisées par le dashboard et nombre de contacts qui les portent (aide-mémoire « Tags Odoo »)."""
+        cats = {c["id"]: c["name"] for c in self._call("res.partner.category", "search_read", domain=[], fields=["name"])}
+        counts: dict[int, int] = {}
+        for r in self._call("res.partner", "formatted_read_group", domain=[("category_id", "!=", False)], groupby=["category_id"], aggregates=["__count"]):
+            if r.get("category_id"):
+                counts[r["category_id"][0]] = int(r["__count"])
+        inv = settings.MARKETING_INVEST_TAG.strip().lower()
+        out = []
+        for cid, name in cats.items():
+            low = name.strip().lower()
+            kind = ("client" if re.match(r"^\s*regroup_client\s*=", low) else "fournisseur" if re.match(r"^\s*regroup_fournisseur\s*=", low)
+                    else "invest" if low == inv else None)
+            if kind:
+                out.append({"name": name, "kind": kind, "count": counts.get(cid, 0)})
+        return {"tags": sorted(out, key=lambda t: (t["kind"], t["name"].lower())), "invest_tag": settings.MARKETING_INVEST_TAG}
 
     # ---- Stock : valorisation au coût moyen -------------------------------------------------------------------------
     def _pif_field(self) -> str | None:

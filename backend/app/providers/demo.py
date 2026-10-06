@@ -106,6 +106,10 @@ class DemoProvider:
                            "items": [{"label": "Création & Développement d'un système graphique", "capex": 5500, "partner": "Actaeon Conseils", "bills": [{"ref": "FACTU/2026/02/0072", "date": "2026-02-24"}, {"ref": "FACTU/2026/04/0013", "date": "2026-04-03"}], "amort": 550, "amort_monthly": 91.67, "amort_months": 60},
                                      {"label": "Package Social Media Almeira 2026", "capex": 5500, "partner": "Actaeon Conseils", "bills": [{"ref": "FACTU/2026/04/0013", "date": "2026-04-03"}], "amort": 550, "amort_monthly": 91.67, "amort_months": 60}]}}
 
+    def tags_overview(self) -> dict:
+        return {"invest_tag": "invest marketing", "tags": [{"name": "regroup_client=Koramic / C.Dumolin", "kind": "client", "count": 3},
+                {"name": "regroup_fournisseur=Pirelli", "kind": "fournisseur", "count": 2}, {"name": "invest marketing", "kind": "invest", "count": 1}]}
+
     def stock_report(self) -> dict:
         from ..stock import build_report
         rnd = random.Random(5)

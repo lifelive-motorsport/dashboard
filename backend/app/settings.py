@@ -68,3 +68,4 @@ GA_SERVICE_ACCOUNT = os.getenv("GA_SERVICE_ACCOUNT", "")  # compte de service à
 MARKETING_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_ACCOUNTS", "602019,602059,612050").split(",") if x.strip()]
 MARKETING_INVEST_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_INVEST_ACCOUNTS", "240050").split(",") if x.strip()]   # comptes INVEST des investissements marketing
 MARKETING_INVEST_KEYWORDS = [x.strip().lower() for x in os.getenv("MARKETING_INVEST_KEYWORDS", "graphique,social media,marketing,communication,publicité,photo,vidéo,video").split(",") if x.strip()]   # le compte INVEST contient aussi du matériel : seules les lignes dont le libellé contient un de ces mots sont des investissements marketing
+MARKETING_INVEST_TAG = os.getenv("MARKETING_INVEST_TAG", "invest marketing")   # étiquette de contact des fournisseurs dont les lignes INVEST sont des investissements marketing

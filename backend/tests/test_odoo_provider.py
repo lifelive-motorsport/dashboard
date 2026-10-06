@@ -713,6 +713,8 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
         if model == "account.move.line":
             seen["dom"] = kw["domain"]
             return lines
+        if model == "res.partner.category":
+            return []                                                                      # étiquette absente : repli sur les mots-clés
         if model == "res.partner":
             return [{"id": 10, "display_name": "AGENCE X", "commercial_partner_id": [10, "x"], "category_id": []},
                     {"id": 11, "display_name": "SALON Y", "commercial_partner_id": [11, "y"], "category_id": []}]
@@ -729,3 +731,35 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
     pkg = next(i for i in inv["items"] if i["label"].startswith("Package"))
     assert (gfx["capex"], gfx["amort_months"], [b["ref"] for b in gfx["bills"]]) == (5500, 60, ["FACTU/2026/02/0072", "FACTU/2026/04/0013"])      # 5 500 ÷ 91,67 = 60 mois
     assert (pkg["capex"], pkg["amort"], pkg["amort_months"]) == (5500, 183, 60)
+
+
+def test_marketing_invest_uses_the_supplier_tag_when_it_exists():
+    p = OdooProvider.__new__(OdooProvider)
+    seen = {}
+
+    def call(model, method, **kw):
+        if model == "res.partner.category":
+            return [{"id": 7, "name": "Invest Marketing"}, {"id": 8, "name": "invest marketing 2025"}]       # seule la correspondance exacte compte
+        if model == "res.partner":
+            seen["partner_dom"] = kw["domain"]
+            return [{"id": 5}]
+        if model == "account.move.line" and ("debit", ">", 0) in kw["domain"]:
+            seen["dom"] = kw["domain"]
+            return [{"name": "Prestation sans mot-clé", "balance": 4000.0, "date": "2026-03-01", "partner_id": [5, "Actaeon"], "move_id": [1, "F1"]}]
+        return []
+    p._call = call
+    inv = p._marketing_invest(date(2026, 10, 6))
+    assert seen["partner_dom"] == [("category_id", "in", [7])] and ("partner_id", "child_of", [5]) in seen["dom"]
+    assert inv["total"] == 4000 and inv["items"][0]["label"] == "Prestation sans mot-clé"                    # le tag suffit : plus besoin de mot-clé
+
+
+def test_tags_overview_classifies_dashboard_tags_and_counts_contacts():
+    p = OdooProvider.__new__(OdooProvider)
+
+    def call(model, method, **kw):
+        if model == "res.partner.category":
+            return [{"id": 1, "name": "regroup_client=Koramic"}, {"id": 2, "name": "regroup_fournisseur=Pirelli"}, {"id": 3, "name": "invest marketing"}, {"id": 4, "name": "VIP"}]
+        return [{"category_id": [1, "regroup_client=Koramic"], "__count": 3}, {"category_id": [3, "invest marketing"], "__count": 1}, {"category_id": [4, "VIP"], "__count": 9}]
+    p._call = call
+    t = p.tags_overview()["tags"]
+    assert [(x["kind"], x["name"], x["count"]) for x in t] == [("client", "regroup_client=Koramic", 3), ("fournisseur", "regroup_fournisseur=Pirelli", 0), ("invest", "invest marketing", 1)]

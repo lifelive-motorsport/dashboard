@@ -150,3 +150,5 @@ th.sortable{cursor:pointer;user-select:none;white-space:normal;vertical-align:bo
 .linechart .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:0 0 6px}.linechart .legend .sw{display:inline-block;width:18px;height:0;border-top:3px solid var(--red);vertical-align:middle;margin-right:6px}
 .linechart .legend .sw.s2{border-top:3px dashed var(--blu)}.linechart rect.hit{fill:transparent}.linechart rect.hit:hover{fill:rgba(128,128,128,.14)}
 .stock td:nth-child(2),.stock td:nth-child(3),.stock th:nth-child(2),.stock th:nth-child(3){text-align:left}
+#logout{color:var(--mut);text-decoration:underline;text-underline-offset:2px}#logout:hover{color:var(--red)}
+@media print{#logout{display:none}}

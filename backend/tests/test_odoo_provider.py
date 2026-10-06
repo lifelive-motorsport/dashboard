@@ -221,7 +221,7 @@ def test_suppliers_ranked_by_bu_from_account_of_each_invoice_line():
 def test_suppliers_query_only_posted_bill_lines_not_taxes():
     seen = {}
     p = make([], [], {})
-    p._grouped = lambda domain, groupby: seen.update(domain=domain, groupby=groupby) or []
+    p._grouped = lambda domain, groupby: (seen.update(domain=domain, groupby=groupby) if groupby[0] == "partner_id" else None) or []
     p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert ("display_type", "=", "product") in seen["domain"] and ("parent_state", "=", "posted") in seen["domain"]
     assert ("move_id.move_type", "in", ["in_invoice", "in_refund"]) in seen["domain"] and seen["groupby"] == ["partner_id", "account_id", "move_id"]     # + facture : nombre de factures et panier moyen
@@ -257,7 +257,7 @@ def test_suppliers_only_expense_accounts_assets_and_old_accounts_excluded():
 def test_supplier_query_filters_expense_accounts_in_the_domain():
     seen = {}
     p = make([], [], {})
-    p._grouped = lambda domain, groupby: seen.update(domain=domain) or []
+    p._grouped = lambda domain, groupby: (seen.update(domain=domain) if groupby[0] == "partner_id" else None) or []      # requête des lignes de factures
     p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert ("account_id.code", "=like", "6%") in seen["domain"]
 

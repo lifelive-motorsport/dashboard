@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, settings
+from . import adjustments, ga, settings
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -69,7 +69,8 @@ def healthz():
 def config():
     link = settings.ODOO_ANALYTIC_LINK.replace("{base}", settings.ODOO_PUBLIC_URL.rstrip("/")) if settings.PROVIDER == "odoo" and settings.ODOO_PUBLIC_URL else ""
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
-            "source": settings.PROVIDER, "analytic_link": link}
+            "source": settings.PROVIDER, "analytic_link": link,
+            "ga": ga.configured() or settings.PROVIDER == "demo"}
 
 
 @app.post("/api/session")
@@ -178,6 +179,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "events": _safe(p.events, d_from, d_to),
             "vehicles": _safe(p.vehicles, d_from, d_to),
             "webshops": _safe(p.webshops, d_from, d_to),
+            "analytics": ga.demo(d_from, d_to) if settings.PROVIDER == "demo" else _safe(ga.report, d_from, d_to),
         }
     except Exception as e:  # le détail va dans les journaux, jamais vers le navigateur
         log.exception("Échec de la lecture de la source de données")

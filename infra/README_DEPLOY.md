@@ -73,3 +73,22 @@ gcloud run services update dashboard --region=europe-west1 --update-secrets=SESS
 ```
 
 Durée réglable avec la variable `SESSION_DAYS` (14 par défaut). Retirer une adresse de `ALLOWED_EMAILS` coupe son accès immédiatement, même avec un cookie valide. Le lien « Se déconnecter » (pied de page) supprime le cookie.
+
+
+## Google Analytics (trafic des webshops et du site vitrine)
+
+Le dashboard lit Google Analytics 4 par l'API de données (lecture seule), avec le compte de service du dashboard :
+
+```
+gcloud config set project lifelive-dashboard-app
+gcloud services enable analyticsdata.googleapis.com iamcredentials.googleapis.com
+# le compte de service doit pouvoir générer son propre jeton avec la portée « analytics.readonly »
+gcloud iam service-accounts add-iam-policy-binding dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com \
+  --member="serviceAccount:dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com" --role=roles/iam.serviceAccountTokenCreator
+gcloud run services update dashboard --region=europe-west1 \
+  --update-env-vars="^#^GA_PROPERTY_ID=123456789#GA_SERVICE_ACCOUNT=dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com"
+```
+
+Dans Google Analytics (Admin › Gestion des accès à la propriété) : ajouter `dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com` avec le rôle **Lecteur**.
+
+Variables : `GA_PROPERTY_ID` (identifiant NUMÉRIQUE de la propriété, pas « G-… »), ou une propriété par site : `GA_PROPERTY_XC`, `GA_PROPERTY_GS`, `GA_PROPERTY_SITE` ; noms d'hôte : `GA_HOST_XC` (www.lifelive-motorsport.com), `GA_HOST_GS` (www.goldspeedtires-xc.com), `GA_HOST_SITE` (par défaut GA_HOST_XC) ; `GA_SHOP_PATH` (/shop).

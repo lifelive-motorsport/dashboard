@@ -102,3 +102,41 @@ def test_config_exposes_odoo_analytic_link_only_with_odoo_source(monkeypatch):
     monkeypatch.setattr(m.settings, "PROVIDER", "odoo")
     monkeypatch.setattr(m.settings, "ODOO_PUBLIC_URL", "https://lifelive.odoo.com/")
     assert c.get("/api/config").json()["analytic_link"] == "https://lifelive.odoo.com/odoo/account.analytic.account/{id}/action-183"
+
+
+def test_analytics_unconfigured_then_filters_and_buckets(monkeypatch):
+    from datetime import date
+    import app.ga as ga
+    import app.main as m
+    assert m._safe(ga.report, date(2026, 1, 1), date(2026, 3, 31)) == {"unconfigured": True}                 # rien de configuré
+    monkeypatch.setattr(ga.settings, "GA_PROPERTY_ID", "123456")
+    seen = []
+
+    def fake(prop, body):
+        seen.append((prop, body))
+        dims = [d["name"] for d in body["dimensions"]]
+        if dims == []:
+            return {"rows": [{"dimensionValues": [{"value": "date_range_0"}], "metricValues": [{"value": str(i + 10)} for i in range(9)]},
+                             {"dimensionValues": [{"value": "date_range_1"}], "metricValues": [{"value": "5"} for _ in range(9)]}]}
+        if dims == ["yearMonth"]:
+            return {"rows": [{"dimensionValues": [{"value": "202601"}], "metricValues": [{"value": v} for v in ("100", "60", "300", "2")]},
+                             {"dimensionValues": [{"value": "202603"}], "metricValues": [{"value": v} for v in ("50", "30", "150", "1")]}]}
+        if dims == ["sessionDefaultChannelGroup"]:
+            return {"rows": [{"dimensionValues": [{"value": "Direct"}], "metricValues": [{"value": v} for v in ("30", "20", "1")]},
+                             {"dimensionValues": [{"value": "Organic Search"}], "metricValues": [{"value": v} for v in ("70", "40", "2")]}]}
+        if dims == ["pagePath", "pageTitle"]:
+            return {"rows": [{"dimensionValues": [{"value": "/shop/a"}, {"value": "(not set)"}], "metricValues": [{"value": "9"}, {"value": "4"}]}]}
+        return {"rows": []}
+    monkeypatch.setattr(ga, "_post", fake)
+    ga._cache.clear()
+    r = ga.report(date(2026, 1, 1), date(2026, 3, 31))
+    xc = r["xc"]
+    assert xc["totals"]["current"]["sessions"] == 10.0 and xc["totals"]["previous"]["sessions"] == 5.0
+    assert xc["series"]["granularity"] == "month" and [p["sessions"] for p in xc["series"]["points"]] == [100, 0, 50]      # février absent : 0
+    assert [c["name"] for c in xc["channels"]] == ["Direct", "Organic Search"] and round(xc["channels"][0]["share"], 2) == 0.3
+    assert xc["pages"][0]["title"] == "/shop/a"                                                                               # titre absent : on garde le chemin
+    flt = seen[0][1]["dimensionFilter"]["andGroup"]["expressions"]
+    assert {"filter": {"fieldName": "hostName", "stringFilter": {"matchType": "EXACT", "value": "www.lifelive-motorsport.com"}}} in flt
+    assert any(e["filter"]["fieldName"] == "pagePath" for e in flt)                                                           # chemin /shop pour le webshop
+    site = [b for _, b in seen if "dimensionFilter" in b and len(b["dimensionFilter"]["andGroup"]["expressions"]) == 1]
+    assert site                                                                                                              # site vitrine : hôte seul

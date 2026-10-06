@@ -18,7 +18,7 @@ const MENU = [
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['others', 'Others', [['marketing','Marketing']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','others/marketing','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -267,7 +267,7 @@ function multiLineChart(points, series, tip, note) {
 
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
 let pickScope = 'web';
-function webshopPage(pick, {topPages = true, customers = false, picking = false} = {}) {
+function webshopPage(pick, {topPages = true, customers = false, picking = false, gaKey = ''} = {}) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
@@ -337,7 +337,7 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false}
         + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
     }, true),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
-  ].filter(b => (topPages || b.id !== 'toppages') && (customers || b.id !== 'customers') && (picking || b.id !== 'picking'));
+  ].concat(gaKey ? gaBlocks(gaKey, {shop: true, pages: topPages}) : []).filter(b => (!(cfg && cfg.ga && gaKey) || (b.id !== 'visits' && b.id !== 'toppages')) && (topPages || b.id !== 'toppages') && (customers || b.id !== 'customers') && (picking || b.id !== 'picking'));
 }
 const PAGES = {
   'overview/ca': () => [
@@ -377,6 +377,7 @@ const PAGES = {
   ],
   'overview/adjustments': () => adjPageBlocks(),
   'xc/inventory': () => stockBlocks(),
+  'others/marketing': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
   'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
@@ -399,8 +400,8 @@ const PAGES = {
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
     NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
   ],
-  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name), {customers: true, picking: true}),
-  'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name), {topPages: false}),      // 2 produits seulement : un classement de pages n'a pas de sens
+  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name), {customers: true, picking: true, gaKey: 'xc'}),
+  'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name), {topPages: false, gaKey: 'gs'}),      // 2 produits seulement : un classement de pages n'a pas de sens
   'xc/events': () => [
     B('events', 'Événements XC', d => eventsTable(d, ['XC'])),
     B('none', 'Autres événements (BU « Others » ou sans BU identifiable)', d => eventsTable(d, ['OTHERS', 'NONE'], true)),

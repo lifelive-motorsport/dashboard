@@ -763,3 +763,22 @@ def test_tags_overview_classifies_dashboard_tags_and_counts_contacts():
     p._call = call
     t = p.tags_overview()["tags"]
     assert [(x["kind"], x["name"], x["count"]) for x in t] == [("client", "regroup_client=Koramic", 3), ("fournisseur", "regroup_fournisseur=Pirelli", 0), ("invest", "invest marketing", 1)]
+
+
+def test_suppliers_reconciliation_lists_direct_costs_that_are_not_vendor_bill_lines():
+    seen = {}
+
+    def grouped(domain, groupby):
+        if groupby == ["journal_id", "account_id"]:
+            seen["dom"] = domain
+            return [{"journal_id": [9, "Opérations diverses"], "account_id": [1, "604010 ACH. MARCH. XC Manufacturer"], "balance:sum": 9000.0},
+                    {"journal_id": [8, "Provisions"], "account_id": [1, "604010 ACH. MARCH. XC Manufacturer"], "balance:sum": 4154.0},
+                    {"journal_id": [9, "Opérations diverses"], "account_id": [2, "615001 Carburant"], "balance:sum": 777.0},        # pas un frais direct
+                    {"journal_id": [9, "Opérations diverses"], "account_id": [3, "604040 ACH. MARCH. Historic Racing"], "balance:sum": 100.0}]
+        return []
+    p = make([], [], {})
+    p._grouped = grouped
+    r = p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["_recon"]["XC"] == {"amount": 13154, "journals": [{"name": "Opérations diverses", "amount": 9000}, {"name": "Provisions", "amount": 4154}]}
+    assert r["_recon"]["CARS"]["amount"] == 100 and r["_recon"]["HISTORIC_RACING"]["amount"] == 100        # le carburant (615) n'est pas du frais direct
+    assert ("account_id.code", "=like", "60%") in seen["dom"] and "|" in seen["dom"]

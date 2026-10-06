@@ -201,9 +201,19 @@ function ranking(d, kind, allowed) {
              : 'Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.') + '</small>'
     : `<small class="neg">Regroupement indisponible : les noms sont affichés tels que saisis dans Odoo.</small>`;
   const infoInv = hasInv ? `<br><small class="na">${sup ? 'Achat moyen' : 'Panier moyen'} = montant HT moyen des ${sup ? 'factures fournisseurs' : 'factures clients'} de la période (les avoirs ne comptent pas comme factures) ; une facture répartie sur plusieurs BU n’est comptée qu’une fois dans le total.</small>` : '';
+  // Rapprochement avec les frais directs du P&L (fournisseurs, périmètres BU / XC / CARS) : explique l'écart par les écritures hors factures
+  let infoRecon = '';
+  const pnlScope = !sup || d._adj ? null : cur === 'XC' || cur === 'CARS' ? grp(d, cur).direct_costs : (d.pnl.bus.find(b => b.key === cur) || {}).direct_costs;
+  if (pnlScope != null && Math.abs(pnlScope - scope) >= 1) {
+    const rc = (tc._recon || {})[cur] || {amount: 0, journals: []}, gap = pnlScope - scope;
+    infoRecon = `<div class="note"><b>Écart avec les frais directs du P&amp;L</b> : ${eur(pnlScope)} (frais directs) − ${eur(scope)} (achats de ce tableau) = <b>${eur(gap)}</b>.<br>`
+      + `Cet écart vient d’écritures sur les comptes 602, 603 et 604 qui ne sont pas des lignes de factures fournisseurs rattachées à un tiers : écritures diverses, provisions ou factures à recevoir, notes de frais, paiements directs, lignes sans fournisseur.`
+      + (rc.amount ? ` Identifié : ${eur(rc.amount)}${rc.journals.length ? ' — ' + rc.journals.map(j => `${esc(j.name)} (${eur(j.amount)})`).join(', ') : ''}.` : '')
+      + `</div>`;
+  }
   const infoOpen = m && !m.open ? `<br><small class="neg">${T.open} indisponible pour le moment.</small>` : '';
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    ${list.length ? table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}`;
+    ${list.length ? table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}${infoRecon}`;
 }
 const clients = (d, allowed) => ranking(d, 'c', allowed);
 const suppliers = (d, allowed) => ranking(d, 's', allowed);

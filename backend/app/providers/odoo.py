@@ -293,6 +293,29 @@ class OdooProvider:
             d_from, d_to, ["out_invoice", "out_refund"], [("account_id.code", "=like", "700%")], self._bucket_revenue, -1, 1),
             names, "regroup_client", limit, aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
+    def _non_bill_direct_costs(self, d_from: date, d_to: date) -> dict[str, dict]:
+        """Charges directes (comptes 602/603/604 classés par BU) qui NE viennent PAS de lignes de factures fournisseurs avec tiers :
+        écritures diverses, provisions / factures à recevoir, notes de frais, paiements directs, lignes sans tiers…
+        C'est l'écart entre les « frais directs » du P&L et le total du hit-parade fournisseurs. {bucket: {amount, journals[]}}."""
+        from ..bu import classify
+        base = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()),
+                ("account_id.code", "=like", "60%")]
+        not_bill = ["|", "|", ("move_id.move_type", "not in", ["in_invoice", "in_refund"]), ("partner_id", "=", False), ("display_type", "!=", "product")]
+        rows = self._grouped(base + not_bill, ["journal_id", "account_id"])
+        out: dict[str, dict] = {}
+        for r in rows:
+            code, name = self._code_name(r["account_id"][1])
+            c = code and len(code) == 6 and classify(code, name)
+            if not c or c.kind != "direct_cost" or c.bu == "UNASSIGNED":
+                continue
+            b = out.setdefault(c.bu, {"amount": 0.0, "journals": {}})
+            amt = float(r["balance:sum"] or 0.0)
+            b["amount"] += amt
+            j = r["journal_id"][1] if r.get("journal_id") else "(sans journal)"
+            b["journals"][j] = b["journals"].get(j, 0.0) + amt
+        return {k: {"amount": round(v["amount"]), "journals": [{"name": n, "amount": round(a)} for n, a in sorted(v["journals"].items(), key=lambda kv: -abs(kv[1]))[:4] if round(a)]}
+                for k, v in out.items()}
+
     def top_suppliers(self, d_from: date, d_to: date, limit: int = 15) -> dict:
         """Classement des fournisseurs par achats HT (lignes de factures et avoirs fournisseurs comptabilisés).
 
@@ -317,10 +340,18 @@ class OdooProvider:
             if row.get("move_id"):
                 mv = moves.setdefault(b, {}).setdefault(pid, {})
                 mv[row["move_id"][0]] = mv.get(row["move_id"][0], 0.0) + row["balance:sum"]
-        return self._boards(by_bucket, lambda: self._open_split(
+        out = self._boards(by_bucket, lambda: self._open_split(
             d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
             aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
+        try:                                                    # rapprochement avec les frais directs du P&L (facultatif)
+            recon = self._non_bill_direct_costs(d_from, d_to)
+            recon["CARS"] = {"amount": sum(recon.get(b, {}).get("amount", 0) for b, g in BU_GROUP.items() if g == "CARS"),
+                             "journals": [j for b, g in BU_GROUP.items() if g == "CARS" for j in recon.get(b, {}).get("journals", [])][:4]}
+            out["_recon"] = recon
+        except Exception:
+            log.exception("Rapprochement des frais directs indisponible")
+        return out
 
     def marketing(self, d_from: date, d_to: date, top: int = 15) -> dict:
         """Dépenses marketing : comptes de charges MARKETING_ACCOUNTS (débit net = dépense), par compte, par période et par

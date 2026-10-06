@@ -23,11 +23,11 @@ const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','o
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
-  'xc/events': ['CA, frais directs et marge par événement (course, meeting) pour XC.',
+  'xc/events': ['CA, coûts directs et marge par événement (course, meeting) pour XC.',
     'Savoir comment un événement est repéré dans Odoo (compte analytique, projet, étiquette sur les factures…). Les comptes « XC Events » (700014, 602014) donnent déjà le total, pas le détail.'],
   'xc/inventory': ['Valeur du stock XC dans le temps (pièces, véhicules, en-cours), par catégorie et par entrepôt, avec alertes de rupture et de surstock.',
     'Valider les entrepôts à inclure et la méthode de valorisation d’Odoo. L’analyse de septembre a montré que la valeur du stock varie fortement : une courbe mensuelle sera utile.'],
-  'cars/events': ['CA, frais directs et marge par événement pour CARS (ex. Andalucia).',
+  'cars/events': ['CA, coûts directs et marge par événement pour CARS (ex. Andalucia).',
     'La même règle d’identification des événements dans Odoo que pour XC.'],
   'staff/general': ['Coûts de personnel (comptes 62) : total, évolution, ventilation XC / CARS / Shared Services.',
     'Les clés de répartition (XC 60 %, clés nominatives pour CARS, Shared Services) reprises de l’analyse de septembre, à confirmer.'],
@@ -121,7 +121,7 @@ function bars(items, key, opts = {}) {
 const table = (head, rows, cl = '') => `<div class="table-wrap"><table class="${cl}"><thead><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 const lineRow = (label, o) => `<tr><td>${esc(label)}</td><td>${eur(o.ca)}</td><td>${eur(o.direct_costs)}</td>
   <td class="${cls(o.margin)}">${eur(o.margin)}</td><td class="${cls(o.margin)}">${margin(o)}</td></tr>`;
-const HEAD = ['', 'CA', 'Frais directs', 'Marge brute', 'Marge %'];
+const HEAD = ['', 'CA', 'Coûts directs', 'Marge brute', 'Marge %'];
 const NOTE = t => ({static: `<div class="note">${t}</div>`});
 
 // Événements (axe analytique « MEETING ») : une ligne par événement dont le groupe BU figure dans `groups`.
@@ -159,7 +159,7 @@ function eventsTable(d, groups, showBu = false, veh = false) {
     ${veh ? `<td class="client">${esc(e.client || '')}</td>` : ''}${showBu ? `<td class="bu">${esc(buText(e))}</td>` : ''}<td>${eur(e.ca)}</td><td>${eur(e.direct_costs)}</td><td>${eur(e.other_costs)}</td>${veh ? '' : `<td>${capexCell(e)}</td>`}
     <td class="${cls(e.result)}">${veh ? resultCell(e) : eur(e.result)}</td><td class="${cls(e.result)}">${e.ca ? pct(e.result / e.ca) : '–'}</td></tr>`;
   const total = {name: `Total (${list.length} ${U}${list.length > 1 ? 's' : ''})`, ca: sum('ca'), direct_costs: sum('direct_costs'), other_costs: sum('other_costs'), capex: sum('capex'), amort: sum('amort'), result: sum('result')};
-  const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Frais directs'], ['other_costs', 'Autres charges']].concat(veh ? [] : [['capex', 'Investis*']], [['result', 'Résultat cash'], ['margin', 'Marge %']]));
+  const cols = [['name', veh ? 'Véhicule' : 'Événement']].concat(veh ? [['client', 'Client']] : [], showBu ? [['bu', 'BU']] : [], [['ca', 'CA'], ['direct_costs', 'Coûts directs'], ['other_costs', 'Autres charges']].concat(veh ? [] : [['capex', 'Investis*']], [['result', 'Résultat cash'], ['margin', 'Marge %']]));
   const sorted = list.slice().sort((a, b) => {
     const x = evVal(a, evSort.k), y = evVal(b, evSort.k);
     return (typeof x === 'string' ? x.localeCompare(y, 'fr') : x - y) * evSort.dir || a.name.localeCompare(b.name, 'fr');
@@ -167,7 +167,7 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   const th = ([k, l]) => `<th class="sortable${evSort.k === k ? ' sorted' : ''}" data-sort="${k}" role="button" tabindex="0" aria-sort="${evSort.k === k ? (evSort.dir > 0 ? 'ascending' : 'descending') : 'none'}">${esc(l)}<span class="arrow">${evSort.k === k ? (evSort.dir > 0 ? ' ▲' : ' ▼') : ''}</span></th>`;
   return `<div class="table-wrap"><table class="prodtable"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${sorted.map(e => row(e)).concat([row(total, 'tot')]).join('')}</tbody></table></div>` + note;
 }
-const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − frais directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
+const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − coûts directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
 const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
 const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others', HORS_BU:'Hors BU'};
@@ -201,12 +201,12 @@ function ranking(d, kind, allowed) {
              : 'Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.') + '</small>'
     : `<small class="neg">Regroupement indisponible : les noms sont affichés tels que saisis dans Odoo.</small>`;
   const infoInv = hasInv ? `<br><small class="na">${sup ? 'Achat moyen' : 'Panier moyen'} = montant HT moyen des ${sup ? 'factures fournisseurs' : 'factures clients'} de la période (les avoirs ne comptent pas comme factures) ; une facture répartie sur plusieurs BU n’est comptée qu’une fois dans le total.</small>` : '';
-  // Rapprochement avec les frais directs du P&L (fournisseurs, périmètres BU / XC / CARS) : explique l'écart par les écritures hors factures
+  // Rapprochement avec les coûts directs du P&L (fournisseurs, périmètres BU / XC / CARS) : explique l'écart par les écritures hors factures
   let infoRecon = '';
   const pnlScope = !sup || d._adj ? null : cur === 'XC' || cur === 'CARS' ? grp(d, cur).direct_costs : (d.pnl.bus.find(b => b.key === cur) || {}).direct_costs;
   if (pnlScope != null && Math.abs(pnlScope - scope) >= 1) {
     const rc = (tc._recon || {})[cur] || {amount: 0, journals: []}, gap = pnlScope - scope;
-    infoRecon = `<div class="note"><b>Écart avec les frais directs du P&amp;L</b> : ${eur(pnlScope)} (frais directs) − ${eur(scope)} (achats de ce tableau) = <b>${eur(gap)}</b>.<br>`
+    infoRecon = `<div class="note"><b>Écart avec les coûts directs du P&amp;L</b> : ${eur(pnlScope)} (coûts directs) − ${eur(scope)} (achats de ce tableau) = <b>${eur(gap)}</b>.<br>`
       + `Cet écart vient d’écritures sur les comptes 602, 603 et 604 qui ne sont pas des lignes de factures fournisseurs rattachées à un tiers : écritures diverses, provisions ou factures à recevoir, notes de frais, paiements directs, lignes sans fournisseur.`
       + (rc.amount ? ` Identifié : ${eur(rc.amount)}${rc.journals.length ? ' — ' + rc.journals.map(j => `${esc(j.name)} (${eur(j.amount)})`).join(', ') : ''}.` : '')
       + `</div>`;
@@ -389,10 +389,10 @@ const PAGES = {
     B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
   ],
   'overview/mb': () => [
-    B('kpi', 'Marge brute', d => { const t = d.pnl.total; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Frais directs', eur(t.direct_costs))}</div>`; }),
+    B('kpi', 'Marge brute', d => { const t = d.pnl.total; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Coûts directs', eur(t.direct_costs))}</div>`; }),
     FINANCE,
     B('bu', 'Marge brute par BU', d => bars(busOf(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
-    NOTE('Marge brute = CA − frais directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
+    NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
   ],
   'overview/suppliers': () => [
     B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
@@ -421,7 +421,7 @@ const PAGES = {
     B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
   ],
   'xc/general': () => [
-    B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
+    B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
     B('decomp', 'XC — CA et coûts directs en détail', d => decompTable(d, [{label: 'XC', o: grp(d, 'XC')}])),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
     B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
@@ -445,10 +445,10 @@ const PAGES = {
   ],
   'cars/vehicles': () => [
     B('vehicles', 'Véhicules CARS', d => eventsTable(d, ['CARS'], true, true)),
-    NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − frais directs − autres charges (hors dotations aux amortissements) − investissements (dépenses immobilisées sur les comptes INVEST, amorties ensuite) ; survolez le ⓘ à côté du résultat pour le montant investi, la durée d’amortissement et le résultat comptable. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
+    NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − coûts directs − autres charges (hors dotations aux amortissements) − investissements (dépenses immobilisées sur les comptes INVEST, amorties ensuite) ; survolez le ⓘ à côté du résultat pour le montant investi, la durée d’amortissement et le résultat comptable. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
   ],
   'cars/general': () => [
-    B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
+    B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Coûts directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
     B('decomp', 'CARS et ses BU — CA et coûts directs en détail', d => decompTable(d, [{label: 'CARS', o: grp(d, 'CARS')}].concat(d.pnl.bus.filter(b => b.group === 'CARS').map(b => ({label: b.label, o: b}))))),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
     B('clients', 'Hit-parade clients CARS', d => clients(d, ['CARS'])),

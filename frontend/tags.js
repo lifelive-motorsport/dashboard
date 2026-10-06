@@ -29,7 +29,7 @@ const TAGS_CONV = [
   ['Axe analytique « BU »', 'Obligatoire sur chaque ligne. Comptes reconnus : XC, Modern Rally, Historic Rally, Historic Racing, Others ; tout compte « OLD… » est ignoré. Il décide de la BU d’un événement ou d’un véhicule.'],
   ['Axe analytique « MEETING »', 'Un compte = un événement (pages Par événement, XC et CARS).'],
   ['Axe analytique « CARS »', 'Un compte = un véhicule (CARS › Par véhicule). Le client et la référence viennent de la fiche du compte analytique ; le libellé s’affiche sans « [référence] » ni nom du client.'],
-  ['Comptes de ventes et d’achats', 'Ventes 700xxx ; frais directs 602, 603, 604 ; la BU est donnée par les 3 derniers chiffres (010 à 019 = XC, 020 Modern Rally, 030 Historic Rally, 040 Historic Racing, 050/059 CARS Others). Un libellé qui commence par « old » est ignoré (sauf pour le CA de l’an dernier, où l’ancien plan comptable compte).'],
+  ['Comptes de ventes et d’achats', 'Ventes 700xxx ; coûts directs 602, 603, 604 ; la BU est donnée par les 3 derniers chiffres (010 à 019 = XC, 020 Modern Rally, 030 Historic Rally, 040 Historic Racing, 050/059 CARS Others). Un libellé qui commence par « old » est ignoré (sauf pour le CA de l’an dernier, où l’ancien plan comptable compte).'],
   ['Comptes marketing', '602019, 602059 et 612050 = dépenses marketing. Les investissements marketing sont sur le compte INVEST 240050 (amortis via les comptes 630xxx).'],
   ['Fiche produit › Site web', 'Rattache un produit à un webshop : pages vues et visites par webshop, top produits.'],
   ['Fiche produit › code PIF', 'Utilisé par la valorisation du stock XC (XC Detail › Inventory).'],

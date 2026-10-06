@@ -66,8 +66,8 @@ def classify(code: str, name: str = "") -> Classified | None:
 def aggregate(balances: dict[str, float], names: dict[str, str] | None = None) -> dict:
     """balances: code -> solde comptable (débit - crédit) sur la période.
 
-    CA = -solde des 700 ; frais directs = +solde des 602/603/604 ;
-    marge brute = CA - frais directs. Personnel (62) et véhicules (615) exclus.
+    CA = -solde des 700 ; coûts directs = +solde des 602/603/604 ;
+    marge brute = CA - coûts directs. Personnel (62) et véhicules (615) exclus.
     """
     names = names or {}
     bus = {k: {"key": k, "label": BU_LABELS[k], "group": BU_GROUP[k], "ca": 0.0, "direct_costs": 0.0,

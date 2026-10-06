@@ -8,7 +8,7 @@ const ADJ_BUS = [['HISTORIC_RACING', 'Historic Racing'], ['HISTORIC_RALLY', 'His
                  ['CARS_OTHERS', 'CARS Others'], ['XC', 'XC']];
 const ADJ_BU_LABEL = Object.fromEntries(ADJ_BUS);
 const ADJ_KINDS = {manual: 'Montant saisi à la main', meeting: 'Événements (axe MEETING)', car: 'Véhicules (axe CARS)'};
-const ADJ_MEASURES = {result: 'Résultat après amortissement (CA − frais directs − autres charges − dotations)', margin: 'Contribution à la MB (CA − frais directs)'};
+const ADJ_MEASURES = {result: 'Résultat après amortissement (CA − coûts directs − autres charges − dotations)', margin: 'Contribution à la MB (CA − coûts directs)'};
 const MB_PAGES = new Set(['overview/mb', 'overview/xcvscars', 'cars/general', 'cars/bu', 'xc/general']);
 
 const adjAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
@@ -43,7 +43,7 @@ function adjEffects(d) {
   });
 }
 
-// Copie des chiffres où la MB de chaque BU est corrigée (les frais directs absorbent l'écart ; le détail par ligne n'est pas ajusté).
+// Copie des chiffres où la MB de chaque BU est corrigée (les coûts directs absorbent l'écart ; le détail par ligne n'est pas ajusté).
 function adjustedData(d) {
   if (!d || !d.pnl) return d;
   const fx = adjEffects(d), byBu = {};

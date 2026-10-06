@@ -384,6 +384,8 @@ class OdooProvider:
         base = [("parent_state", "=", "posted"), ("date", ">=", y0), ("date", "<=", d_to.isoformat())]
         inv = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "in", settings.MARKETING_INVEST_ACCOUNTS), ("debit", ">", 0)],
                          fields=["name", "balance", "date", "partner_id", "move_id"])
+        kw = settings.MARKETING_INVEST_KEYWORDS          # le compte INVEST contient aussi du matériel (ponts, sols…) : on ne garde que le marketing
+        inv = [ln for ln in inv if any(k in (ln.get("name") or "").lower() for k in kw)]
         if not inv:
             return None
         am = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "=like", "630%"), ("name", "ilike", "amortissement")],

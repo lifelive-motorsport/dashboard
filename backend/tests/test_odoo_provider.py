@@ -703,7 +703,9 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
         if model == "account.move.line" and ("debit", ">", 0) in kw["domain"]:                       # lignes d'investissement (compte INVEST)
             return [{"name": "Création & Développement d'un système graphique", "balance": 2200.0, "date": "2026-02-24", "partner_id": [5, "Actaeon"], "move_id": [1, "FACTU/2026/02/0072"]},
                     {"name": "Création & Développement d'un système graphique", "balance": 3300.0, "date": "2026-04-03", "partner_id": [5, "Actaeon"], "move_id": [2, "FACTU/2026/04/0013"]},
-                    {"name": "Package Social Media Almeira 2026", "balance": 5500.0, "date": "2026-04-03", "partner_id": [5, "Actaeon"], "move_id": [2, "FACTU/2026/04/0013"]}]
+                    {"name": "Package Social Media Almeira 2026", "balance": 5500.0, "date": "2026-04-03", "partner_id": [5, "Actaeon"], "move_id": [2, "FACTU/2026/04/0013"]},
+                    {"name": "2 Säulen Hebebühne 4.2 t - BASIC LINE", "balance": 1764.0, "date": "2026-02-10", "partner_id": [6, "Twin-Busch"], "move_id": [3, "FACTU/2026/02/0113"]},   # matériel : pas du marketing
+                    {"name": "Dalle à clipser PVC", "balance": 2880.0, "date": "2026-02-12", "partner_id": [7, "Rubber"], "move_id": [4, "FACTU/2026/02/0025"]}]
         if model == "account.move.line" and ("name", "ilike", "amortissement") in kw["domain"]:   # dotations mensuelles
             return [{"name": "Package Social Media Almeira 2026 : Amortissement", "balance": 91.67, "date": "2026-08-31"},
                     {"name": "Package Social Media Almeira 2026 : Amortissement", "balance": 91.66, "date": "2026-09-30"},
@@ -722,7 +724,7 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
     assert [(s["name"], s["amount"], s["invoices"]) for s in r["suppliers"]] == [("Agence X", 1500, 2), ("Salon Y", 200, 1)]            # l'avoir n'est pas une facture
     assert [x["total"] for x in r["series"]["points"]] == [1500, 0, 200] and r["series"]["granularity"] == "month"
     inv = r["invest"]
-    assert (inv["total"], inv["year"], len(inv["items"])) == (11000, 2026, 2)
+    assert (inv["total"], inv["year"], len(inv["items"])) == (11000, 2026, 2)               # le matériel du même compte INVEST est écarté
     gfx = next(i for i in inv["items"] if i["label"].startswith("Création"))
     pkg = next(i for i in inv["items"] if i["label"].startswith("Package"))
     assert (gfx["capex"], gfx["amort_months"], [b["ref"] for b in gfx["bills"]]) == (5500, 60, ["FACTU/2026/02/0072", "FACTU/2026/04/0013"])      # 5 500 ÷ 91,67 = 60 mois

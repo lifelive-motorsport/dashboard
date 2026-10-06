@@ -180,6 +180,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "events": _safe(p.events, d_from, d_to),
             "vehicles": _safe(p.vehicles, d_from, d_to),
             "webshops": _safe(p.webshops, d_from, d_to),
+            "marketing": _safe(p.marketing, d_from, d_to),
             "analytics": ga.demo(d_from, d_to) if settings.PROVIDER == "demo" else _safe(ga.report, d_from, d_to),
         }
     except Exception as e:  # le détail va dans les journaux, jamais vers le navigateur

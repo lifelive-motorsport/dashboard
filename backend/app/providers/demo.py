@@ -93,6 +93,17 @@ class DemoProvider:
                 "mixed": False, "bus": [{"bu": bu, "share": 1.0}]} for i, (n, bu, c, ref, ca, dc, oc, cx) in enumerate(demo, 1)]
         return {"vehicles": out, "plans": ["CARS"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
+    def marketing(self, d_from: date, d_to: date) -> dict:
+        from .odoo import OdooProvider
+        gran, buckets = OdooProvider._buckets(d_from, d_to)
+        pts = [{"label": lbl, "avg": float(3000 + 700 * ((i * 3) % 5)), "total": 3000 + 700 * ((i * 3) % 5), "by_account": {}} for i, (_, lbl) in enumerate(buckets)]
+        tot = sum(p["total"] for p in pts)
+        accs = [("602019", "Frais XC Sales & Marketing", .5), ("602059", "Frais CARS Sales & Marketing", .3), ("612050", "Frais marketing génériques", .2)]
+        return {"total": tot, "codes": [a[0] for a in accs], "series": {"granularity": gran, "points": pts},
+                "accounts": [{"code": c, "name": n, "amount": round(tot * s), "share": s} for c, n, s in accs],
+                "suppliers": [{"name": f"Fournisseur marketing {i}", "amount": round(tot * .3 / i), "share": .3 / i, "invoices": 2 + i} for i in range(1, 9)],
+                "invest": {"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60, "year": d_to.year}}
+
     def stock_report(self) -> dict:
         from ..stock import build_report
         rnd = random.Random(5)

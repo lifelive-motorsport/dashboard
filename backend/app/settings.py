@@ -63,3 +63,7 @@ GA_HOST_GS = os.getenv("GA_HOST_GS", "www.goldspeedtires-xc.com")
 GA_HOST_SITE = os.getenv("GA_HOST_SITE", "")             # site vitrine : par défaut le domaine de GA_HOST_XC
 GA_SHOP_PATH = os.getenv("GA_SHOP_PATH", "/shop")
 GA_SERVICE_ACCOUNT = os.getenv("GA_SERVICE_ACCOUNT", "")  # compte de service à usurper (portée analytics.readonly), ex. dashboard-run@…
+
+# Dépenses marketing : comptes de charges suivis et événement dont l'investissement est signalé en remarque
+MARKETING_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_ACCOUNTS", "602019,602059,612050").split(",") if x.strip()]
+MARKETING_INVEST_EVENT = os.getenv("MARKETING_INVEST_EVENT", "andalucia")

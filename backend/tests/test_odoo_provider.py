@@ -689,3 +689,29 @@ def test_stock_report_values_top_pif_negatives_and_attention_points():
     assert [d["ref"] for d in att["decimals"]] == ["F"]                                       # quantité décimale sur une unité « Units »
     assert att["pairs"] and att["pairs"][0]["gap"] == 40 and {att["pairs"][0]["a_qty"], att["pairs"][0]["b_qty"]} == {20.0, 16.0}
     assert att["no_pif"]["refs"] == 2
+
+
+def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment():
+    p = OdooProvider.__new__(OdooProvider)
+    lines = [{"date": "2026-01-15", "balance": 1000.0, "account_id": [1, "602019 Frais XC Sales & Marketing"], "partner_id": [10, "AGENCE X"], "move_id": [100, "B1"]},
+             {"date": "2026-01-20", "balance": 500.0, "account_id": [2, "612050 Frais marketing génériques"], "partner_id": [10, "AGENCE X"], "move_id": [101, "B2"]},
+             {"date": "2026-03-03", "balance": 300.0, "account_id": [3, "602059 Frais CARS Sales & Marketing"], "partner_id": [11, "SALON Y"], "move_id": [102, "B3"]},
+             {"date": "2026-03-04", "balance": -100.0, "account_id": [3, "602059 Frais CARS Sales & Marketing"], "partner_id": [11, "SALON Y"], "move_id": [103, "AV1"]}]
+    seen = {}
+
+    def call(model, method, **kw):
+        if model == "account.move.line":
+            seen["dom"] = kw["domain"]
+            return lines
+        if model == "res.partner":
+            return [{"id": 10, "display_name": "AGENCE X", "commercial_partner_id": [10, "x"], "category_id": []},
+                    {"id": 11, "display_name": "SALON Y", "commercial_partner_id": [11, "y"], "category_id": []}]
+        return []
+    p._call = call
+    p._by_axis = lambda d_from, d_to, *a, **k: {"items": [{"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60}]}
+    r = p.marketing(date(2026, 1, 1), date(2026, 3, 31))
+    assert ("account_id.code", "in", ["602019", "602059", "612050"]) in seen["dom"]
+    assert r["total"] == 1700 and [a["code"] for a in r["accounts"]] == ["602019", "612050", "602059"] and r["accounts"][2]["amount"] == 200   # avoir déduit
+    assert [(s["name"], s["amount"], s["invoices"]) for s in r["suppliers"]] == [("Agence X", 1500, 2), ("Salon Y", 200, 1)]            # l'avoir n'est pas une facture
+    assert [x["total"] for x in r["series"]["points"]] == [1500, 0, 200] and r["series"]["granularity"] == "month"
+    assert r["invest"] == {"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60, "year": 2026}

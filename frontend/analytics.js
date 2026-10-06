@@ -53,3 +53,22 @@ function gaBlocks(key, o = {}) {
   }, 'countries')));
   return out;
 }
+
+// Marketing › Dépenses marketing : comptes de charges marketing (602019, 602059, 612050), évolution, fournisseurs, remarque sur l'investissement.
+function marketingBlocks() {
+  const wrap = fn => d => { const m = d.marketing; return (!m || m.unavailable) ? `<p class="na">${esc((m && m.unavailable) || 'Indisponible pour le moment.')}</p>` : fn(m, d); };
+  return [
+    B('mk_kpi', 'Dépenses marketing', wrap(m => `<div class="kpis">${kpi('Total des dépenses', eur(m.total))}${m.accounts.map(a => kpi(a.name || a.code, eur(a.amount), '', `${a.code} · ${pct(a.share)} du total`)).join('')}</div>`
+      + `<small class="na">Charges des comptes ${esc((m.codes || []).join(', '))} (factures fournisseurs comptabilisées, avoirs déduits), hors taxes.</small>`)),
+    B('mk_evol', 'Évolution des dépenses', wrap(m => lineChart(m.series.points, null, `Dépenses marketing par ${m.series.granularity === 'week' ? 'semaine' : 'mois'}. Survolez un point pour le détail.`,
+      v => eur(Math.round(v)), p => `${p.label} : ${eur(p.total)}`, ''))),
+    B('mk_acc', 'Par compte', wrap(m => m.accounts.length ? table(['Compte', 'Libellé', 'Montant HT', '% du total'], m.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.amount)}</td><td>${pct(a.share)}</td></tr>`)
+      .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(m.total)}</td><td>100,0 %</td></tr>`]), 'prodtable') : '<p class="na">Aucune dépense sur la période.</p>')),
+    B('mk_sup', 'Principaux fournisseurs', wrap(m => m.suppliers.length ? table(['#', 'Fournisseur', 'Montant HT', '% du total', 'Factures'], m.suppliers.map((s, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(s.name)}</td><td>${eur(s.amount)}</td><td>${pct(s.share)}</td><td>${num(s.invoices)}</td></tr>`), 'prodtable')
+      + '<small class="na">Contacts d’une même société fusionnés (et étiquettes « regroup_fournisseur= » appliquées).</small>' : '<p class="na">Aucun fournisseur sur la période.</p>')),
+    B('mk_invest', 'Remarque : investissement marketing', wrap(m => {
+      const v = m.invest; if (!v) return '<p class="na">Aucun investissement marketing immobilisé repéré cette année.</p>';
+      return `<div class="note"><b>Événement ${esc(v.name)}</b> : un investissement marketing de <b>${eur(v.capex)}</b> lié à cet événement a été comptabilisé en immobilisation (comptes INVEST) et non en charge. Il est <b>amorti sur ${v.amort_months ? v.amort_months + ' mois' : 'une durée à préciser'}</b>${v.amort_months ? ` (${Math.round(v.amort_months / 12 * 10) / 10} ans, ≈ ${eur(v.amort_monthly)} par mois)` : ''}${v.amort ? ` — ${eur(v.amort)} déjà amortis en ${v.year}` : ''}. Il n’est donc pas repris dans les dépenses marketing ci-dessus.</div>`;
+    }), true),
+  ];
+}

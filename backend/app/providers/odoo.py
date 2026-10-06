@@ -322,6 +322,66 @@ class OdooProvider:
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
             aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
+    def marketing(self, d_from: date, d_to: date, top: int = 15) -> dict:
+        """Dépenses marketing : comptes de charges MARKETING_ACCOUNTS (débit net = dépense), par compte, par période et par
+        fournisseur ; plus l'investissement marketing immobilisé de l'événement MARKETING_INVEST_EVENT (montant et durée d'amortissement)."""
+        codes = settings.MARKETING_ACCOUNTS
+        lines = self._call("account.move.line", "search_read",
+                           domain=[("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()),
+                                   ("account_id.code", "in", codes)],
+                           fields=["date", "balance", "account_id", "partner_id", "move_id"])
+        gran, buckets = self._buckets(d_from, d_to)
+        starts = [b[0] for b in buckets]
+        per_acc: dict[str, dict] = {}
+        per_bucket: dict[date, dict[str, float]] = {st: {} for st in starts}
+        per_partner: dict[int, dict] = {}
+        for ln in lines:
+            code, name = self._code_name(ln["account_id"][1])
+            amt = float(ln["balance"] or 0.0)
+            a = per_acc.setdefault(code or "", {"code": code or "", "name": name, "amount": 0.0})
+            a["amount"] += amt
+            d = date.fromisoformat(str(ln["date"])[:10])
+            st = max((x for x in starts if x <= d), default=None)
+            if st is not None:
+                per_bucket[st][code or ""] = per_bucket[st].get(code or "", 0.0) + amt
+            if ln.get("partner_id"):
+                pid, pname = ln["partner_id"]
+                p = per_partner.setdefault(pid, {"name": pname, "amount": 0.0, "moves": {}})
+                p["amount"] += amt
+                mid = (ln.get("move_id") or [0])[0]
+                p["moves"][mid] = p["moves"].get(mid, 0.0) + amt
+        total = sum(a["amount"] for a in per_acc.values())
+        accounts = [{"code": c, "name": a["name"], "amount": round(a["amount"]), "share": a["amount"] / total if total else 0.0}
+                    for c, a in sorted(per_acc.items(), key=lambda kv: -kv[1]["amount"])]
+        try:
+            groups = self._client_groups(set(per_partner), "regroup_fournisseur")
+        except Exception:
+            groups = {}
+        merged: dict[str, dict] = {}
+        for pid, p in per_partner.items():
+            key, label = groups.get(pid, (f"p:{pid}", p["name"]))
+            m = merged.setdefault(key, {"name": normalize_name(label), "amount": 0.0, "moves": {}})
+            m["amount"] += p["amount"]
+            for mid, v in p["moves"].items():
+                m["moves"][mid] = m["moves"].get(mid, 0.0) + v
+        suppliers = [{"name": m["name"], "amount": round(m["amount"]), "share": m["amount"] / total if total else 0.0,
+                      "invoices": sum(1 for v in m["moves"].values() if v > 0)}
+                     for m in sorted(merged.values(), key=lambda m: -m["amount"])[:top] if m["amount"] > 0]
+        pts = [{"label": lbl, "avg": round(sum(per_bucket[st].values()), 2), "total": round(sum(per_bucket[st].values())),
+                "by_account": {c: round(v) for c, v in per_bucket[st].items()}} for st, lbl in buckets]
+        invest = None
+        try:                                                       # investissement lié à l'événement, indépendant de la période choisie
+            key = self._plain(settings.MARKETING_INVEST_EVENT).strip()
+            for e in self._by_axis(date(d_to.year, 1, 1), d_to)["items"]:
+                if key and key in self._plain(e["name"]) and e.get("capex"):
+                    invest = {"name": e["name"], "capex": e["capex"], "amort": e.get("amort", 0), "amort_monthly": e.get("amort_monthly", 0),
+                              "amort_months": e.get("amort_months", 0), "year": d_to.year}
+                    break
+        except Exception:
+            log.exception("Investissement marketing indisponible")
+        return {"total": round(total), "accounts": accounts, "suppliers": suppliers, "series": {"granularity": gran, "points": pts},
+                "codes": codes, "invest": invest}
+
     # ---- Stock : valorisation au coût moyen -------------------------------------------------------------------------
     def _pif_field(self) -> str | None:
         """Champ « code PIF » des articles : STOCK_PIF_FIELD, sinon détecté (champ texte/sélection dont le nom ou le libellé contient « PIF »)."""

@@ -38,3 +38,4 @@ ADJUSTMENTS_STORE = os.getenv("ADJUSTMENTS_STORE", "memory" if PROVIDER == "demo
 WEBSHOP_PATH = os.getenv("WEBSHOP_PATH", "/shop")
 VISITS_DAYS = int(os.getenv("VISITS_DAYS", "50"))   # fenêtre fixe des visites (Odoo supprime les visiteurs anonymes inactifs après ~60 jours)
 WEBSHOP_STRICT_SITE = os.getenv("WEBSHOP_STRICT_SITE", "false").lower() == "true"   # true : ignorer aussi les produits sans site web précis
+PICKING_WEEKS = int(os.getenv("PICKING_WEEKS", "12"))   # nombre de semaines du graphique des commandes préparées

@@ -626,3 +626,27 @@ def test_suppliers_invoice_count_and_average():
     rows = [_mrow(1, "Four", "602010 FRAIS XC Manufacturer", 600.0, 201), _mrow(1, "Four", "615001 Carburant", 400.0, 201), _mrow(1, "Four", "615001 Carburant", 100.0, 202)]
     r = make(rows, [_partner(1, "Four")], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert (r["total"][0]["invoices"], r["total"][0]["avg"]) == (2, 550.0)           # 1 000 € sur la 201, 100 € sur la 202
+
+
+def test_pickings_per_week_count_orders_and_units_by_date_done():
+    from datetime import date as _d, timedelta as _td
+    p = OdooProvider.__new__(OdooProvider)
+    today = _d.today()
+    monday = today - _td(days=today.weekday())
+    last_week = monday - _td(days=7)
+    seen = {}
+
+    def call(model, method, **kw):
+        if model == "stock.picking":
+            seen["dom"] = kw["domain"]
+            return [{"id": 1, "date_done": f"{last_week + _td(days=1)} 10:00:00"}, {"id": 2, "date_done": f"{last_week + _td(days=3)} 10:00:00"},
+                    {"id": 3, "date_done": f"{monday} 08:00:00"}]
+        if model == "stock.move":
+            return [{"picking_id": [1, "P1"], "quantity:sum": 4.0}, {"picking_id": [2, "P2"], "quantity:sum": 10.0}, {"picking_id": [3, "P3"], "quantity:sum": 1.0}]
+    p._call = call
+    r = p._pickings(7, 4)
+    assert ("sale_id.website_id", "=", 7) in seen["dom"] and ("picking_type_code", "=", "outgoing") in seen["dom"]
+    assert [x["orders"] for x in r["points"]] == [0, 0, 2, 1] and [x["units"] for x in r["points"]] == [0, 0, 14, 1]
+    assert r["points"][2]["per_order"] == 7.0 and r["points"][0]["per_order"] is None and (r["orders"], r["units"]) == (3, 15)
+    p._pickings(None, 4)
+    assert not any(c[0] == "sale_id.website_id" for c in seen["dom"])                      # tous les bons de livraison

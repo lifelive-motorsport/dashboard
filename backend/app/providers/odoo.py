@@ -796,6 +796,40 @@ class OdooProvider:
         return {"customers": customers, "total_ca": round(total_ca), "total_orders": sum(c["orders"] for c in agg.values()),
                 "count": len(agg), "repeat": sum(1 for c in agg.values() if c["orders"] >= 2), "top_ca": round(sum(c["ca"] for c in best))}
 
+    def _pickings(self, wid: int | None, weeks: int) -> dict:
+        """Bons de livraison validés par semaine (= commandes préparées au magasin) et nombre de produits expédiés.
+
+        `wid` : limiter aux commandes de ce site web ; None = tous les bons de livraison sortants. Semaines commençant le lundi,
+        la semaine en cours comprise. Les produits = quantités des mouvements de stock terminés de ces bons."""
+        today = date.today()
+        first = today - timedelta(days=today.weekday() + 7 * (weeks - 1))
+        starts = [first + timedelta(days=7 * i) for i in range(weeks)]
+        mois = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+        dom = [("picking_type_code", "=", "outgoing"), ("state", "=", "done"), ("date_done", ">=", first.isoformat()),
+               ("date_done", "<", (today + timedelta(days=1)).isoformat())]
+        if wid is not None:
+            dom.append(("sale_id.website_id", "=", wid))
+        picks = self._call("stock.picking", "search_read", domain=dom, fields=["date_done"])
+        week_of: dict[int, date] = {}
+        for pk in picks:
+            if pk.get("date_done"):
+                d = date.fromisoformat(str(pk["date_done"])[:10])
+                week_of[pk["id"]] = max(st for st in starts if st <= d)
+        orders = {st: 0 for st in starts}
+        units = {st: 0.0 for st in starts}
+        for st in week_of.values():
+            orders[st] += 1
+        ids = list(week_of)
+        for k in range(0, len(ids), 400):
+            for r in self._call("stock.move", "formatted_read_group", domain=[("picking_id", "in", ids[k:k + 400]), ("state", "=", "done")],
+                                groupby=["picking_id"], aggregates=["quantity:sum"]):
+                if r.get("picking_id") and r["picking_id"][0] in week_of:
+                    units[week_of[r["picking_id"][0]]] += float(r["quantity:sum"] or 0.0)
+        pts = [{"label": f"{st.day} {mois[st.month - 1]}", "orders": orders[st], "units": round(units[st]),
+                "per_order": round(units[st] / orders[st], 1) if orders[st] else None} for st in starts]
+        n, u = sum(orders.values()), sum(units.values())
+        return {"weeks": weeks, "points": pts, "orders": n, "units": round(u), "per_order": round(u / n, 1) if n else None}
+
     def webshops(self, d_from: date, d_to: date, top: int = 15) -> list[dict]:
         """Ventes des sites web (commandes confirmées, HT) et top produits (valeur, unités, % du total)."""
         base = [("state", "in", ["sale", "done"]), ("date_order", ">=", d_from.isoformat()),
@@ -839,7 +873,8 @@ class OdooProvider:
                         "deliveries": safe("deliveries", self._deliveries, wid, [("state", "in", ["sale", "done"])] + order_dom),
                         "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)),
                         "visits": safe("visits", self._visits, wid, vf, vt), "top_pages": safe("top_pages", self._top_pages, wid, vf, vt),
-                        "customers": safe("customers", self._top_customers, wid, base), "errors": errors,
+                        "customers": safe("customers", self._top_customers, wid, base),
+                        "pickings": safe("pickings", lambda w=wid: {"web": self._pickings(w, settings.PICKING_WEEKS), "all": self._pickings(None, settings.PICKING_WEEKS)}), "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

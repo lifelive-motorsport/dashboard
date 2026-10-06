@@ -239,8 +239,26 @@ function modeTable(rows, head, countLabel, note, err) {
     <td class="sharecell"><span class="sharebar" style="width:${Math.round(r.share * 100)}%"></span><span>${pct(r.share)}</span></td><td>${eur(r.amount)}</td></tr>`)
     .concat([`<tr class="tot"><td>Total</td><td>${num(tot)}</td><td>100,0 %</td><td>${eur(amt)}</td></tr>`]), 'prodtable') + `<small class="na">${note}</small>`;
 }
+// Courbes multiples sur UN SEUL axe (points = [{label, ...valeurs}], series = [{key, label, cls}]) ; légende + infobulle par point.
+function multiLineChart(points, series, tip, note) {
+  if (!points.some(p => series.some(s => p[s.key] > 0))) return '<p class="na">Aucune donnée sur la période.</p>';
+  const W = 640, H = 250, L = 46, R = 14, T = 14, B = 34, hi = Math.max(...points.flatMap(p => series.map(s => p[s.key] || 0))) * 1.12 || 1;
+  const x = i => L + (W - L - R) * (points.length > 1 ? i / (points.length - 1) : .5), y = v => T + (H - T - B) * (1 - v / hi);
+  const ticks = [0, 1, 2, 3].map(k => hi * k / 3), every = Math.ceil(points.length / 8);
+  const path = s => points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[s.key] || 0).toFixed(1)}`).join('');
+  return `<div class="linechart"><div class="legend">${series.map(s => `<span><i class="sw ${s.cls}"></i>${esc(s.label)}</span>`).join('')}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(series.map(s => s.label).join(' et '))}">
+    ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="ax" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${num(Math.round(t))}</text>`).join('')}
+    ${series.map(s => `<path class="ln ${s.cls}" d="${path(s)}"/>`).join('')}
+    ${points.map((p, i) => series.map(s => `<circle class="dot ${s.cls}" cx="${x(i).toFixed(1)}" cy="${y(p[s.key] || 0).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>`).join('')
+      + `<rect class="hit" x="${(x(i) - 10).toFixed(1)}" y="${T}" width="20" height="${H - T - B}"><title>${esc(tip(p))}</title></rect>`).join('')}
+    ${points.map((p, i) => i % every === 0 ? `<text class="ax" x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
+  </svg><small class="na">${note}</small></div>`;
+}
+
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
-function webshopPage(pick, {topPages = true, customers = false} = {}) {
+let pickScope = 'web';
+function webshopPage(pick, {topPages = true, customers = false, picking = false} = {}) {
   const shop = d => (d.webshops.unavailable ? null : d.webshops.find(pick));
   const miss = d => d.webshops.unavailable ? `<p class="na">${esc(d.webshops.unavailable)}</p>` : '<p class="na">Aucune vente sur ce webshop pour la période.</p>';
   return [
@@ -251,6 +269,15 @@ function webshopPage(pick, {topPages = true, customers = false} = {}) {
       return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
         : '<p class="na">Évolution indisponible pour le moment.</p>';
     }),
+    B('picking', 'Commandes préparées par semaine', d => {
+      const w = shop(d); if (!w) return miss(d);
+      const pk = w.pickings; if (!pk || pk.unavailable) return `<p class="na">Commandes préparées indisponibles pour le moment.</p>${(w.errors || {}).pickings ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.pickings)}</small>` : ''}`;
+      const sc = pk[pickScope] || pk.web, tabs = `<div class="tabs">${[['web', 'Commandes du webshop'], ['all', 'Tous les bons de livraison']].map(([k, l]) => `<button data-pickscope="${k}" class="${k === pickScope ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+      return tabs + `<div class="kpis">${kpi('Commandes préparées', num(sc.orders))}${kpi('Produits expédiés', num(sc.units))}${kpi('Produits par commande', sc.per_order == null ? '–' : num(sc.per_order))}</div>`
+        + multiLineChart(sc.points, [{key: 'orders', label: 'Commandes préparées', cls: 's1'}, {key: 'units', label: 'Produits expédiés', cls: 's2'}],
+          p => `Semaine du ${p.label} : ${p.orders} commande${p.orders > 1 ? 's' : ''}, ${num(p.units)} produit${p.units > 1 ? 's' : ''}${p.per_order == null ? '' : ' (' + num(p.per_order) + ' par commande)'}`,
+          `Les ${sc.weeks} dernières semaines. Une commande est comptée comme préparée quand son bon de livraison est validé (date de validation, semaines commençant le lundi, semaine en cours comprise). Produits = quantités expédiées. Survolez une semaine pour le détail : moins de commandes mais plus de produits par commande explique souvent une semaine plus calme.`);
+    }, true),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);
       const t = w.products_total || {value: 0, units: 0, count: 0};
@@ -301,7 +328,7 @@ function webshopPage(pick, {topPages = true, customers = false} = {}) {
         + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
     }, true),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),
-  ].filter(b => (topPages || b.id !== 'toppages') && (customers || b.id !== 'customers'));
+  ].filter(b => (topPages || b.id !== 'toppages') && (customers || b.id !== 'customers') && (picking || b.id !== 'picking'));
 }
 const PAGES = {
   'overview/ca': () => [
@@ -362,7 +389,7 @@ const PAGES = {
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
     NOTE('Le Race Team se déplace d’abord pour soutenir les clients constructeur ; le contrat Goldspeed découle du statut de constructeur XC. Les ventes webshop sont comptabilisées sur d’autres lignes que « Webshop » (CA = 0 sur cette ligne) — à confirmer.'),
   ],
-  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name), {customers: true}),
+  'xc/webshop_xc': () => webshopPage(w => !/goldspeed/i.test(w.name), {customers: true, picking: true}),
   'xc/webshop_gs': () => webshopPage(w => /goldspeed/i.test(w.name), {topPages: false}),      // 2 produits seulement : un classement de pages n'a pas de sens
   'xc/events': () => [
     B('events', 'Événements XC', d => eventsTable(d, ['XC'])),
@@ -507,7 +534,7 @@ const sortBy = e => { const h = e.target.closest('th[data-sort]'); if (!h) retur
   const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' || k === 'client' ? 1 : -1)};     // 2ᵉ clic : inverse
   current.blocks.filter(b => !b.static).forEach(updateBlock); return true; };
 $('page').onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && sortBy(e)) e.preventDefault(); };
-$('page').onclick = e => { if (sortBy(e)) return; if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
+$('page').onclick = e => { if (e.target.dataset.pickscope) { pickScope = e.target.dataset.pickscope; current.blocks.filter(b => !b.static).forEach(updateBlock); return; } if (sortBy(e)) return; if (e.target.dataset.tab) { if (e.target.dataset.kind === 's') tabS = e.target.dataset.tab; else tab = e.target.dataset.tab; current.blocks.filter(b => !b.static).forEach(updateBlock); } };
 $('page').onchange = e => {
   const bid = e.target.dataset.bid; if (!bid || !e.target.classList.contains('per')) return;
   const b = current.blocks.find(x => x.id === bid); periods[bkey(b)] = e.target.value; store.set('lm_periods', JSON.stringify(periods));

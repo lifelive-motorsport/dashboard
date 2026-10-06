@@ -105,6 +105,9 @@ class DemoProvider:
                     "avg": round(basket + 25 * math.sin(i + len(name)), 2)} for i, (_, lbl) in enumerate(buckets)]
             return {"name": name, "orders": round(orders * s), "revenue": round(revenue * s), "avg_basket": basket,
                     "basket_series": {"granularity": gran, "points": pts},
+                    "pickings": {k: {"weeks": 12, "orders": 150, "units": 520, "per_order": 3.5,
+                                     "points": [{"label": f"{(i % 4) * 7 + 1} sept.", "orders": 10 + (i * 5) % 9 + (k == "all") * 6, "units": 28 + (i * 11) % 30 + (k == "all") * 20,
+                                                 "per_order": 3.2 + (i % 4) * 0.4} for i in range(12)]} for k in ("web", "all")},
                     "customers": {"customers": [{"name": f"Client exemple {i}", "ca": round(revenue * s * (0.09 / i)), "orders": 6 - i // 3, "avg_basket": round(revenue * s * 0.09 / i / max(1, 6 - i // 3)),
                                                  "share": 0.09 / i, "country": ("Belgique", "France", "Allemagne")[i % 3], "last_order": f"2026-09-{28 - i:02d}",
                                                  "payments": [{"name": "Carte bancaire", "count": 3}, {"name": "PayPal", "count": 1}],

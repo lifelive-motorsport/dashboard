@@ -1,5 +1,5 @@
 // Cache de l'enveloppe applicative uniquement ; les données (/api) ne sont jamais mises en cache.
-const C = 'shell-v52', SHELL = ['/', 'style.css', 'app.js', 'adjust.js', 'manifest.json', 'icon-192.png', 'favicon.png', 'logo-light.png', 'logo-dark.png'];
+const C = 'shell-v53', SHELL = ['/', 'style.css', 'app.js', 'adjust.js', 'manifest.json', 'icon-192.png', 'favicon.png', 'logo-light.png', 'logo-dark.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(SHELL))));
 self.addEventListener('fetch', e => {
   const u = new URL(e.request.url);

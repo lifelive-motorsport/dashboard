@@ -170,6 +170,12 @@ def _devices(prop: str, flt, d_from: date, d_to: date) -> list[dict]:
     return [{"name": d[0], "sessions": round(v[0]), "share": v[0] / tot} for d, v in _rows(resp)]
 
 
+def _hosts(prop: str, d_from: date, d_to: date) -> list[dict]:
+    """Noms de domaine vus par la propriété (diagnostic quand un site n'a aucune session : nom d'hôte mal renseigné)."""
+    resp = run(prop, _body(d_from, d_to, ["sessions"], ["hostName"], None, orderBys=[{"metric": {"metricName": "sessions"}, "desc": True}], limit=6))
+    return [{"name": d[0], "sessions": round(v[0])} for d, v in _rows(resp)]
+
+
 def site_report(key: str, d_from: date, d_to: date) -> dict:
     cfg = sites()[key]
     if not cfg["property"]:
@@ -192,6 +198,11 @@ def site_report(key: str, d_from: date, d_to: date) -> dict:
                 out[name] = res
     if errors:
         out["errors"] = errors
+    if "totals" in out and not out["totals"]["current"].get("sessions"):
+        try:
+            out["hosts"] = _hosts(prop, d_from, d_to)
+        except Exception:
+            pass
     return out
 
 

@@ -19,6 +19,8 @@ function gaBlocks(key, o = {}) {
     B(`ga_${key}_traffic`, 'Trafic (Google Analytics)', wrap((s) => {
       const t = s.totals, c = t.current, p = t.previous, yr = t.previous_period.from.slice(0, 4);
       const cmp = k => (p && p[k] > 0) ? vsPrev(c[k], p[k], yr) : '';
+      if (!c.sessions) return `<p class="neg">Aucune session pour ${esc(s.host || 'ce site')}${s.path ? ' (pages « ' + esc(s.path) + ' »)' : ''} sur la période.</p>`
+        + (s.hosts && s.hosts.length ? `<small class="na">Noms de domaine vus par Google Analytics sur la période : ${s.hosts.map(h => esc(h.name) + ' (' + num(h.sessions) + ')').join(', ')}. Si le vôtre est écrit autrement, indiquez-le avec la variable GA_HOST_XC / GA_HOST_GS / GA_HOST_SITE.</small>` : '<small class="na">Vérifiez le nom de domaine (GA_HOST_XC / GA_HOST_GS / GA_HOST_SITE) et la période.</small>');
       const conv = c.sessions ? c.ecommercePurchases / c.sessions : null;
       const cards = kpi('Sessions', num(c.sessions), '', cmp('sessions')) + kpi('Utilisateurs', num(c.totalUsers), '', cmp('totalUsers')) + kpi('Pages vues', num(c.screenPageViews), '', cmp('screenPageViews'))
         + kpi('Engagement', pct(c.engagementRate || 0), '', 'sessions engagées') + kpi('Durée moyenne', gaDur(c.averageSessionDuration), '', 'par session')

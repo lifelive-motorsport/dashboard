@@ -64,3 +64,33 @@ def test_dashboard_carries_the_previous_year_same_period_and_handles_leap_day():
     r = c.get("/api/dashboard?from=2026-01-01&to=2026-10-05").json()
     assert r["pnl_prev"]["period"] == {"from": "2025-01-01", "to": "2025-10-05"} and r["pnl_prev"]["total"]["ca"] >= 0
     assert m._year_back(date(2024, 2, 29)) == date(2023, 2, 28) and m._year_back(date(2026, 10, 5)) == date(2025, 10, 5)
+
+
+def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
+    import time
+    import app.auth as a
+    import app.main as m
+    monkeypatch.setattr(a.settings, "AUTH_ENABLED", True)
+    monkeypatch.setattr(a.settings, "SESSION_SECRET", "x" * 40)
+    monkeypatch.setattr(a.settings, "SESSION_DAYS", 14)
+    monkeypatch.setattr(a.settings, "ALLOWED_DOMAIN", "lifelive-motorsport.com")
+    monkeypatch.setattr(a.settings, "ALLOWED_EMAILS", ["actio@gmail.com"])
+    monkeypatch.setattr(a, "verify_google", lambda auth: "md@lifelive-motorsport.com" if auth == "Bearer ok" else (_ for _ in ()).throw(HTTPException(401, "x")))
+    monkeypatch.setattr(m, "verify_google", a.verify_google)
+    from fastapi import HTTPException
+    cl = TestClient(app)
+    assert cl.get("/api/session").status_code == 401                                   # ni cookie ni jeton
+    r = cl.post("/api/session", headers={"Authorization": "Bearer ok"})
+    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True} and "lm_session" in r.headers["set-cookie"]
+    assert "HttpOnly" in r.headers["set-cookie"] and "SameSite=strict" in r.headers["set-cookie"]
+    assert cl.get("/api/session").json()["email"] == "md@lifelive-motorsport.com"      # le cookie suffit, plus de jeton Google
+    good = a.make_session("md@lifelive-motorsport.com")
+    assert a.read_session(good) is not None
+    assert a.read_session(good[:-2] + "xx") is None                                    # signature falsifiée
+    assert a.read_session(good, now=time.time() + 15 * 86400) is None                  # expirée après SESSION_DAYS
+    assert a.read_session(a.make_session("intrus@autre.com")) is None                  # adresse plus autorisée : accès retiré immédiatement
+    assert a.read_session(a.make_session("actio@gmail.com")) is not None               # liste blanche
+    cl.cookies.clear()
+    assert cl.get("/api/session").status_code == 401
+    monkeypatch.setattr(a.settings, "SESSION_SECRET", "")
+    assert TestClient(app).post("/api/session", headers={"Authorization": "Bearer ok"}).json()["session"] is False   # non configuré : jeton seul

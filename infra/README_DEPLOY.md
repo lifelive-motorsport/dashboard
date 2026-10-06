@@ -58,3 +58,18 @@ gcloud run services update dashboard --region=europe-west1 \
 ```
 
 `ADMIN_EMAILS` : seules ces adresses peuvent modifier les ajustements ; les autres utilisateurs les voient en lecture seule.
+
+
+## Durée de session (rester connecté)
+
+Le jeton Google ne vaut qu'environ 1 heure. Pour rester connecté 14 jours (glissants : la session se prolonge tant qu'on s'en sert), le dashboard échange ce jeton contre un cookie signé. Il lui faut un secret de signature, à créer une fois :
+
+```
+gcloud config set project lifelive-dashboard-app
+head -c 48 /dev/urandom | base64 | tr -d '\n' | gcloud secrets create SESSION_SECRET --replication-policy=automatic --data-file=-
+gcloud secrets add-iam-policy-binding SESSION_SECRET \
+  --member="serviceAccount:dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+gcloud run services update dashboard --region=europe-west1 --update-secrets=SESSION_SECRET=SESSION_SECRET:latest
+```
+
+Durée réglable avec la variable `SESSION_DAYS` (14 par défaut). Retirer une adresse de `ALLOWED_EMAILS` coupe son accès immédiatement, même avec un cookie valide. Le lien « Se déconnecter » (pied de page) supprime le cookie.

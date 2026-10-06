@@ -5,12 +5,12 @@ import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import adjustments, settings
-from .auth import require_user
+from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
 
@@ -69,6 +69,27 @@ def healthz():
 def config():
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
             "source": settings.PROVIDER}
+
+
+@app.post("/api/session")
+def open_session(request: Request, response: Response, authorization: str | None = Header(default=None)):
+    """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant)."""
+    email = verify_google(authorization)
+    if not settings.SESSION_SECRET:
+        return {"email": email, "session": False}            # non configuré : on reste sur le jeton Google
+    set_session_cookie(response, request, email)
+    return {"email": email, "session": True}
+
+
+@app.get("/api/session")
+def current_session(user: str = Depends(require_user)):
+    return {"email": user, "session": True}
+
+
+@app.delete("/api/session")
+def close_session(response: Response):
+    response.delete_cookie(COOKIE, path="/")
+    return {"session": False}
 
 
 @app.get("/api/adjustments")

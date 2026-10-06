@@ -47,12 +47,19 @@ else
 fi
 gcloud secrets add-iam-policy-binding ODOO_API_KEY --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor >/dev/null
 
+# Secret de signature des sessions du dashboard (cookie de 14 jours) : généré ici, jamais affiché.
+if ! gcloud secrets describe SESSION_SECRET >/dev/null 2>&1; then
+  gcloud secrets create SESSION_SECRET --replication-policy=automatic
+  head -c 48 /dev/urandom | base64 | tr -d '\n' | gcloud secrets versions add SESSION_SECRET --data-file=-
+fi
+gcloud secrets add-iam-policy-binding SESSION_SECRET --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor >/dev/null
+
 read -rp "ODOO_URL (ex. https://lifelive-motorsport.odoo.com) : " ODOO_URL
 read -rp "ODOO_DB : " ODOO_DB
 
 gcloud run deploy dashboard --source=. --region="$REGION" --service-account="$SA" \
   --allow-unauthenticated --min-instances=0 --max-instances=2 --memory=512Mi --timeout=60 \
-  --set-secrets=ODOO_API_KEY=ODOO_API_KEY:latest \
+  --set-secrets=ODOO_API_KEY=ODOO_API_KEY:latest,SESSION_SECRET=SESSION_SECRET:latest \
   --set-env-vars="^#^DATA_PROVIDER=odoo#ODOO_URL=${ODOO_URL}#ODOO_DB=${ODOO_DB}#AUTH_ENABLED=true#GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}#ALLOWED_DOMAIN=lifelive-motorsport.com#ALLOWED_EMAILS=${ALLOWED_EMAILS}#ADMIN_EMAILS=${ADMIN_EMAILS}"  # séparateur « # » : les e-mails contiennent « @ » et « , »
 # --allow-unauthenticated : le service est public, mais /api/* exige un jeton Google valide
 # (domaine Workspace ou email de la liste blanche) vérifié côté serveur.

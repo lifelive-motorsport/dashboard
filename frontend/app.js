@@ -96,8 +96,14 @@ const anyData = () => { for (const h of cache.values()) return h.data; return nu
 const latestData = () => [...cache.values()].map(h => h.data).sort((x, y) => (y.generated_at > x.generated_at) - (y.generated_at < x.generated_at))[0] || null;
 function renderFooter() {
   const d = latestData(); if (!d) return;
-  $('foot').textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+  const f = $('foot'); f.textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+  if (cfg && cfg.auth) { const a = document.createElement('a'); a.href = '#'; a.id = 'logout'; a.textContent = 'Se déconnecter'; f.append(' — ', a); }
 }
+document.addEventListener('click', async e => {
+  if (e.target.id !== 'logout') return; e.preventDefault();
+  try { await fetch('/api/session', {method: 'DELETE'}); } catch {}
+  sessionStorage.removeItem('idt'); token = null; location.reload();
+});
 
 // ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
 const kpi = (l, v, c='', sub='', ls='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}${ls ? ` <small class="na">${ls}</small>` : ''}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
@@ -484,7 +490,9 @@ function render(force) {
 function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
-    callback: r => { token = r.credential; sessionStorage.setItem('idt', token); loadAdj().then(() => render()); }});
+    callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
+      try { await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); } catch {}      // cookie de session du dashboard (durée longue)
+      loadAdj().then(() => render()); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
 
@@ -549,7 +557,9 @@ document.addEventListener('visibilitychange', tick);
   cfg = await (await fetch('/api/config')).json();
   if (cfg.auth) {
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
-    if (!token) return needLogin();
+    let ok = false;
+    try { ok = (await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}})).ok; } catch {}      // cookie de session valide, ou jeton Google encore valable
+    if (!ok) { token = null; sessionStorage.removeItem('idt'); return needLogin(); }
   }
   await loadAdj();
   render();

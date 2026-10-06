@@ -39,3 +39,8 @@ WEBSHOP_PATH = os.getenv("WEBSHOP_PATH", "/shop")
 VISITS_DAYS = int(os.getenv("VISITS_DAYS", "50"))   # fenêtre fixe des visites (Odoo supprime les visiteurs anonymes inactifs après ~60 jours)
 WEBSHOP_STRICT_SITE = os.getenv("WEBSHOP_STRICT_SITE", "false").lower() == "true"   # true : ignorer aussi les produits sans site web précis
 PICKING_WEEKS = int(os.getenv("PICKING_WEEKS", "12"))   # nombre de semaines du graphique des commandes préparées
+
+# Session du dashboard : cookie signé (nécessite SESSION_SECRET, dans Secret Manager) valable SESSION_DAYS jours, glissant.
+# Sans SESSION_SECRET, seul le jeton Google (≈ 1 h) fait foi et il faut se reconnecter souvent.
+SESSION_SECRET = os.getenv("SESSION_SECRET", "")
+SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))

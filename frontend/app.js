@@ -100,7 +100,9 @@ function renderFooter() {
 }
 
 // ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
-const kpi = (l, v, c='', sub='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
+const kpi = (l, v, c='', sub='', ls='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}${ls ? ` <small class="na">${ls}</small>` : ''}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
+// Variation par rapport à la même période un an plus tôt (cur, prev : montants ; label : année comparée)
+const vsPrev = (cur, prev, yr) => prev > 0 ? `<span class="${cur >= prev ? 'pos' : 'neg'}">${cur >= prev ? '▲ +' : '▼ '}${((cur / prev - 1) * 100).toFixed(1).replace('.', ',')} %</span> vs ${yr}` : `<span class="na">vs ${yr} : n/d</span>`;
 const margin = o => o.ca ? pct(o.margin / o.ca) : '–';
 const grp = (d, k) => d.pnl.groups.find(g => g.key === k) || {ca: 0, direct_costs: 0, margin: 0};
 const busOf = d => d.pnl.bus.filter(b => b.ca || b.direct_costs);
@@ -299,7 +301,14 @@ function webshopPage(pick, {topPages = true, customers = false} = {}) {
 }
 const PAGES = {
   'overview/ca': () => [
-    B('kpi', 'Chiffre d’affaires', d => `<div class="kpis">${kpi('Chiffre d’affaires', eur(d.pnl.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca)) + kpi('CA CARS', eur(grp(d,'CARS').ca))}</div>`),
+    B('kpi', 'Chiffre d’affaires', d => {
+      const tot = d.pnl.total.ca, pv = d.pnl_prev, yr = pv && pv.period ? pv.period.from.slice(0, 4) : '', pg = k => pv ? (pv.groups.find(g => g.key === k) || {ca: 0}).ca : 0;
+      const share = k => tot > 0 ? pct(grp(d, k).ca / tot) + ' du CA' : '';
+      const cmp = (cur, prev) => pv ? vsPrev(cur, prev, yr) : '';
+      return `<div class="kpis">${kpi('Chiffre d’affaires', eur(tot), '', cmp(tot, pv && pv.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca), '', cmp(grp(d,'XC').ca, pg('XC')), share('XC'))
+        + kpi('CA CARS', eur(grp(d,'CARS').ca), '', cmp(grp(d,'CARS').ca, pg('CARS')), share('CARS'))}</div>`
+        + (pv ? `<small class="na">Comparaison avec la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}). Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
+    }),
     FINANCE,
     B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
   ],

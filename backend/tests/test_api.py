@@ -55,3 +55,12 @@ def test_adjustments_roundtrip_validation_and_edit_rights(monkeypatch):
         assert c.put("/api/adjustments", json={"items": []}).status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def test_dashboard_carries_the_previous_year_same_period_and_handles_leap_day():
+    from datetime import date
+    import app.main as m
+    m._cache.clear()
+    r = c.get("/api/dashboard?from=2026-01-01&to=2026-10-05").json()
+    assert r["pnl_prev"]["period"] == {"from": "2025-01-01", "to": "2025-10-05"} and r["pnl_prev"]["total"]["ca"] >= 0
+    assert m._year_back(date(2024, 2, 29)) == date(2023, 2, 28) and m._year_back(date(2026, 10, 5)) == date(2025, 10, 5)

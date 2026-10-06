@@ -31,6 +31,14 @@ def provider():
     return _provider
 
 
+def _year_back(d: date) -> date:
+    """Même jour un an plus tôt (le 29 février devient le 28)."""
+    try:
+        return d.replace(year=d.year - 1)
+    except ValueError:
+        return d.replace(year=d.year - 1, day=28)
+
+
 def _safe(fn, *a):
     """Un bloc secondaire (clients, fournisseurs, webshops) qui échoue ne doit pas empêcher d'afficher le reste."""
     try:
@@ -89,6 +97,16 @@ def put_adjustments(payload: adjustments.Payload, user: str = Depends(require_us
     return {**doc, "can_edit": True}
 
 
+def _prev_pnl(p, d_from: date, d_to: date) -> dict | None:
+    """P&L de la même période un an plus tôt (None si indisponible : la comparaison est un plus)."""
+    pf, pt = _year_back(d_from), _year_back(d_to)
+    try:
+        return {**aggregate(p.pnl_balances(pf, pt)), "period": {"from": pf.isoformat(), "to": pt.isoformat()}}
+    except Exception:
+        log.exception("P&L de l'année précédente indisponible")
+        return None
+
+
 @app.get("/api/dashboard")
 def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date | None = Query(None, alias="to"),
               refresh: bool = False, _user: str = Depends(require_user)):
@@ -106,6 +124,7 @@ def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date 
             "source": p.name, "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "pnl": aggregate(p.pnl_balances(d_from, d_to)),
+            "pnl_prev": _prev_pnl(p, d_from, d_to),
             "balance_sheet": p.balance_sheet(d_to.year),
             "top_clients": _safe(p.top_clients, d_from, d_to),
             "top_suppliers": _safe(p.top_suppliers, d_from, d_to),

@@ -667,3 +667,25 @@ def test_pickings_only_computed_for_non_goldspeed_webshops():
                                      if m == "website" else base(m, meth, **kw))
     (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)           # le simulateur ne connaît qu'un site (id 1) : XC
     assert w["pickings"] is not None or w["errors"].get("pickings")          # calculé (ou en erreur de droits) pour XC
+
+
+def test_stock_report_values_top_pif_negatives_and_attention_points():
+    from app.stock import build_report
+    items = [{"ref": "A", "name": "Chassis", "pif": "N", "cost": 100.0, "qty": 6.0, "uom": "Units"},
+             {"ref": "B", "name": "Upright front right", "pif": "F", "cost": 10.0, "qty": 20.0, "uom": "Units"},
+             {"ref": "C", "name": "Upright front left", "pif": "F", "cost": 10.0, "qty": 16.0, "uom": "Units"},
+             {"ref": "D", "name": "Engine", "pif": "", "cost": 500.0, "qty": -4.0, "uom": "Units"},
+             {"ref": "E", "name": "Free part", "pif": "", "cost": 0.0, "qty": 7.0, "uom": "Units"},
+             {"ref": "F", "name": "Tube", "pif": "N", "cost": 5.0, "qty": 509.7, "uom": "Units"},
+             {"ref": "G", "name": "Spacer", "pif": "N", "cost": 3.0, "qty": 2989.0, "uom": "Units"}]
+    r = build_report(items, "x_pif")
+    assert r["total"] == {"value": round(600 + 200 + 160 - 2000 + 0 + 2548.5 + 8967), "refs": 7, "positive": 12476, "negative": -2000}
+    assert r["pif"]["refs"] == 5 and [t["ref"] for t in r["top"]][:2] == ["G", "F"] and r["top"][-1]["cum"] == 1.0
+    assert {c["code"]: c["refs"] for c in r["by_pif"]} == {"N": 3, "F": 2} and r["pif_empty"]["refs"] == 2
+    att = r["attention"]
+    assert att["negatives"]["refs"] == 1 and att["negatives"]["top"][0]["ref"] == "D"
+    assert att["zero_cost"] == {"refs": 1, "units": 7.0}
+    assert [v["ref"] for v in att["volumes"]] == ["G", "F"]                                   # ≥ 500 pièces dans le top 10
+    assert [d["ref"] for d in att["decimals"]] == ["F"]                                       # quantité décimale sur une unité « Units »
+    assert att["pairs"] and att["pairs"][0]["gap"] == 40 and {att["pairs"][0]["a_qty"], att["pairs"][0]["b_qty"]} == {20.0, 16.0}
+    assert att["no_pif"]["refs"] == 2

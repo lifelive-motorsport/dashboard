@@ -44,3 +44,7 @@ PICKING_WEEKS = int(os.getenv("PICKING_WEEKS", "12"))   # nombre de semaines du 
 # Sans SESSION_SECRET, seul le jeton Google (≈ 1 h) fait foi et il faut se reconnecter souvent.
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))
+
+# Stock : champ « code PIF » des articles (détecté si vide) et filtre facultatif sur le nom des emplacements internes
+STOCK_PIF_FIELD = os.getenv("STOCK_PIF_FIELD", "")
+STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")

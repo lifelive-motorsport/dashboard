@@ -92,6 +92,28 @@ def close_session(response: Response):
     return {"session": False}
 
 
+_stock_cache: dict[str, tuple[float, dict]] = {}
+
+
+@app.get("/api/stock")
+def stock(refresh: bool = False, _user: str = Depends(require_user)):
+    """Valorisation du stock XC (indépendante de la période) ; mise en cache 10 min."""
+    hit = _stock_cache.get("s")
+    if hit and time.time() - hit[0] < (30 if refresh else 600):
+        return hit[1]
+    try:
+        data = {**provider().stock_report(), "as_of": date.today().isoformat(), "source": provider().name}
+    except (NotImplementedError, LookupError) as e:
+        return {"unavailable": str(e)}
+    except Exception:
+        log.exception("Stock indisponible")
+        if hit:
+            return hit[1]
+        raise HTTPException(502, "Stock momentanément indisponible")
+    _stock_cache["s"] = (time.time(), data)
+    return data
+
+
 @app.get("/api/adjustments")
 def get_adjustments(user: str = Depends(require_user)):
     try:

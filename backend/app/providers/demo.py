@@ -93,6 +93,13 @@ class DemoProvider:
                 "mixed": False, "bus": [{"bu": bu, "share": 1.0}]} for i, (n, bu, c, ref, ca, dc, oc, cx) in enumerate(demo, 1)]
         return {"vehicles": out, "plans": ["CARS"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
+    def stock_report(self) -> dict:
+        from ..stock import build_report
+        rnd = random.Random(5)
+        items = [{"ref": f"6{i:05d}", "name": f"Pièce exemple {i}" + (" left" if i % 40 == 1 else " right" if i % 40 == 2 else ""), "pif": "N" if i % 2 else ("F" if i % 3 else ""),
+                  "cost": round(rnd.random() ** 2 * 800, 2), "qty": float(rnd.randint(-3, 60)) if i % 50 else 2989.0, "uom": "Units"} for i in range(1, 400)]
+        return build_report(items, "x_pif")
+
     def webshops(self, d_from: date, d_to: date) -> list[dict]:
         s = _scale(d_from, d_to)
 

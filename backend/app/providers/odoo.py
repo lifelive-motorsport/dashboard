@@ -322,6 +322,40 @@ class OdooProvider:
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
             aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
+    # ---- Stock : valorisation au coût moyen -------------------------------------------------------------------------
+    def _pif_field(self) -> str | None:
+        """Champ « code PIF » des articles : STOCK_PIF_FIELD, sinon détecté (champ texte/sélection dont le nom ou le libellé contient « PIF »)."""
+        if settings.STOCK_PIF_FIELD:
+            return settings.STOCK_PIF_FIELD
+        try:
+            for name, f in self._call("product.product", "fields_get", attributes=["string", "type"]).items():
+                if f.get("type") in ("char", "selection") and re.search(r"\bpif\b|_pif|pif_", f"{name} {f.get('string', '')}", re.I):
+                    return name
+        except Exception:
+            log.exception("Détection du champ PIF impossible")
+        return None
+
+    def stock_report(self) -> dict:
+        """Stock en main valorisé au coût moyen (standard_price) : tous les emplacements internes (ou ceux dont le nom contient
+        STOCK_LOCATION_LIKE), quantité nette par article, quantités négatives conservées. Lecture seule."""
+        from ..stock import build_report
+        dom = [("location_id.usage", "=", "internal")]
+        if settings.STOCK_LOCATION_LIKE:
+            dom.append(("location_id.complete_name", "ilike", settings.STOCK_LOCATION_LIKE))
+        rows = self._call("stock.quant", "formatted_read_group", domain=dom, groupby=["product_id"], aggregates=["quantity:sum"])
+        qty = {r["product_id"][0]: float(r["quantity:sum"] or 0.0) for r in rows if r.get("product_id") and abs(r["quantity:sum"] or 0.0) > 1e-9}
+        pif = self._pif_field()
+        fields = ["default_code", "name", "standard_price", "uom_id"] + ([pif] if pif else [])
+        items = []
+        ids = sorted(qty)
+        for k in range(0, len(ids), 400):
+            for p in self._call("product.product", "read", ids=ids[k:k + 400], fields=fields, context={"active_test": False}):
+                code = p.get(pif) if pif else None
+                items.append({"ref": p.get("default_code") or "", "name": p.get("name") or "", "pif": (str(code).strip() if code else ""),
+                              "cost": float(p.get("standard_price") or 0.0), "qty": qty[p["id"]],
+                              "uom": (p.get("uom_id") or [0, ""])[1]})
+        return build_report(items, pif)
+
     # ---- Événements : comptes analytiques d'un plan « Événements » -------------------------------------------------
     @staticmethod
     def _plain(text: str) -> str:

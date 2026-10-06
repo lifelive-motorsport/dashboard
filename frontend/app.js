@@ -272,11 +272,11 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false}
     B('picking', 'Commandes préparées par semaine', d => {
       const w = shop(d); if (!w) return miss(d);
       const pk = w.pickings; if (!pk || pk.unavailable) return `<p class="na">Commandes préparées indisponibles pour le moment.</p>${(w.errors || {}).pickings ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.pickings)}</small>` : ''}`;
-      const sc = pk[pickScope] || pk.web, tabs = `<div class="tabs">${[['web', 'Commandes du webshop'], ['all', 'Tous les bons de livraison']].map(([k, l]) => `<button data-pickscope="${k}" class="${k === pickScope ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+      const sc = pk[pickScope] || pk.web, tabs = `<div class="tabs">${[['web', 'Commandes du webshop'], ['all', 'Tous les bons de livraison (hors Goldspeed)']].map(([k, l]) => `<button data-pickscope="${k}" class="${k === pickScope ? 'on' : ''}">${l}</button>`).join('')}</div>`;
       return tabs + `<div class="kpis">${kpi('Commandes préparées', num(sc.orders))}${kpi('Produits expédiés', num(sc.units))}${kpi('Produits par commande', sc.per_order == null ? '–' : num(sc.per_order))}</div>`
         + multiLineChart(sc.points, [{key: 'orders', label: 'Commandes préparées', cls: 's1'}, {key: 'units', label: 'Produits expédiés', cls: 's2'}],
           p => `Semaine du ${p.label} : ${p.orders} commande${p.orders > 1 ? 's' : ''}, ${num(p.units)} produit${p.units > 1 ? 's' : ''}${p.per_order == null ? '' : ' (' + num(p.per_order) + ' par commande)'}`,
-          `Les ${sc.weeks} dernières semaines. Une commande est comptée comme préparée quand son bon de livraison est validé (date de validation, semaines commençant le lundi, semaine en cours comprise). Produits = quantités expédiées. Survolez une semaine pour le détail : moins de commandes mais plus de produits par commande explique souvent une semaine plus calme.`);
+          `Les ${sc.weeks} dernières semaines. Une commande est comptée comme préparée quand son bon de livraison est validé (date de validation, semaines commençant le lundi, semaine en cours comprise). Les livraisons du webshop Goldspeed sont exclues : elles sont faites sur les courses par le Race Team. Produits = quantités expédiées. Survolez une semaine pour le détail : moins de commandes mais plus de produits par commande explique souvent une semaine plus calme.`);
     }, true),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);

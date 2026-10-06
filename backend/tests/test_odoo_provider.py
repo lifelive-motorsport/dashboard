@@ -650,3 +650,20 @@ def test_pickings_per_week_count_orders_and_units_by_date_done():
     assert r["points"][2]["per_order"] == 7.0 and r["points"][0]["per_order"] is None and (r["orders"], r["units"]) == (3, 15)
     p._pickings(None, 4)
     assert not any(c[0] == "sale_id.website_id" for c in seen["dom"])                      # tous les bons de livraison
+
+
+def test_pickings_exclude_goldspeed_site_but_keep_deliveries_without_sale_order():
+    p = OdooProvider.__new__(OdooProvider)
+    seen = {}
+    p._call = lambda model, method, **kw: seen.update(dom=kw["domain"]) or [] if model == "stock.picking" else []
+    p._pickings(None, 4, [9])
+    assert ["|", ("sale_id", "=", False), ("sale_id.website_id", "not in", [9])] == seen["dom"][-3:]
+
+
+def test_pickings_only_computed_for_non_goldspeed_webshops():
+    p, _ = _shop_provider()
+    base = p._call
+    p._call = lambda m, meth, **kw: ([{"id": 1, "name": "Lifelive Motorsport"}, {"id": 2, "name": "Goldspeed XC Cross Car tires - European Championship"}]
+                                     if m == "website" else base(m, meth, **kw))
+    (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)           # le simulateur ne connaît qu'un site (id 1) : XC
+    assert w["pickings"] is not None or w["errors"].get("pickings")          # calculé (ou en erreur de droits) pour XC

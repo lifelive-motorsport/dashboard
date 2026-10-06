@@ -796,10 +796,11 @@ class OdooProvider:
         return {"customers": customers, "total_ca": round(total_ca), "total_orders": sum(c["orders"] for c in agg.values()),
                 "count": len(agg), "repeat": sum(1 for c in agg.values() if c["orders"] >= 2), "top_ca": round(sum(c["ca"] for c in best))}
 
-    def _pickings(self, wid: int | None, weeks: int) -> dict:
+    def _pickings(self, wid: int | None, weeks: int, exclude_sites: list[int] | None = None) -> dict:
         """Bons de livraison validés par semaine (= commandes préparées au magasin) et nombre de produits expédiés.
 
-        `wid` : limiter aux commandes de ce site web ; None = tous les bons de livraison sortants. Semaines commençant le lundi,
+        `wid` : limiter aux commandes de ce site web ; None = tous les bons de livraison sortants, sauf ceux des commandes des sites
+        de `exclude_sites` (webshop Goldspeed : livré par le Race Team, pas par le magasinier). Semaines commençant le lundi,
         la semaine en cours comprise. Les produits = quantités des mouvements de stock terminés de ces bons."""
         today = date.today()
         first = today - timedelta(days=today.weekday() + 7 * (weeks - 1))
@@ -809,6 +810,8 @@ class OdooProvider:
                ("date_done", "<", (today + timedelta(days=1)).isoformat())]
         if wid is not None:
             dom.append(("sale_id.website_id", "=", wid))
+        elif exclude_sites:
+            dom += ["|", ("sale_id", "=", False), ("sale_id.website_id", "not in", exclude_sites)]
         picks = self._call("stock.picking", "search_read", domain=dom, fields=["date_done"])
         week_of: dict[int, date] = {}
         for pk in picks:
@@ -841,6 +844,11 @@ class OdooProvider:
             series = self._basket_series(d_from, d_to, base)
         except Exception:                                      # le graphique est un plus : ne bloque pas le reste de la page
             series = {}
+        try:                                                   # sites « Goldspeed » : leurs livraisons ne passent pas par le magasinier
+            gold = {w["id"] for w in self._call("website", "search_read", domain=[], fields=["name"])
+                    if re.search("goldspeed", f"{w['name']} {settings.WEBSHOP_LABELS.get(w['name'], '')}", re.I)}
+        except Exception:
+            gold = set()
         groups = self._call("sale.order", "formatted_read_group", domain=base + [("website_id", "!=", False)],
                             groupby=["website_id"], aggregates=["amount_untaxed:sum", "__count"])
         for g in groups:
@@ -874,7 +882,8 @@ class OdooProvider:
                         "abandoned": safe("abandoned", self._abandoned, wid, d_from, d_to, series.get(wid)),
                         "visits": safe("visits", self._visits, wid, vf, vt), "top_pages": safe("top_pages", self._top_pages, wid, vf, vt),
                         "customers": safe("customers", self._top_customers, wid, base),
-                        "pickings": safe("pickings", lambda w=wid: {"web": self._pickings(w, settings.PICKING_WEEKS), "all": self._pickings(None, settings.PICKING_WEEKS)}), "errors": errors,
+                        "pickings": None if wid in gold else safe("pickings", lambda w=wid: {"web": self._pickings(w, settings.PICKING_WEEKS),
+                                                                                   "all": self._pickings(None, settings.PICKING_WEEKS, sorted(gold))}), "errors": errors,
                         "products": [{"name": names[l["product_id"][0]], "value": round(l["price_subtotal:sum"]),
                                       "units": round(l["product_uom_qty:sum"], 2),
                                       "share": l["price_subtotal:sum"] / total_value if total_value else 0.0} for l in best],

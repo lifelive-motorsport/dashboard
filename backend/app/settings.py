@@ -66,4 +66,4 @@ GA_SERVICE_ACCOUNT = os.getenv("GA_SERVICE_ACCOUNT", "")  # compte de service à
 
 # Dépenses marketing : comptes de charges suivis et événement dont l'investissement est signalé en remarque
 MARKETING_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_ACCOUNTS", "602019,602059,612050").split(",") if x.strip()]
-MARKETING_INVEST_EVENT = os.getenv("MARKETING_INVEST_EVENT", "andalucia")
+MARKETING_INVEST_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_INVEST_ACCOUNTS", "240050").split(",") if x.strip()]   # comptes INVEST des investissements marketing

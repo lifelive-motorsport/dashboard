@@ -700,6 +700,14 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
     seen = {}
 
     def call(model, method, **kw):
+        if model == "account.move.line" and ("debit", ">", 0) in kw["domain"]:                       # lignes d'investissement (compte INVEST)
+            return [{"name": "Création & Développement d'un système graphique", "balance": 2200.0, "date": "2026-02-24", "partner_id": [5, "Actaeon"], "move_id": [1, "FACTU/2026/02/0072"]},
+                    {"name": "Création & Développement d'un système graphique", "balance": 3300.0, "date": "2026-04-03", "partner_id": [5, "Actaeon"], "move_id": [2, "FACTU/2026/04/0013"]},
+                    {"name": "Package Social Media Almeira 2026", "balance": 5500.0, "date": "2026-04-03", "partner_id": [5, "Actaeon"], "move_id": [2, "FACTU/2026/04/0013"]}]
+        if model == "account.move.line" and ("name", "ilike", "amortissement") in kw["domain"]:   # dotations mensuelles
+            return [{"name": "Package Social Media Almeira 2026 : Amortissement", "balance": 91.67, "date": "2026-08-31"},
+                    {"name": "Package Social Media Almeira 2026 : Amortissement", "balance": 91.66, "date": "2026-09-30"},
+                    {"name": "Création & Développement d'un système graphique : Amortissement", "balance": 91.67, "date": "2026-09-30"}]
         if model == "account.move.line":
             seen["dom"] = kw["domain"]
             return lines
@@ -708,10 +716,14 @@ def test_marketing_expenses_by_account_supplier_bucket_and_andalucia_investment(
                     {"id": 11, "display_name": "SALON Y", "commercial_partner_id": [11, "y"], "category_id": []}]
         return []
     p._call = call
-    p._by_axis = lambda d_from, d_to, *a, **k: {"items": [{"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60}]}
     r = p.marketing(date(2026, 1, 1), date(2026, 3, 31))
     assert ("account_id.code", "in", ["602019", "602059", "612050"]) in seen["dom"]
     assert r["total"] == 1700 and [a["code"] for a in r["accounts"]] == ["602019", "612050", "602059"] and r["accounts"][2]["amount"] == 200   # avoir déduit
     assert [(s["name"], s["amount"], s["invoices"]) for s in r["suppliers"]] == [("Agence X", 1500, 2), ("Salon Y", 200, 1)]            # l'avoir n'est pas une facture
     assert [x["total"] for x in r["series"]["points"]] == [1500, 0, 200] and r["series"]["granularity"] == "month"
-    assert r["invest"] == {"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60, "year": 2026}
+    inv = r["invest"]
+    assert (inv["total"], inv["year"], len(inv["items"])) == (11000, 2026, 2)
+    gfx = next(i for i in inv["items"] if i["label"].startswith("Création"))
+    pkg = next(i for i in inv["items"] if i["label"].startswith("Package"))
+    assert (gfx["capex"], gfx["amort_months"], [b["ref"] for b in gfx["bills"]]) == (5500, 60, ["FACTU/2026/02/0072", "FACTU/2026/04/0013"])      # 5 500 ÷ 91,67 = 60 mois
+    assert (pkg["capex"], pkg["amort"], pkg["amort_months"]) == (5500, 183, 60)

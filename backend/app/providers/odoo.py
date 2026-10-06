@@ -370,17 +370,48 @@ class OdooProvider:
         pts = [{"label": lbl, "avg": round(sum(per_bucket[st].values()), 2), "total": round(sum(per_bucket[st].values())),
                 "by_account": {c: round(v) for c, v in per_bucket[st].items()}} for st, lbl in buckets]
         invest = None
-        try:                                                       # investissement lié à l'événement, indépendant de la période choisie
-            key = self._plain(settings.MARKETING_INVEST_EVENT).strip()
-            for e in self._by_axis(date(d_to.year, 1, 1), d_to)["items"]:
-                if key and key in self._plain(e["name"]) and e.get("capex"):
-                    invest = {"name": e["name"], "capex": e["capex"], "amort": e.get("amort", 0), "amort_monthly": e.get("amort_monthly", 0),
-                              "amort_months": e.get("amort_months", 0), "year": d_to.year}
-                    break
+        try:
+            invest = self._marketing_invest(d_to)
         except Exception:
             log.exception("Investissement marketing indisponible")
         return {"total": round(total), "accounts": accounts, "suppliers": suppliers, "series": {"granularity": gran, "points": pts},
                 "codes": codes, "invest": invest}
+
+    def _marketing_invest(self, d_to: date) -> dict | None:
+        """Investissements marketing de l'année portés sur les comptes INVEST (MARKETING_INVEST_ACCOUNTS), par libellé de ligne de
+        facture : montant, factures, amortissement déjà passé et dotation mensuelle (donc durée = investi ÷ dotation)."""
+        y0 = date(d_to.year, 1, 1).isoformat()
+        base = [("parent_state", "=", "posted"), ("date", ">=", y0), ("date", "<=", d_to.isoformat())]
+        inv = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "in", settings.MARKETING_INVEST_ACCOUNTS), ("debit", ">", 0)],
+                         fields=["name", "balance", "date", "partner_id", "move_id"])
+        if not inv:
+            return None
+        am = self._call("account.move.line", "search_read", domain=base + [("account_id.code", "=like", "630%"), ("name", "ilike", "amortissement")],
+                        fields=["name", "balance", "date"])
+        items: dict[str, dict] = {}
+        for ln in inv:
+            label = (ln.get("name") or "").strip() or "(sans libellé)"
+            c = items.setdefault(label, {"label": label, "capex": 0.0, "bills": {}, "partner": ""})
+            c["capex"] += float(ln["balance"] or 0.0)
+            if ln.get("move_id"):
+                c["bills"][ln["move_id"][1]] = str(ln["date"])[:10]
+            if ln.get("partner_id"):
+                c["partner"] = ln["partner_id"][1]
+        out = []
+        for c in items.values():
+            mine = [a for a in am if (a.get("name") or "").lower().startswith(c["label"].lower())]
+            months: dict[str, float] = {}
+            for a in mine:
+                months[str(a["date"])[:7]] = months.get(str(a["date"])[:7], 0.0) + float(a["balance"] or 0.0)
+            monthly = months[max(months)] if months else 0.0
+            out.append({"label": c["label"], "capex": round(c["capex"]), "partner": c["partner"],
+                        "bills": [{"ref": r, "date": d} for r, d in sorted(c["bills"].items(), key=lambda kv: kv[1])],
+                        "amort": round(sum(months.values())), "amort_monthly": round(monthly, 2),
+                        "amort_months": round(c["capex"] / monthly) if monthly > 0 else 0})
+        out.sort(key=lambda c: -c["capex"])
+        total_monthly = sum(c["amort_monthly"] for c in out)
+        return {"year": d_to.year, "total": sum(c["capex"] for c in out), "amort": sum(c["amort"] for c in out), "amort_monthly": round(total_monthly, 2),
+                "items": out, "accounts": settings.MARKETING_INVEST_ACCOUNTS}
 
     # ---- Stock : valorisation au coût moyen -------------------------------------------------------------------------
     def _pif_field(self) -> str | None:

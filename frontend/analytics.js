@@ -66,9 +66,20 @@ function marketingBlocks() {
       .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(m.total)}</td><td>100,0 %</td></tr>`]), 'prodtable') : '<p class="na">Aucune dépense sur la période.</p>')),
     B('mk_sup', 'Principaux fournisseurs', wrap(m => m.suppliers.length ? table(['#', 'Fournisseur', 'Montant HT', '% du total', 'Factures'], m.suppliers.map((s, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(s.name)}</td><td>${eur(s.amount)}</td><td>${pct(s.share)}</td><td>${num(s.invoices)}</td></tr>`), 'prodtable')
       + '<small class="na">Contacts d’une même société fusionnés (et étiquettes « regroup_fournisseur= » appliquées).</small>' : '<p class="na">Aucun fournisseur sur la période.</p>')),
-    B('mk_invest', 'Remarque : investissement marketing', wrap(m => {
-      const v = m.invest; if (!v) return '<p class="na">Aucun investissement marketing immobilisé repéré cette année.</p>';
-      return `<div class="note"><b>Événement ${esc(v.name)}</b> : un investissement marketing de <b>${eur(v.capex)}</b> lié à cet événement a été comptabilisé en immobilisation (comptes INVEST) et non en charge. Il est <b>amorti sur ${v.amort_months ? v.amort_months + ' mois' : 'une durée à préciser'}</b>${v.amort_months ? ` (${Math.round(v.amort_months / 12 * 10) / 10} ans, ≈ ${eur(v.amort_monthly)} par mois)` : ''}${v.amort ? ` — ${eur(v.amort)} déjà amortis en ${v.year}` : ''}. Il n’est donc pas repris dans les dépenses marketing ci-dessus.</div>`;
+    B('mk_invest', 'Remarque : investissements marketing de l’année', wrap(m => {
+      const v = m.invest; if (!v || !v.items || !v.items.length) return '<p class="na">Aucun investissement marketing immobilisé repéré cette année.</p>';
+      const yrs = n => `${Math.round(n / 12 * 10) / 10}`.replace('.', ',');
+      const what = it => /graphique/i.test(it.label)
+        ? 'imputé analytiquement sur les trois BU CARS (Modern Rally, Historic Rally, Historic Racing). Ce travail a aussi servi XC, mais la demande ne venant pas de cette BU, XC n’a pas été impacté.'
+        : /social media|almeira/i.test(it.label)
+          ? 'couverture photo et vidéo de notre événement à l’Andalucia Circuit, en partenariat avec GDM Motors ; coût imputé à la BU Historic Racing uniquement (événement LLM/GDM event Andalucia).' : '';
+      const bills = it => (it.bills || []).map(b => esc(b.ref)).join(', ');
+      const dur = (it, pl) => it.amort_months ? `amorti${pl ? 's' : ''} sur ${it.amort_months} mois (${yrs(it.amort_months)} ans, ≈ ${eur(it.amort_monthly)} par mois)` : 'durée d’amortissement à préciser';
+      const same = v.items.length > 1 && v.items.every(it => it.amort_months && it.amort_months === v.items[0].amort_months);
+      return `<div class="note"><b>Investissements marketing ${v.year} : ${eur(v.total)} HT</b>, comptabilisés en immobilisation (compte${(v.accounts || []).length > 1 ? 's' : ''} ${esc((v.accounts || []).join(', '))} INVEST) et non en charges : ils ne sont donc <b>pas repris dans les dépenses marketing ci-dessus</b>.`
+        + `<ul>${v.items.map(it => `<li><b>${esc(it.label)}</b> : ${eur(it.capex)}${it.partner ? ` (${esc(it.partner)}${bills(it) ? ', ' + bills(it) : ''})` : ''}${what(it) ? ' — ' + what(it) : ''}${same ? '' : ' Investissement ' + dur(it) + '.'}</li>`).join('')}</ul>`
+        + (same ? `Ces investissements sont ${dur(v.items[0], true)} chacun, soit ≈ ${eur(v.amort_monthly)} par mois au total` : `Soit ≈ ${eur(v.amort_monthly)} par mois d’amortissement au total`)
+        + `${v.amort ? ` ; ${eur(v.amort)} déjà amortis en ${v.year}` : ''}.</div>`;
     }), true),
   ];
 }

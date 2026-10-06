@@ -102,7 +102,9 @@ class DemoProvider:
         return {"total": tot, "codes": [a[0] for a in accs], "series": {"granularity": gran, "points": pts},
                 "accounts": [{"code": c, "name": n, "amount": round(tot * s), "share": s} for c, n, s in accs],
                 "suppliers": [{"name": f"Fournisseur marketing {i}", "amount": round(tot * .3 / i), "share": .3 / i, "invoices": 2 + i} for i in range(1, 9)],
-                "invest": {"name": "LLM/GDM event Andalucia", "capex": 37510, "amort": 3840, "amort_monthly": 625, "amort_months": 60, "year": d_to.year}}
+                "invest": {"year": d_to.year, "total": 11000, "amort": 1100, "amort_monthly": 183.33, "accounts": ["240050"],
+                           "items": [{"label": "Création & Développement d'un système graphique", "capex": 5500, "partner": "Actaeon Conseils", "bills": [{"ref": "FACTU/2026/02/0072", "date": "2026-02-24"}, {"ref": "FACTU/2026/04/0013", "date": "2026-04-03"}], "amort": 550, "amort_monthly": 91.67, "amort_months": 60},
+                                     {"label": "Package Social Media Almeira 2026", "capex": 5500, "partner": "Actaeon Conseils", "bills": [{"ref": "FACTU/2026/04/0013", "date": "2026-04-03"}], "amort": 550, "amort_monthly": 91.67, "amort_months": 60}]}}
 
     def stock_report(self) -> dict:
         from ..stock import build_report

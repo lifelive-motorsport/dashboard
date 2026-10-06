@@ -302,12 +302,12 @@ function webshopPage(pick, {topPages = true, customers = false} = {}) {
 const PAGES = {
   'overview/ca': () => [
     B('kpi', 'Chiffre d’affaires', d => {
-      const tot = d.pnl.total.ca, pv = d.pnl_prev, yr = pv && pv.period ? pv.period.from.slice(0, 4) : '', pg = k => pv ? (pv.groups.find(g => g.key === k) || {ca: 0}).ca : 0;
+      const tot = d.pnl.total.ca, pv = d.pnl_prev, yr = pv && pv.period ? pv.period.from.slice(0, 4) : '';
       const share = k => tot > 0 ? pct(grp(d, k).ca / tot) + ' du CA' : '';
       const cmp = (cur, prev) => pv ? vsPrev(cur, prev, yr) : '';
-      return `<div class="kpis">${kpi('Chiffre d’affaires', eur(tot), '', cmp(tot, pv && pv.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca), '', cmp(grp(d,'XC').ca, pg('XC')), share('XC'))
-        + kpi('CA CARS', eur(grp(d,'CARS').ca), '', cmp(grp(d,'CARS').ca, pg('CARS')), share('CARS'))}</div>`
-        + (pv ? `<small class="na">Comparaison avec la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}). Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
+      return `<div class="kpis">${kpi('Chiffre d’affaires', eur(tot), '', cmp(tot, pv && pv.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca), '', '', share('XC'))
+        + kpi('CA CARS', eur(grp(d,'CARS').ca), '', '', share('CARS'))}</div>`
+        + (pv ? `<small class="na">Variation du CA total par rapport à la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}) : ${eur(pv.total.ca)}. Pas de comparaison XC / CARS : la structure des comptes de ${yr} ne permet pas la répartition par BU. Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
     }),
     FINANCE,
     B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),

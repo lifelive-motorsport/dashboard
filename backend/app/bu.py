@@ -71,7 +71,7 @@ def aggregate(balances: dict[str, float], names: dict[str, str] | None = None) -
     """
     names = names or {}
     bus = {k: {"key": k, "label": BU_LABELS[k], "group": BU_GROUP[k], "ca": 0.0, "direct_costs": 0.0,
-               "lines": {}} for k in BU_ORDER}
+               "costs": {"604": 0.0, "603": 0.0, "602": 0.0}, "lines": {}} for k in BU_ORDER}
     for code, bal in balances.items():
         c = classify(code, names.get(code, ""))
         if not c:
@@ -84,6 +84,7 @@ def aggregate(balances: dict[str, float], names: dict[str, str] | None = None) -
         else:
             b["direct_costs"] += bal
             line["direct_costs"] += bal
+            b["costs"][code.strip()[:3]] = b["costs"].get(code.strip()[:3], 0.0) + bal      # 604 achats de marchandises, 603 sous-traitance, 602 frais
     out_bus = []
     for k in BU_ORDER:
         b = bus[k]
@@ -96,9 +97,10 @@ def aggregate(balances: dict[str, float], names: dict[str, str] | None = None) -
         members = [b for b in out_bus if b["group"] == g]
         ca = sum(b["ca"] for b in members)
         dc = sum(b["direct_costs"] for b in members)
-        groups[g] = {"key": g, "ca": ca, "direct_costs": dc, "margin": ca - dc}
+        groups[g] = {"key": g, "ca": ca, "direct_costs": dc, "margin": ca - dc,
+                     "costs": {k: sum(b["costs"].get(k, 0.0) for b in members) for k in ("604", "603", "602")}}
     ca = sum(b["ca"] for b in out_bus)
     dc = sum(b["direct_costs"] for b in out_bus)
     return {"bus": out_bus, "groups": list(groups.values()),
-            "total": {"ca": ca, "direct_costs": dc, "margin": ca - dc,
+            "total": {"ca": ca, "direct_costs": dc, "margin": ca - dc, "costs": {k: sum(b["costs"].get(k, 0.0) for b in out_bus) for k in ("604", "603", "602")},
                       "margin_pct": (ca - dc) / ca if ca else 0.0}}

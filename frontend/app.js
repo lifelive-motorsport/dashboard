@@ -228,6 +228,25 @@ const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTOR
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
+// Décomposition d'un périmètre : CA d'un côté ; de l'autre achats de marchandises (604), sous-traitance (603) et frais (602) ; une colonne par entité.
+function decompTable(d, cols) {
+  cols = cols.filter(c => c.o && (c.o.ca || c.o.direct_costs || Object.values(c.o.costs || {}).some(Boolean)));
+  if (!cols.length) return '<p class="na">Aucune donnée sur la période.</p>';
+  const cell = (v, ca, extra = '') => `<td${extra}>${eur(v)}${ca > 0 ? `<br><small class="na">${pct(v / ca)} du CA</small>` : ''}</td>`;
+  const sum = o => ['604', '603', '602'].reduce((t, k) => t + ((o.costs || {})[k] || 0), 0);
+  const row = (label, fn, cl = '', pctOn = true) => `<tr class="${cl}"><td class="prod">${label}</td>${cols.map(c => { const v = fn(c.o); return pctOn ? cell(v, c.o.ca, v < 0 && cl === 'tot' ? ' class="neg"' : '') : `<td>${eur(v)}</td>`; }).join('')}</tr>`;
+  const adj = cols.some(c => Math.abs(sum(c.o) - c.o.direct_costs) >= 1);
+  return table([''].concat(cols.map(c => c.label)), [
+    row('<b>Chiffre d’affaires</b> (comptes 700)', o => o.ca, 'tot', false),
+    row('Achats de marchandises (604)', o => (o.costs || {})['604'] || 0),
+    row('Sous-traitance (603)', o => (o.costs || {})['603'] || 0),
+    row('Frais (602)', o => (o.costs || {})['602'] || 0),
+    row('<b>Total des coûts directs</b>', o => sum(o), 'tot'),
+    adj ? row('Ajustements de MB', o => sum(o) - o.direct_costs, '') : '',
+    `<tr class="tot"><td class="prod">Marge brute</td>${cols.map(c => `<td class="${cls(c.o.margin)}">${eur(c.o.margin)}<br><small>${c.o.ca ? pct(c.o.margin / c.o.ca) : '–'}</small></td>`).join('')}</tr>`,
+  ].filter(Boolean), 'prodtable decomp') + '<small class="na">Les pourcentages sont rapportés au CA de chaque colonne. Coûts directs = achats de marchandises (604), sous-traitance (603) et frais (602) rattachés à la BU ; le personnel et les véhicules (615) sont exclus.</small>';
+}
+
 // Courbe d'évolution (une seule série, SVG adaptatif) : points = [{label, avg (ou null), orders}], ref = valeur de référence en pointillé.
 function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => `${p.label} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})`, refLabel = 'moyenne') {
   const pts = points.map((p, i) => ({...p, i})), vals = pts.filter(p => p.avg != null);
@@ -403,6 +422,7 @@ const PAGES = {
   ],
   'xc/general': () => [
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Frais directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
+    B('decomp', 'XC — CA et coûts directs en détail', d => decompTable(d, [{label: 'XC', o: grp(d, 'XC')}])),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
     B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
     B('suppliers', 'Hit-parade fournisseurs XC', d => suppliers(d, ['XC'])),
@@ -429,6 +449,7 @@ const PAGES = {
   ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Frais directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
+    B('decomp', 'CARS et ses BU — CA et coûts directs en détail', d => decompTable(d, [{label: 'CARS', o: grp(d, 'CARS')}].concat(d.pnl.bus.filter(b => b.group === 'CARS').map(b => ({label: b.label, o: b}))))),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
     B('clients', 'Hit-parade clients CARS', d => clients(d, ['CARS'])),
     B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),

@@ -49,3 +49,11 @@ def test_every_live_pnl_account_is_mapped():
             assert c is not None
             if code[3:] not in ("000", "099"):
                 assert c.bu != "UNASSIGNED", (code, name)
+
+
+def test_costs_are_split_by_account_class_for_bus_and_groups():
+    r = aggregate({"700010": -1000.0, "604010": 300.0, "603010": 200.0, "602010": 100.0, "604040": 50.0, "602020": 25.0})
+    xc = next(b for b in r["bus"] if b["key"] == "XC")
+    assert xc["costs"] == {"604": 300.0, "603": 200.0, "602": 100.0} and xc["direct_costs"] == 600.0
+    g = {x["key"]: x for x in r["groups"]}
+    assert g["CARS"]["costs"] == {"604": 50.0, "603": 0.0, "602": 25.0} and r["total"]["costs"] == {"604": 350.0, "603": 200.0, "602": 125.0}

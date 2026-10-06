@@ -307,7 +307,7 @@ const PAGES = {
       const cmp = (cur, prev) => pv ? vsPrev(cur, prev, yr) : '';
       return `<div class="kpis">${kpi('Chiffre d’affaires', eur(tot), '', cmp(tot, pv && pv.total.ca)) + kpi('CA XC', eur(grp(d,'XC').ca), '', '', share('XC'))
         + kpi('CA CARS', eur(grp(d,'CARS').ca), '', '', share('CARS'))}</div>`
-        + (pv ? `<small class="na">Variation du CA total par rapport à la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}) : ${eur(pv.total.ca)}. Pas de comparaison XC / CARS : la structure des comptes de ${yr} ne permet pas la répartition par BU. Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
+        + (pv ? `<small class="na">Variation du CA total par rapport à la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}) : ${eur(pv.total.ca)}${pv.old_plan_ca ? ` (dont ${eur(pv.old_plan_ca)} sur l’ancien plan comptable, comptes « OLD »)` : ''}. Pas de comparaison XC / CARS : la structure des comptes de ${yr} ne permet pas la répartition par BU. Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
     }),
     FINANCE,
     B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),

@@ -57,6 +57,17 @@ class OdooProvider:
                 out[m.group(1)] = out.get(m.group(1), 0.0) + row["balance:sum"]
         return out
 
+    def old_plan_revenue(self, d_from: date, d_to: date) -> float:
+        """Produits (comptes 70…) de l'ANCIEN plan comptable, ceux dont le libellé commence par « OLD » : écartés des chiffres
+        courants mais indispensables pour comparer avec 2025, année où cet ancien plan était encore utilisé. Montant positif."""
+        domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()),
+                  ("account_id.code", "=like", "70%")]
+        total = 0.0
+        for row in self._grouped(domain, ["account_id"]):
+            if re.match(r"^\s*\d+\s+old\b", row["account_id"][1], re.I):
+                total -= row["balance:sum"]
+        return total
+
     def _open_invoices(self, move_types: list[str], year: int) -> float:
         """Montant restant dû (signé, devise société) des factures ET AVOIRS validés non payés ou partiellement payés dont
         la date comptable est dans l'année de référence. Critères de l'écran Odoo « Vendor bills to pay » (statut comptabilisé,

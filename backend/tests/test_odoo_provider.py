@@ -595,3 +595,12 @@ def test_top_customers_merge_contacts_and_report_payment_delivery_and_share():
     assert a["payments"] == [{"name": "Carte", "count": 2}] and a["deliveries"] == [{"name": "Express", "count": 2}]
     assert b["payments"] == [{"name": "Virement", "count": 1}] and b["deliveries"] == [{"name": "Sans livraison", "count": 1}]
     assert (r["total_ca"], r["total_orders"], r["count"], r["repeat"], r["top_ca"]) == (500, 3, 2, 1, 500)
+
+
+def test_old_plan_revenue_sums_old_labelled_70_accounts_only():
+    rows = [{"account_id": [1, "700010 CA XC Manufacturer"], "balance:sum": -500.0},          # plan courant : non compté ici
+            {"account_id": [2, "700000 OLD - Ventes marchandises"], "balance:sum": -1200.0},
+            {"account_id": [3, "701000 old - Ventes services"], "balance:sum": -300.0},
+            {"account_id": [4, "700500 Goldspeed ventes"], "balance:sum": -50.0}]             # « Goldspeed » n'est pas « old »
+    p = make(rows)
+    assert p.old_plan_revenue(date(2025, 1, 1), date(2025, 10, 5)) == 1500.0

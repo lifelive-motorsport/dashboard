@@ -101,7 +101,10 @@ def _prev_pnl(p, d_from: date, d_to: date) -> dict | None:
     """P&L de la même période un an plus tôt (None si indisponible : la comparaison est un plus)."""
     pf, pt = _year_back(d_from), _year_back(d_to)
     try:
-        return {**aggregate(p.pnl_balances(pf, pt)), "period": {"from": pf.isoformat(), "to": pt.isoformat()}}
+        pnl = aggregate(p.pnl_balances(pf, pt))
+        old = float(p.old_plan_revenue(pf, pt))            # l'ancien plan comptable (comptes « OLD ») portait le CA de 2025
+        pnl["total"]["ca"] += old
+        return {**pnl, "old_plan_ca": old, "period": {"from": pf.isoformat(), "to": pt.isoformat()}}
     except Exception:
         log.exception("P&L de l'année précédente indisponible")
         return None

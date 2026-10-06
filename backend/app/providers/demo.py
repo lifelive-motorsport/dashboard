@@ -13,6 +13,9 @@ def _scale(d_from: date, d_to: date) -> float:
 class DemoProvider:
     name = "demo"
 
+    def old_plan_revenue(self, d_from: date, d_to: date) -> float:
+        return 0.0
+
     def pnl_balances(self, d_from: date, d_to: date) -> dict[str, float]:
         s = _scale(d_from, d_to)
         ca = {"700010": 1_300_000, "700011": 20_000, "700012": 60_000, "700013": 190_000, "700014": 30_000,

@@ -1,4 +1,4 @@
-// Trafic d'après Google Analytics 4 : blocs réutilisés par les webshops (XC, Goldspeed) et par Others › Marketing (site vitrine).
+// Trafic d'après Google Analytics 4 : blocs réutilisés par les webshops (XC, Goldspeed) et par Marketing › Site internet (site vitrine).
 // Chargé avant app.js ; utilise ses fonctions (esc, num, pct, eur, kpi, table, B, NOTE, multiLineChart, vsPrev) au moment de l'appel.
 const gaDur = s => { s = Math.round(s || 0); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}` : `${s} s`; };
 

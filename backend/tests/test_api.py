@@ -94,3 +94,11 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     assert cl.get("/api/session").status_code == 401
     monkeypatch.setattr(a.settings, "SESSION_SECRET", "")
     assert TestClient(app).post("/api/session", headers={"Authorization": "Bearer ok"}).json()["session"] is False   # non configuré : jeton seul
+
+
+def test_config_exposes_odoo_analytic_link_only_with_odoo_source(monkeypatch):
+    import app.main as m
+    assert c.get("/api/config").json()["analytic_link"] == ""                             # démo : pas de lien
+    monkeypatch.setattr(m.settings, "PROVIDER", "odoo")
+    monkeypatch.setattr(m.settings, "ODOO_PUBLIC_URL", "https://lifelive.odoo.com/")
+    assert c.get("/api/config").json()["analytic_link"] == "https://lifelive.odoo.com/odoo/account.analytic.account/{id}/action-183"

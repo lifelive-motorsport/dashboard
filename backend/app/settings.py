@@ -48,3 +48,7 @@ SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))
 # Stock : champ « code PIF » des articles (détecté si vide) et filtre facultatif sur le nom des emplacements internes
 STOCK_PIF_FIELD = os.getenv("STOCK_PIF_FIELD", "")
 STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")
+
+# Liens vers Odoo (événements, véhicules) : adresse publique d'Odoo (par défaut ODOO_URL) et modèle de lien vers un compte analytique
+ODOO_PUBLIC_URL = os.getenv("ODOO_PUBLIC_URL", "") or ODOO_URL
+ODOO_ANALYTIC_LINK = os.getenv("ODOO_ANALYTIC_LINK", "{base}/odoo/account.analytic.account/{id}/action-183")

@@ -67,8 +67,9 @@ def healthz():
 
 @app.get("/api/config")
 def config():
+    link = settings.ODOO_ANALYTIC_LINK.replace("{base}", settings.ODOO_PUBLIC_URL.rstrip("/")) if settings.PROVIDER == "odoo" and settings.ODOO_PUBLIC_URL else ""
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
-            "source": settings.PROVIDER}
+            "source": settings.PROVIDER, "analytic_link": link}
 
 
 @app.post("/api/session")

@@ -176,22 +176,26 @@ function ranking(d, kind, allowed) {
   const list = tc[cur] || [], shown = list.reduce((s, c) => s + c.ca, 0), other = scope - shown;
   const hasOpen = !!(tc._meta && tc._meta.open), sumOpen = list.reduce((s, c) => s + (c.open || 0), 0);
   const scopeOpen = hasOpen ? ((tc._open_totals || {})[cur] || 0) : 0;
+  const hasInv = list.some(c => c.invoices != null), st = (tc._stats || {})[cur] || null;
+  const topInv = list.reduce((s, c) => s + (c.invoices || 0), 0), topAmt = list.reduce((s, c) => s + (c.invoices || 0) * (c.avg || 0), 0);
+  const inv = (n, avg) => hasInv ? `<td>${n == null ? '–' : num(n)}</td><td>${avg != null && n ? eur(avg) : '–'}</td>` : '';
   const op = v => hasOpen ? `<td class="open">${v ? eur(v) : '–'}</td>` : '';
   const T = sup ? {one: 'fournisseurs', other: 'Autres fournisseurs', scope: 'Total des achats du périmètre', head: ['#', 'Fournisseur', 'Achats HT', '% des achats'], open: 'Reste à payer'}
                 : {one: 'clients', other: 'Autres clients et ventes sans client identifié', scope: 'Total du périmètre', head: ['#', 'Client', 'CA', '% du CA'], open: 'Solde ouvert'};
-  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${op(c.open || 0)}</tr>`);
-  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${op(sumOpen)}</tr>`,
-    `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${op(scopeOpen - sumOpen)}</tr>`,
-    `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${op(scopeOpen)}</tr>`);
+  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${inv(c.invoices, c.avg)}${op(c.open || 0)}</tr>`);
+  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${inv(topInv, topInv ? topAmt / topInv : null)}${op(sumOpen)}</tr>`,
+    `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${inv(st ? Math.max(0, st.invoices - topInv) : null, null)}${op(scopeOpen - sumOpen)}</tr>`,
+    `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${inv(st ? st.invoices : null, st ? st.avg : null)}${op(scopeOpen)}</tr>`);
   const m = tc._meta, tag = sup ? 'regroup_fournisseur=' : 'regroup_client=';
   const info = !m ? '' : m.grouping
     ? `<small class="na">Regroupements d’après les étiquettes Odoo « ${tag} » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. `
       + (sup ? 'Achats HT = lignes de factures fournisseurs (avoirs déduits), rattachées à une BU d’après le compte comptable de chaque ligne (602, 603, 604) ; « Hors BU » = frais généraux, véhicules, honoraires… <i>Reste à payer</i> = reste dû TTC des factures de la période non soldées.'
              : 'Le « % » est la part du CA du périmètre sélectionné (comptes 700). <i>Solde ouvert</i> = reste dû TTC des factures de la période non soldées, avoirs déduits.') + '</small>'
     : `<small class="neg">Regroupement indisponible : les noms sont affichés tels que saisis dans Odoo.</small>`;
+  const infoInv = hasInv ? `<br><small class="na">${sup ? 'Achat moyen' : 'Panier moyen'} = montant HT moyen des ${sup ? 'factures fournisseurs' : 'factures clients'} de la période (les avoirs ne comptent pas comme factures) ; une facture répartie sur plusieurs BU n’est comptée qu’une fois dans le total.</small>` : '';
   const infoOpen = m && !m.open ? `<br><small class="neg">${T.open} indisponible pour le moment.</small>` : '';
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    ${list.length ? table(T.head.concat(hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoOpen}`;
+    ${list.length ? table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}`;
 }
 const clients = (d, allowed) => ranking(d, 'c', allowed);
 const suppliers = (d, allowed) => ranking(d, 's', allowed);
@@ -316,6 +320,7 @@ const PAGES = {
     B('kpi', 'Clients', d => { const c = d.top_clients || {}, list = c.total || [], ca = d.pnl.total.ca, top = list.reduce((x, y) => x + y.ca, 0);
       return c.unavailable ? `<p class="na">${esc(c.unavailable)}</p>`
         : `<div class="kpis">${kpi('CA facturé', eur(ca)) + kpi('Part des ' + list.length + ' premiers clients', pct(ca > 0 ? top / ca : 0), '', eur(top))
+          + (c._stats && c._stats.total && c._stats.total.invoices ? kpi('Factures émises', num(c._stats.total.invoices), '', 'panier moyen ' + eur(c._stats.total.avg || 0)) : '')
           + (c._meta && c._meta.open ? kpi('Solde ouvert (période)', eur((c._open_totals || {}).total || 0)) : '')}</div>`; }),
     B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
   ],
@@ -329,6 +334,7 @@ const PAGES = {
     B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
       return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`
         : `<div class="kpis">${kpi('Achats HT', eur(t.total || 0)) + kpi('Rattachés à une BU', eur(bu), '', pct(t.total ? bu / t.total : 0))
+          + (s._stats && s._stats.total && s._stats.total.invoices ? kpi('Factures reçues', num(s._stats.total.invoices), '', 'achat moyen ' + eur(s._stats.total.avg || 0)) : '')
           + kpi('Hors BU (frais généraux…)', eur(t.HORS_BU || 0), '', pct(t.total ? (t.HORS_BU || 0) / t.total : 0))
           + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {}).total || 0)) : '')}</div>`; }),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),

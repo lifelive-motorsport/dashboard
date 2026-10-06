@@ -176,7 +176,8 @@ class OdooProvider:
         return out, names
 
     def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int,
-                ignore: frozenset = frozenset(), aggregates: dict[str, list[str]] | None = None) -> dict:
+                ignore: frozenset = frozenset(), aggregates: dict[str, list[str]] | None = None,
+                moves: dict[str, dict[int, dict[int, float]]] | None = None) -> dict:
         """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre.
 
         `aggregates` ajoute des vues qui regroupent plusieurs BU (ex. « CARS ») : elles ne comptent PAS dans « total »."""
@@ -208,7 +209,29 @@ class OdooProvider:
                     out[pid] = out.get(pid, 0.0) + v
             return out
 
-        def board(per_partner: dict[int, float], per_open: dict[int, float]) -> list[dict]:
+        def merge_moves(buckets) -> dict[int, dict[int, float]]:
+            """pid -> {facture: montant} ; une facture répartie sur plusieurs BU voit ses montants additionnés (une seule facture)."""
+            out: dict[int, dict[int, float]] = {}
+            for b in buckets:
+                for pid, mv in (moves or {}).get(b, {}).items():
+                    d = out.setdefault(pid, {})
+                    for m, v in mv.items():
+                        d[m] = d.get(m, 0.0) + v
+            return out
+
+        def invoice_stats(per_moves: dict[int, dict[int, float]]) -> tuple[dict[str, tuple[int, float]], int, float]:
+            """({clé de tiers: (nb de factures, montant des factures)}, total factures, montant). Seules les factures de montant net
+            positif comptent (un avoir réduit le CA mais n'est pas une « facture »)."""
+            per_key: dict[str, dict[int, float]] = {}
+            for pid, mv in per_moves.items():
+                d = per_key.setdefault(key_of(pid), {})
+                for m, v in mv.items():
+                    d[m] = d.get(m, 0.0) + v
+            res = {k: (sum(1 for v in mv.values() if v > 0), sum(v for v in mv.values() if v > 0)) for k, mv in per_key.items()}
+            return res, sum(n for n, _ in res.values()), sum(a for _, a in res.values())
+
+        def board(per_partner: dict[int, float], per_open: dict[int, float], per_moves: dict | None = None) -> list[dict]:
+            inv = invoice_stats(per_moves)[0] if per_moves else {}
             agg: dict[str, float] = {}
             opn: dict[str, float] = {}
             for pid, v in per_partner.items():
@@ -216,22 +239,34 @@ class OdooProvider:
             for pid, v in per_open.items():
                 opn[key_of(pid)] = opn.get(key_of(pid), 0.0) + v
             top = sorted(agg.items(), key=lambda kv: -kv[1])[:limit]
-            return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None}
+            return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None,
+                     "invoices": inv.get(k, (0, 0.0))[0], "avg": round(inv[k][1] / inv[k][0], 2) if inv.get(k, (0, 0.0))[0] else None}
                     for k, v in top if v > 0]   # affichage uniformisé
 
-        out = {"total": board(merge(by_bucket.values()), merge(open_bucket.values()))}
+        stats: dict[str, dict] = {}
+
+        def stat(name: str, buckets) -> None:
+            if moves is not None:
+                _, n, amt = invoice_stats(merge_moves(buckets))
+                stats[name] = {"invoices": n, "avg": round(amt / n, 2) if n else None}
+
+        out = {"total": board(merge(by_bucket.values()), merge(open_bucket.values()), merge_moves(by_bucket))}
+        stat("total", by_bucket)
         for b, per in by_bucket.items():
-            out[b] = board(per, open_bucket.get(b, {}))
+            out[b] = board(per, open_bucket.get(b, {}), merge_moves([b]))
+            stat(b, [b])
         out["_totals"] = {"total": round(sum(sum(d.values()) for d in by_bucket.values())),
                           **{b: round(sum(d.values())) for b, d in by_bucket.items()}}
         out["_open_totals"] = ({"total": round(sum(sum(d.values()) for d in open_bucket.values())),
                                 **{b: round(sum(d.values())) for b, d in open_bucket.items()}} if meta["open"] else {})
         for name, members in (aggregates or {}).items():           # vues agrégées (calculées après, hors du total)
-            out[name] = board(merge(by_bucket.get(m, {}) for m in members), merge(open_bucket.get(m, {}) for m in members))
+            out[name] = board(merge(by_bucket.get(m, {}) for m in members), merge(open_bucket.get(m, {}) for m in members), merge_moves(members))
+            stat(name, members)
             out["_totals"][name] = round(sum(sum(by_bucket.get(m, {}).values()) for m in members))
             if meta["open"]:
                 out["_open_totals"][name] = round(sum(sum(open_bucket.get(m, {}).values()) for m in members))
         meta["groups"] = len({k for k in label if k.startswith("g:")})
+        out["_stats"] = stats
         out["_meta"] = meta
         return out
 
@@ -241,8 +276,9 @@ class OdooProvider:
                   ("date", "<=", d_to.isoformat()), ("account_id.code", "=like", "700%"),
                   ("partner_id", "!=", False)]
         by_bu: dict[str, dict[int, float]] = {}
+        moves: dict[str, dict[int, dict[int, float]]] = {}
         names: dict[int, str] = {}
-        for row in self._grouped(domain, ["partner_id", "account_id"]):
+        for row in self._grouped(domain, ["partner_id", "account_id", "move_id"]):
             bu = self._bucket_revenue(row["account_id"][1])
             if not bu:
                 continue
@@ -250,9 +286,12 @@ class OdooProvider:
             names[pid] = pname
             by_bu.setdefault(bu, {}).setdefault(pid, 0.0)
             by_bu[bu][pid] -= row["balance:sum"]  # crédit = CA
+            if row.get("move_id"):
+                mv = moves.setdefault(bu, {}).setdefault(pid, {})
+                mv[row["move_id"][0]] = mv.get(row["move_id"][0], 0.0) - row["balance:sum"]
         return self._boards(by_bu, lambda: self._open_split(
             d_from, d_to, ["out_invoice", "out_refund"], [("account_id.code", "=like", "700%")], self._bucket_revenue, -1, 1),
-            names, "regroup_client", limit, aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]})
+            names, "regroup_client", limit, aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
     def top_suppliers(self, d_from: date, d_to: date, limit: int = 15) -> dict:
         """Classement des fournisseurs par achats HT (lignes de factures et avoirs fournisseurs comptabilisés).
@@ -265,8 +304,9 @@ class OdooProvider:
                   ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()), ("partner_id", "!=", False),
                   ("account_id.code", "=like", "6%")] + line   # comptes de charges uniquement
         by_bucket: dict[str, dict[int, float]] = {}
+        moves: dict[str, dict[int, dict[int, float]]] = {}
         names: dict[int, str] = {}
-        for row in self._grouped(domain, ["partner_id", "account_id"]):
+        for row in self._grouped(domain, ["partner_id", "account_id", "move_id"]):
             b = self._bucket_cost(row["account_id"][1])
             if b == "HORS_PERIMETRE":
                 continue
@@ -274,10 +314,13 @@ class OdooProvider:
             names[pid] = pname
             by_bucket.setdefault(b, {}).setdefault(pid, 0.0)
             by_bucket[b][pid] += row["balance:sum"]           # débit = achat
+            if row.get("move_id"):
+                mv = moves.setdefault(b, {}).setdefault(pid, {})
+                mv[row["move_id"][0]] = mv.get(row["move_id"][0], 0.0) + row["balance:sum"]
         return self._boards(by_bucket, lambda: self._open_split(
             d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
-            aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]})
+            aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
     # ---- Événements : comptes analytiques d'un plan « Événements » -------------------------------------------------
     @staticmethod

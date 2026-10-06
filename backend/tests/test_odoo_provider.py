@@ -224,7 +224,7 @@ def test_suppliers_query_only_posted_bill_lines_not_taxes():
     p._grouped = lambda domain, groupby: seen.update(domain=domain, groupby=groupby) or []
     p.top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
     assert ("display_type", "=", "product") in seen["domain"] and ("parent_state", "=", "posted") in seen["domain"]
-    assert ("move_id.move_type", "in", ["in_invoice", "in_refund"]) in seen["domain"] and seen["groupby"] == ["partner_id", "account_id"]
+    assert ("move_id.move_type", "in", ["in_invoice", "in_refund"]) in seen["domain"] and seen["groupby"] == ["partner_id", "account_id", "move_id"]     # + facture : nombre de factures et panier moyen
 
 
 def test_supplier_open_balance_is_debt_split_by_bu_of_bill_lines():
@@ -604,3 +604,25 @@ def test_old_plan_revenue_sums_old_labelled_70_accounts_only():
             {"account_id": [4, "700500 Goldspeed ventes"], "balance:sum": -50.0}]             # « Goldspeed » n'est pas « old »
     p = make(rows)
     assert p.old_plan_revenue(date(2025, 1, 1), date(2025, 10, 5)) == 1500.0
+
+
+def _mrow(pid, name, acc, bal, move):
+    return {"partner_id": [pid, name], "account_id": [1, acc], "balance:sum": bal, "move_id": [move, f"M{move}"]}
+
+
+def test_clients_invoice_count_and_average_basket_count_each_invoice_once_even_split_over_bus():
+    rows = [_mrow(1, "A", "700010 CA XC Manufacturer", -300.0, 101), _mrow(1, "A", "700040 CA Historic Racing", -100.0, 101),   # une facture sur 2 BU
+            _mrow(1, "A", "700010 CA XC Manufacturer", -200.0, 102),
+            _mrow(1, "A", "700010 CA XC Manufacturer", 50.0, 103)]                                                      # un avoir : pas une facture
+    r = make(rows, [_partner(1, "A")], {}).top_clients(date(2026, 1, 1), date(2026, 9, 4))
+    t = r["total"][0]
+    assert (t["invoices"], t["avg"], t["ca"]) == (2, 300.0, 550)                  # factures 101 (400) et 102 (200) ; l'avoir réduit seulement le CA
+    assert r["XC"][0]["invoices"] == 2 and r["XC"][0]["avg"] == 250.0              # XC : 101 -> 300, 102 -> 200
+    assert r["HISTORIC_RACING"][0]["invoices"] == 1 and r["HISTORIC_RACING"][0]["avg"] == 100.0
+    assert r["_stats"]["total"] == {"invoices": 2, "avg": 300.0} and r["_stats"]["CARS"] == {"invoices": 1, "avg": 100.0}
+
+
+def test_suppliers_invoice_count_and_average():
+    rows = [_mrow(1, "Four", "602010 FRAIS XC Manufacturer", 600.0, 201), _mrow(1, "Four", "615001 Carburant", 400.0, 201), _mrow(1, "Four", "615001 Carburant", 100.0, 202)]
+    r = make(rows, [_partner(1, "Four")], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert (r["total"][0]["invoices"], r["total"][0]["avg"]) == (2, 550.0)           # 1 000 € sur la 201, 100 € sur la 202

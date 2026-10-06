@@ -177,7 +177,8 @@ class OdooProvider:
 
     def _boards(self, by_bucket: dict[str, dict[int, float]], open_fn, names: dict[int, str], prefix: str, limit: int,
                 ignore: frozenset = frozenset(), aggregates: dict[str, list[str]] | None = None,
-                moves: dict[str, dict[int, dict[int, float]]] | None = None) -> dict:
+                moves: dict[str, dict[int, dict[int, float]]] | None = None,
+                mix: dict[str, dict[int, dict[str, float]]] | None = None) -> dict:
         """Classements « total » + un par BU, avec regroupement, solde ouvert et totaux de périmètre.
 
         `aggregates` ajoute des vues qui regroupent plusieurs BU (ex. « CARS ») : elles ne comptent PAS dans « total »."""
@@ -230,8 +231,27 @@ class OdooProvider:
             res = {k: (sum(1 for v in mv.values() if v > 0), sum(v for v in mv.values() if v > 0)) for k, mv in per_key.items()}
             return res, sum(n for n, _ in res.values()), sum(a for _, a in res.values())
 
-        def board(per_partner: dict[int, float], per_open: dict[int, float], per_moves: dict | None = None) -> list[dict]:
+        def merge_mix(buckets) -> dict[int, dict[str, float]]:
+            """pid -> {famille de coût: montant} (604 achats de marchandises, 603 sous-traitance, 602 frais, « autres »)."""
+            out: dict[int, dict[str, float]] = {}
+            for b in buckets:
+                for pid, fam in (mix or {}).get(b, {}).items():
+                    d = out.setdefault(pid, {})
+                    for f, v in fam.items():
+                        d[f] = d.get(f, 0.0) + v
+            return out
+
+        def mix_by_key(per_mix: dict[int, dict[str, float]]) -> dict[str, dict[str, int]]:
+            res: dict[str, dict[str, float]] = {}
+            for pid, fam in per_mix.items():
+                d = res.setdefault(key_of(pid), {})
+                for f, v in fam.items():
+                    d[f] = d.get(f, 0.0) + v
+            return {k: {f: round(v) for f, v in d.items()} for k, d in res.items()}
+
+        def board(per_partner: dict[int, float], per_open: dict[int, float], per_moves: dict | None = None, per_mix: dict | None = None) -> list[dict]:
             inv = invoice_stats(per_moves)[0] if per_moves else {}
+            fam = mix_by_key(per_mix) if per_mix else {}
             agg: dict[str, float] = {}
             opn: dict[str, float] = {}
             for pid, v in per_partner.items():
@@ -240,7 +260,8 @@ class OdooProvider:
                 opn[key_of(pid)] = opn.get(key_of(pid), 0.0) + v
             top = sorted(agg.items(), key=lambda kv: -kv[1])[:limit]
             return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None,
-                     "invoices": inv.get(k, (0, 0.0))[0], "avg": round(inv[k][1] / inv[k][0], 2) if inv.get(k, (0, 0.0))[0] else None}
+                     "invoices": inv.get(k, (0, 0.0))[0], "avg": round(inv[k][1] / inv[k][0], 2) if inv.get(k, (0, 0.0))[0] else None,
+                     **({"mix": fam.get(k, {})} if per_mix else {})}
                     for k, v in top if v > 0]   # affichage uniformisé
 
         stats: dict[str, dict] = {}
@@ -250,23 +271,38 @@ class OdooProvider:
                 _, n, amt = invoice_stats(merge_moves(buckets))
                 stats[name] = {"invoices": n, "avg": round(amt / n, 2) if n else None}
 
-        out = {"total": board(merge(by_bucket.values()), merge(open_bucket.values()), merge_moves(by_bucket))}
+        scope_mix: dict[str, dict[str, int]] = {}
+
+        def scope(name: str, buckets) -> None:
+            if mix is not None:
+                tot: dict[str, float] = {}
+                for fam in merge_mix(buckets).values():
+                    for f, v in fam.items():
+                        tot[f] = tot.get(f, 0.0) + v
+                scope_mix[name] = {f: round(v) for f, v in tot.items()}
+
+        out = {"total": board(merge(by_bucket.values()), merge(open_bucket.values()), merge_moves(by_bucket), merge_mix(by_bucket))}
         stat("total", by_bucket)
+        scope("total", list(by_bucket))
         for b, per in by_bucket.items():
-            out[b] = board(per, open_bucket.get(b, {}), merge_moves([b]))
+            out[b] = board(per, open_bucket.get(b, {}), merge_moves([b]), merge_mix([b]))
             stat(b, [b])
+            scope(b, [b])
         out["_totals"] = {"total": round(sum(sum(d.values()) for d in by_bucket.values())),
                           **{b: round(sum(d.values())) for b, d in by_bucket.items()}}
         out["_open_totals"] = ({"total": round(sum(sum(d.values()) for d in open_bucket.values())),
                                 **{b: round(sum(d.values())) for b, d in open_bucket.items()}} if meta["open"] else {})
         for name, members in (aggregates or {}).items():           # vues agrégées (calculées après, hors du total)
-            out[name] = board(merge(by_bucket.get(m, {}) for m in members), merge(open_bucket.get(m, {}) for m in members), merge_moves(members))
+            out[name] = board(merge(by_bucket.get(m, {}) for m in members), merge(open_bucket.get(m, {}) for m in members), merge_moves(members), merge_mix(members))
             stat(name, members)
+            scope(name, members)
             out["_totals"][name] = round(sum(sum(by_bucket.get(m, {}).values()) for m in members))
             if meta["open"]:
                 out["_open_totals"][name] = round(sum(sum(open_bucket.get(m, {}).values()) for m in members))
         meta["groups"] = len({k for k in label if k.startswith("g:")})
         out["_stats"] = stats
+        if mix is not None:
+            out["_mix"] = scope_mix
         out["_meta"] = meta
         return out
 
@@ -328,6 +364,7 @@ class OdooProvider:
                   ("account_id.code", "=like", "6%")] + line   # comptes de charges uniquement
         by_bucket: dict[str, dict[int, float]] = {}
         moves: dict[str, dict[int, dict[int, float]]] = {}
+        mix: dict[str, dict[int, dict[str, float]]] = {}
         names: dict[int, str] = {}
         for row in self._grouped(domain, ["partner_id", "account_id", "move_id"]):
             b = self._bucket_cost(row["account_id"][1])
@@ -337,13 +374,17 @@ class OdooProvider:
             names[pid] = pname
             by_bucket.setdefault(b, {}).setdefault(pid, 0.0)
             by_bucket[b][pid] += row["balance:sum"]           # débit = achat
+            code = (self._code_name(row["account_id"][1])[0] or "")[:3]
+            f = mix.setdefault(b, {}).setdefault(pid, {})
+            fam = code if code in ("604", "603", "602") else "autres"      # achats de marchandises, sous-traitance, frais, autres charges
+            f[fam] = f.get(fam, 0.0) + row["balance:sum"]
             if row.get("move_id"):
                 mv = moves.setdefault(b, {}).setdefault(pid, {})
                 mv[row["move_id"][0]] = mv.get(row["move_id"][0], 0.0) + row["balance:sum"]
         out = self._boards(by_bucket, lambda: self._open_split(
             d_from, d_to, ["in_invoice", "in_refund"], line, self._bucket_cost, 1, -1),
             names, "regroup_fournisseur", limit, ignore=frozenset({"HORS_PERIMETRE", "UNASSIGNED"}),
-            aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
+            aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves, mix=mix)
         try:                                                    # rapprochement avec les coûts directs du P&L (facultatif)
             recon = self._non_bill_direct_costs(d_from, d_to)
             recon["CARS"] = {"amount": sum(recon.get(b, {}).get("amount", 0) for b, g in BU_GROUP.items() if g == "CARS"),

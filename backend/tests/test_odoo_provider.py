@@ -782,3 +782,12 @@ def test_suppliers_reconciliation_lists_direct_costs_that_are_not_vendor_bill_li
     assert r["_recon"]["XC"] == {"amount": 13154, "journals": [{"name": "Opérations diverses", "amount": 9000}, {"name": "Provisions", "amount": 4154}]}
     assert r["_recon"]["CARS"]["amount"] == 100 and r["_recon"]["HISTORIC_RACING"]["amount"] == 100        # le carburant (615) n'est pas du frais direct
     assert ("account_id.code", "=like", "60%") in seen["dom"] and "|" in seen["dom"]
+
+
+def test_suppliers_carry_the_split_between_purchases_subcontracting_expenses_and_other():
+    rows = [_mrow(1, "Four", "604010 ACH. MARCH. XC Manufacturer", 600.0, 1), _mrow(1, "Four", "603010 SS TRAIT. XC Manufacturer", 300.0, 2),
+            _mrow(1, "Four", "602010 FRAIS XC Manufacturer", 100.0, 3), _mrow(1, "Four", "615001 Carburant", 50.0, 4)]
+    r = make(rows, [_partner(1, "Four")], {}).top_suppliers(date(2026, 1, 1), date(2026, 9, 4))
+    assert r["total"][0]["mix"] == {"604": 600, "603": 300, "602": 100, "autres": 50}
+    assert r["XC"][0]["mix"] == {"604": 600, "603": 300, "602": 100}                               # le carburant est « hors BU »
+    assert r["_mix"]["total"] == {"604": 600, "603": 300, "602": 100, "autres": 50} and r["_mix"]["HORS_BU"] == {"autres": 50}

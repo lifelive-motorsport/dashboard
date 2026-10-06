@@ -186,14 +186,19 @@ function ranking(d, kind, allowed) {
   const scopeOpen = hasOpen ? ((tc._open_totals || {})[cur] || 0) : 0;
   const hasInv = list.some(c => c.invoices != null), st = (tc._stats || {})[cur] || null;
   const topInv = list.reduce((s, c) => s + (c.invoices || 0), 0), topAmt = list.reduce((s, c) => s + (c.invoices || 0) * (c.avg || 0), 0);
+  const hasMix = sup && list.some(c => c.mix), MIXN = {'604': 'Achats de marchandises', '603': 'Sous-traitance', '602': 'Frais', autres: 'Autres charges'};
+  const mx = m => { if (!hasMix) return ''; if (!m) return '<td></td>';
+    const keys = ['604', '603', '602', 'autres'], pos = keys.reduce((t, k) => t + Math.max(0, m[k] || 0), 0); if (!pos) return '<td>–</td>';
+    const tip = keys.filter(k => m[k]).map(k => `${MIXN[k]} : ${eur(m[k])} (${pct(Math.max(0, m[k]) / pos)})`).join(' · ');
+    return `<td class="mixcell" title="${esc(tip)}"><span class="mixbar">${keys.map(k => `<i class="m${k}" style="width:${Math.max(0, m[k] || 0) / pos * 100}%"></i>`).join('')}</span></td>`; };
   const inv = (n, avg) => hasInv ? `<td>${n == null ? '–' : num(n)}</td><td>${avg != null && n ? eur(avg) : '–'}</td>` : '';
   const op = v => hasOpen ? `<td class="open">${v ? eur(v) : '–'}</td>` : '';
   const T = sup ? {one: 'fournisseurs', other: 'Autres fournisseurs', scope: 'Total des achats du périmètre', head: ['#', 'Fournisseur', 'Achats HT', '% des achats'], open: 'Reste à payer'}
                 : {one: 'clients', other: 'Autres clients et ventes sans client identifié', scope: 'Total du périmètre', head: ['#', 'Client', 'CA', '% du CA'], open: 'Solde ouvert'};
-  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${inv(c.invoices, c.avg)}${op(c.open || 0)}</tr>`);
-  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${inv(topInv, topInv ? topAmt / topInv : null)}${op(sumOpen)}</tr>`,
-    `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${inv(st ? Math.max(0, st.invoices - topInv) : null, null)}${op(scopeOpen - sumOpen)}</tr>`,
-    `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${inv(st ? st.invoices : null, st ? st.avg : null)}${op(scopeOpen)}</tr>`);
+  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${inv(c.invoices, c.avg)}${mx(c.mix)}${op(c.open || 0)}</tr>`);
+  if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${inv(topInv, topInv ? topAmt / topInv : null)}${mx(null)}${op(sumOpen)}</tr>`,
+    `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${inv(st ? Math.max(0, st.invoices - topInv) : null, null)}${mx(null)}${op(scopeOpen - sumOpen)}</tr>`,
+    `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${inv(st ? st.invoices : null, st ? st.avg : null)}${mx((tc._mix || {})[cur])}${op(scopeOpen)}</tr>`);
   const m = tc._meta, tag = sup ? 'regroup_fournisseur=' : 'regroup_client=';
   const info = !m ? '' : m.grouping
     ? `<small class="na">Regroupements d’après les étiquettes Odoo « ${tag} » : ${m.groups} appliqué${m.groups > 1 ? 's' : ''}. `
@@ -212,8 +217,9 @@ function ranking(d, kind, allowed) {
       + `</div>`;
   }
   const infoOpen = m && !m.open ? `<br><small class="neg">${T.open} indisponible pour le moment.</small>` : '';
+  const legend = hasMix ? `<div class="legend mixlegend">${['604', '603', '602', 'autres'].map(k => `<span><i class="sw m${k}"></i>${MIXN[k]}${k === 'autres' ? '' : ' (' + k + ')'}</span>`).join('')}</div>` : '';
   return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
-    ${list.length ? table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}${infoRecon}`;
+    ${list.length ? legend + table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasMix ? ['Répartition'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}${infoRecon}`;
 }
 const clients = (d, allowed) => ranking(d, 'c', allowed);
 const suppliers = (d, allowed) => ranking(d, 's', allowed);
@@ -424,8 +430,8 @@ const PAGES = {
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
     B('decomp', 'XC — CA et coûts directs en détail', d => decompTable(d, [{label: 'XC', o: grp(d, 'XC')}])),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
-    B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
     B('suppliers', 'Hit-parade fournisseurs XC', d => suppliers(d, ['XC'])),
+    B('clients', 'Hit-parade clients XC', d => clients(d, ['XC'])),
   ],
   'xc/lignes': () => [
     B('lines', 'XC — par ligne d’activité', d => table(HEAD, d.pnl.bus.find(b => b.key === 'XC').lines.map(l => lineRow(l.line, l)))),
@@ -451,13 +457,13 @@ const PAGES = {
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Coûts directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
     B('decomp', 'CARS et ses BU — CA et coûts directs en détail', d => decompTable(d, [{label: 'CARS', o: grp(d, 'CARS')}].concat(d.pnl.bus.filter(b => b.group === 'CARS').map(b => ({label: b.label, o: b}))))),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
-    B('clients', 'Hit-parade clients CARS', d => clients(d, ['CARS'])),
     B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),
+    B('clients', 'Hit-parade clients CARS', d => clients(d, ['CARS'])),
   ],
   'cars/bu': () => [
     B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
-    B('clients', 'Hit-parade clients', d => clients(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
+    B('clients', 'Hit-parade clients', d => clients(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),
   ],
 };

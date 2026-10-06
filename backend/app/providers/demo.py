@@ -58,7 +58,9 @@ class DemoProvider:
         def board(total: float) -> list[dict]:
             w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
             return [{"name": n, "ca": round(total * s * 0.75 * x / sum(w)), "open": round(total * s * 0.75 * x / sum(w) * (0.0 if i % 4 == 0 else 0.1 * (i % 4))),
-                     "invoices": 2 + (i * 5) % 13, "avg": round(total * s * 0.75 * x / sum(w) / (2 + (i * 5) % 13), 2)}
+                     "invoices": 2 + (i * 5) % 13, "avg": round(total * s * 0.75 * x / sum(w) / (2 + (i * 5) % 13), 2),
+                     "mix": {"604": round(total * s * 0.75 * x / sum(w) * (0.5 - 0.03 * (i % 5))), "603": round(total * s * 0.75 * x / sum(w) * (0.2 + 0.05 * (i % 4))),
+                             "602": round(total * s * 0.75 * x / sum(w) * 0.15), "autres": round(total * s * 0.75 * x / sum(w) * 0.05)}}
                     for i, (n, x) in enumerate(list(zip(names, w))[:15])]
         sizes = {"XC": 1_200_000, "MODERN_RALLY": 45_000, "HISTORIC_RALLY": 90_000, "HISTORIC_RACING": 300_000,
                  "CARS_OTHERS": 40_000, "HORS_BU": 520_000}
@@ -67,6 +69,7 @@ class DemoProvider:
         out = {k: board(v) for k, v in sizes.items()}
         out["_totals"] = {k: round(v * s) for k, v in sizes.items()}
         out["_open_totals"] = {k: round(sum(c["open"] for c in v) * 1.2) for k, v in out.items() if not k.startswith("_")}
+        out["_mix"] = {k: {"604": round(out["_totals"][k] * .45), "603": round(out["_totals"][k] * .25), "602": round(out["_totals"][k] * .2), "autres": round(out["_totals"][k] * .1)} for k in sizes}
         out["_stats"] = {k: {"invoices": round(240 * s * (1 + len(v) / 15)), "avg": round(sum(c["ca"] for c in v) / max(1, sum(c["invoices"] for c in v)), 2)} for k, v in out.items() if not k.startswith("_")}
         out["_meta"] = {"grouping": True, "groups": 0, "open": True}
         return out

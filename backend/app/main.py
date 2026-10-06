@@ -70,7 +70,8 @@ def config():
     link = settings.ODOO_ANALYTIC_LINK.replace("{base}", settings.ODOO_PUBLIC_URL.rstrip("/")) if settings.PROVIDER == "odoo" and settings.ODOO_PUBLIC_URL else ""
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
             "source": settings.PROVIDER, "analytic_link": link,
-            "ga": ga.configured() or settings.PROVIDER == "demo"}
+            "ga": ga.configured() or settings.PROVIDER == "demo",
+            "hosts": {"xc": settings.GA_HOST_XC, "gs": settings.GA_HOST_GS, "site": settings.GA_HOST_SITE or settings.GA_HOST_XC}}
 
 
 @app.post("/api/session")

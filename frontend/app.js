@@ -333,7 +333,7 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
       const w = shop(d); if (!w) return miss(d);
       const t = w.top_pages; if (!t || t.unavailable) return `<p class="na">Pages les plus visitées indisponibles pour le moment.</p>${(w.errors || {}).top_pages ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.top_pages)}</small>` : ''}`;
       if (!t.length) return '<p class="na">Aucune page suivie sur la période.</p>';
-      return table(['#', 'Page', 'Vues', '% des vues'], t.map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.label)}<br><small class="na">${esc(p.path)}</small></td><td>${num(p.views)}</td><td>${pct(p.share)}</td></tr>`), 'prodtable')
+      return table(['#', 'Page', 'Vues', '% des vues'], t.map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${pageLink(cfg && cfg.hosts && cfg.hosts.xc, p.path, p.label)}<br><small class="na">${esc(p.path)}</small></td><td>${num(p.views)}</td><td>${pct(p.share)}</td></tr>`), 'prodtable')
         + '<small class="na">Pages du webshop suivies par Odoo, adresses regroupées sans leurs paramètres ; le % est la part dans les vues de ces pages (hors visites des pages non suivies).</small>';
     }, true),
     NOTE('Commandes confirmées, hors taxes. Le classement porte sur les produits (hors livraison et autres services) ; le « % du total » est la part dans la valeur de ces produits pour le webshop. Noms de produits en français quand Odoo les traduit. Source : commandes Odoo par site web.'),

@@ -2,6 +2,12 @@
 // Chargé avant app.js ; utilise ses fonctions (esc, num, pct, eur, kpi, table, B, NOTE, multiLineChart, vsPrev) au moment de l'appel.
 const gaDur = s => { s = Math.round(s || 0); return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')}` : `${s} s`; };
 
+// Lien vers une page du site (nouvel onglet) ; adresse https construite à partir du nom de domaine du site et du chemin, jamais d'un lien brut.
+function pageLink(host, path, text) {
+  if (!host || typeof path !== 'string' || !/^\/[^\s]*$/.test(path)) return esc(text);
+  return `<a class="olink" href="${esc('https://' + host + path)}" target="_blank" rel="noopener noreferrer" title="Ouvrir la page">${esc(text)}</a>`;
+}
+
 function gaSite(d, key) {                       // -> {site} ou {msg, cls}
   const a = d.analytics;
   if (!a || a.unconfigured) return {msg: 'Google Analytics n’est pas encore relié au dashboard (identifiant de propriété à renseigner).', cls: 'na'};
@@ -39,7 +45,7 @@ function gaBlocks(key, o = {}) {
   ];
   if (pages) out.push(B(`ga_${key}_pages`, shop ? 'Pages les plus visitées (Google Analytics)' : 'Pages les plus visitées', wrap(s => {
     if (!s.pages || !s.pages.length) return '<p class="na">Aucune page sur la période.</p>';
-    return table(['#', 'Page', 'Vues', '% des vues', 'Utilisateurs'], s.pages.map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${esc(p.title)}<br><small class="na">${esc(p.path)}</small></td><td>${num(p.views)}</td><td>${pct(p.share)}</td><td>${num(p.users)}</td></tr>`), 'prodtable');
+    return table(['#', 'Page', 'Vues', '% des vues', 'Utilisateurs'], s.pages.map((p, i) => `<tr><td>${i + 1}</td><td class="prod">${pageLink(s.host, p.path, p.title)}<br><small class="na">${esc(p.path)}</small></td><td>${num(p.views)}</td><td>${pct(p.share)}</td><td>${num(p.users)}</td></tr>`), 'prodtable');
   }, 'pages')));
   if (geo) out.push(B(`ga_${key}_geo`, 'Pays et appareils', wrap(s => {
     const part = (title, rows) => `<h4 class="sub">${title}</h4>` + table(['', 'Sessions', '%'], (rows || []).map(r => `<tr><td>${esc(r.name)}</td><td>${num(r.sessions)}</td><td>${pct(r.share)}</td></tr>`), 'prodtable');

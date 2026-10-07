@@ -564,11 +564,14 @@ class OdooProvider:
                                   ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")],
                           fields=["name", "ref", "invoice_date", "date", "amount_untaxed", "amount_total", "payment_state", "move_type", "commercial_partner_id"],
                           order="date desc", limit=500)
+        from ..bu import is_old
         fees: dict[int, float] = {}
         if rows and settings.STAFF_FEE_PREFIXES:                # honoraires = lignes sur les comptes 613 ; le reste (frais avancés, refacturés) est exclu
             dom = ["|"] * (len(settings.STAFF_FEE_PREFIXES) - 1) + [("account_id.code", "=like", f"{x}%") for x in settings.STAFF_FEE_PREFIXES]
             for ln in self._call("account.move.line", "search_read", domain=[("move_id", "in", [r["id"] for r in rows]), ("parent_state", "=", "posted")] + dom,
-                                 fields=["move_id", "balance"]):
+                                 fields=["move_id", "balance", "account_id"]):
+                if is_old(self._code_name(ln["account_id"][1])[1]):          # compte « old - … » (ancien plan) : ignoré, comme partout ailleurs
+                    continue
                 fees[ln["move_id"][0]] = fees.get(ln["move_id"][0], 0.0) + float(ln["balance"] or 0.0)
         out = []
         for r in rows:

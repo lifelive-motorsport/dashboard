@@ -818,7 +818,8 @@ def test_staff_invoices_report_fees_on_613_accounts_only():
             return [{"id": 1, "name": "F1", "ref": "r1", "invoice_date": "2026-01-31", "date": "2026-01-31", "amount_untaxed": 1000.0, "amount_total": 1210.0, "payment_state": "paid", "move_type": "in_invoice", "commercial_partner_id": [9, "ILP"]},
                     {"id": 2, "name": "A1", "ref": "", "invoice_date": "2026-02-10", "date": "2026-02-10", "amount_untaxed": 100.0, "amount_total": 121.0, "payment_state": "not_paid", "move_type": "in_refund", "commercial_partner_id": [9, "ILP"]}]
         seen["domain"] = kw["domain"]
-        return [{"move_id": [1, "F1"], "balance": 700.0}, {"move_id": [2, "A1"], "balance": -100.0}]      # F1 : 300 € de frais avancés exclus
+        return [{"move_id": [1, "F1"], "balance": 700.0, "account_id": [5, "613000 Honoraires"]}, {"move_id": [2, "A1"], "balance": -100.0, "account_id": [5, "613000 Honoraires"]},
+                {"move_id": [1, "F1"], "balance": 50.0, "account_id": [6, "61300000 old - Honoraires"]}]      # F1 : 300 € de frais avancés exclus ; ligne « old » ignorée
     p._call = call
     r = p.staff_invoices([9], 2026)
     assert [(x["number"], x["untaxed"], x["fees"]) for x in r] == [("F1", 1000.0, 700.0), ("A1", -100.0, -100.0)]

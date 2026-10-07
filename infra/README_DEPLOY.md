@@ -95,14 +95,12 @@ Variables : `GA_PROPERTY_ID` (identifiant NUMÉRIQUE de la propriété, pas « G
 
 ## Fiches de paie (STAFF costs › Données source)
 
-Les rémunérations sont des données sensibles : tout le personnel (salariés, indépendants, fiches de paie) n'est lisible et modifiable que par les adresses de `ADMIN_EMAILS`. Pour pouvoir déposer les PDF des fiches de paie, créez un bucket **privé** :
+Les rémunérations sont des données sensibles : tout le personnel (salariés, indépendants, fiches de paie) n'est lisible et modifiable que par les adresses de `ADMIN_EMAILS`. Pour pouvoir déposer les PDF des fiches de paie depuis l'app, il faut un bucket **privé**, créé une seule fois. Dans Cloud Shell, depuis le dépôt cloné :
 
 ```
-gcloud config set project lifelive-dashboard-app
-gcloud storage buckets create gs://lifelive-dashboard-payslips --location=europe-west1 --uniform-bucket-level-access --public-access-prevention
-gcloud storage buckets add-iam-policy-binding gs://lifelive-dashboard-payslips \
-  --member="serviceAccount:dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com" --role=roles/storage.objectAdmin
-gcloud run services update dashboard --region=europe-west1 --update-env-vars="STAFF_BUCKET=lifelive-dashboard-payslips"
+./infra/setup_payslips.sh
 ```
+
+(`setup_gcp.sh` le fait déjà pour une première installation.) Le script crée le bucket `lifelive-dashboard-app-payslips`, donne l'accès au seul compte de service et active `STAFF_BUCKET` sur Cloud Run, sans redéploiement du code. Ensuite, tous les dépôts mensuels se font dans l'app.
 
 Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste fonctionne (les chiffres se saisissent à la main). `STAFF_PAY_PREFIXES` (par défaut `620,621`) désigne les comptes comparés aux fiches de paie.

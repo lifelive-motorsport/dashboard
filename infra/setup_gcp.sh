@@ -36,6 +36,12 @@ gcloud firestore databases describe --database='(default)' >/dev/null 2>&1 || \
   gcloud firestore databases create --database='(default)' --location="$REGION" --type=firestore-native
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/datastore.user --condition=None >/dev/null
 
+# Bucket privé des fiches de paie (PDF déposés depuis l'app) : accès uniforme, jamais public, lisible par le seul compte de service.
+STAFF_BUCKET="${STAFF_BUCKET:-${PROJECT_ID}-payslips}"
+gcloud storage buckets describe "gs://${STAFF_BUCKET}" >/dev/null 2>&1 || \
+  gcloud storage buckets create "gs://${STAFF_BUCKET}" --location="$REGION" --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets add-iam-policy-binding "gs://${STAFF_BUCKET}" --member="serviceAccount:$SA" --role=roles/storage.objectAdmin >/dev/null
+
 # Secret : saisi à l'invite (masqué), jamais dans l'historique ni dans le dépôt.
 if ! gcloud secrets describe ODOO_API_KEY >/dev/null 2>&1; then
   gcloud secrets create ODOO_API_KEY --replication-policy=automatic
@@ -60,7 +66,7 @@ read -rp "ODOO_DB : " ODOO_DB
 gcloud run deploy dashboard --source=. --region="$REGION" --service-account="$SA" \
   --allow-unauthenticated --min-instances=0 --max-instances=2 --memory=512Mi --timeout=60 \
   --set-secrets=ODOO_API_KEY=ODOO_API_KEY:latest,SESSION_SECRET=SESSION_SECRET:latest \
-  --set-env-vars="^#^DATA_PROVIDER=odoo#ODOO_URL=${ODOO_URL}#ODOO_DB=${ODOO_DB}#AUTH_ENABLED=true#GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}#ALLOWED_DOMAIN=lifelive-motorsport.com#ALLOWED_EMAILS=${ALLOWED_EMAILS}#ADMIN_EMAILS=${ADMIN_EMAILS}"  # séparateur « # » : les e-mails contiennent « @ » et « , »
+  --set-env-vars="^#^DATA_PROVIDER=odoo#ODOO_URL=${ODOO_URL}#ODOO_DB=${ODOO_DB}#AUTH_ENABLED=true#GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}#ALLOWED_DOMAIN=lifelive-motorsport.com#ALLOWED_EMAILS=${ALLOWED_EMAILS}#ADMIN_EMAILS=${ADMIN_EMAILS}#STAFF_BUCKET=${STAFF_BUCKET}"  # séparateur « # » : les e-mails contiennent « @ » et « , »
 # --allow-unauthenticated : le service est public, mais /api/* exige un jeton Google valide
 # (domaine Workspace ou email de la liste blanche) vérifié côté serveur.
 

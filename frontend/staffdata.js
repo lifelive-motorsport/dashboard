@@ -200,9 +200,9 @@ const sdServiceMonth = date => { const d = String(date).slice(0, 10), y = +d.sli
   if (day > 5) return d.slice(0, 7); const pm = m === 1 ? 12 : m - 1; return `${m === 1 ? y - 1 : y}-${String(pm).padStart(2, '0')}`; };
 // Mois d'activité d'un indépendant (pour la projection sur 1 an) : une facture = un mois de prestation, quelle que soit sa date d'encodage
 // (9 factures de même montant au 07/10 = les 9 premiers mois, pas 5 ; 3 factures encodées le même jour = 3 mois de rattrapage).
-// Les mois couverts se terminent au mois de prestation de la dernière facture et ne peuvent pas remonter avant janvier. Un avoir ne compte pas.
+// Une facture sans honoraires (pas en 613 ou compte « old ») ne couvre aucun mois. Les mois couverts se terminent au mois de prestation de la dernière facture et ne peuvent pas remonter avant janvier. Un avoir ne compte pas.
 function sdServiceMonths(inv) {
-  const list = inv ? inv.list.filter(x => !x.refund && (+x.untaxed || 0) > 0) : [];
+  const list = inv ? inv.list.filter(x => !x.refund && (+x.fees || 0) > 0.5) : [];      // seules les factures avec honoraires (613, hors « old ») couvrent un mois
   if (!list.length) return [];
   const last = list.map(x => sdServiceMonth(x.date)).sort().pop(), y = +last.slice(0, 4), m = +last.slice(5, 7);
   const n = Math.min(list.length, y === SD_YEAR ? m : 12);

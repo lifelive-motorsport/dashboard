@@ -60,3 +60,10 @@ def test_adjusted_cost_uses_billable_rate_and_hours_ratio():
     p.pop("billable_pct"); p.pop("hours_pct")
     r = run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")
     assert r["adjFactor"] == 1 and r["hourlyAdj"] == r["hourly"]
+
+
+def test_employee_real_cost_to_date_sums_slips_and_recurring_costs_of_worked_months():
+    p = {"patronal_pct": 30, "monthly_other": 100, "extras": [{"monthly": 50}],
+         "payslips": [{"month": "2026-01", "brut": 3000, "patronal": 1000}, {"month": "2026-02", "brut": 3000}, {"month": "2025-12", "brut": 9999}]}
+    r = run(f"SC.employeeRealYtd({json.dumps(p)}, 2026, 400)")
+    assert r["months"] == 2 and r["real"] == 4000 + 3900 + (100 + 50) * 2 + 400                        # fiche 1 (patronal réel) + fiche 2 (patronal estimé 30 %) + récurrents + cotisations du gérant

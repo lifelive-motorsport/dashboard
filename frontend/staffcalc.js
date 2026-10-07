@@ -23,6 +23,14 @@ const SC = (() => {
     return {brut, patronal, factor, remunMonthly, remunAnnual, recurringAnnual, extrasAnnual, ...finish(remunAnnual + recurringAnnual + extrasAnnual, p, params)};
   }
 
+  // Coût réel d'un salarié depuis le 1er janvier de `year` : somme des fiches (brut + patronal réel ou estimé, primes et pécule compris)
+  // + autres coûts récurrents et hors salaire pour chaque mois ayant une fiche + cotisations sociales déjà payées (gérant, `socialYtd`). Aucune projection.
+  function employeeRealYtd(p, year, socialYtd = 0) {
+    const slips = (p.payslips || []).filter(s => String(s.month).startsWith(String(year)));
+    const pay = slips.reduce((t, s) => t + (+s.brut || 0) + slipPatronal(p, s), 0), months = slips.length;
+    return {real: pay + ((+p.monthly_other || 0) + extrasMonthly(p)) * months + (+socialYtd || 0), months};
+  }
+
   // Indépendant : honoraires facturés depuis le début de l'année ÷ mois d'activité = moyenne mensuelle ; projeté sur 1 an × 12 ; + coûts « hors facture » × 12.
   // « Réel » = ce qui a été réellement facturé à ce jour (+ hors facture × mois d'activité), sans projection.
   function independentCosts(p, params, invoicedYtd, monthsActive) {
@@ -46,6 +54,6 @@ const SC = (() => {
     return m;
   }
 
-  return {employeeCosts, independentCosts, allocate, payrollByMonth, lastSlip, sortedSlips, extrasMonthly};
+  return {employeeCosts, employeeRealYtd, independentCosts, allocate, payrollByMonth, lastSlip, sortedSlips, extrasMonthly};
 })();
 if (typeof module !== 'undefined') module.exports = SC;

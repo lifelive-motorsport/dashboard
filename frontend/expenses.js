@@ -388,15 +388,25 @@ function exIndicative(x, cal) {
 }
 // % retenu d'une ligne : ceux que vous avez saisis (case vide = 0) ; si rien n'est saisi, la proposition indicative.
 function exRetained(x, ind) { const sv = (ex.split || (ex.vsplit || {}).split || {})[x.vehicle]; return sv && Object.keys(sv).length ? {src: 'saisi', p: Object.fromEntries(EX_SPLIT.map(([k]) => [k, (sv[k] || 0) / 100]))} : {src: 'indicatif', p: ind}; }
+// Lignes de l'imputation des frais véhicules (indicatif, retenu, total saisi) : partagées avec le calcul de la marge nette.
+function exSplitRows(v) {
+  const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null;
+  const gen = (ex.general || v.general_vehicles || []).map(n => n.toLowerCase());
+  return v.vehicles.map(x0 => { const base = x0.identified !== false || !!x0.forced_general, forced = gen.includes(x0.vehicle.toLowerCase()), x = {...x0, base, identified: base && !forced, forced}; const ind = exIndicative(x, cal), ret = exRetained(x, ind); const sv = (ex.split || v.split || {})[x.vehicle] || {};
+    const sum = EX_SPLIT.reduce((t, [k]) => t + (sv[k] || 0), 0); return {x, ind, ret, sv, sum}; });
+}
+// Total des frais véhicules par BU et frais généraux avec les % retenus ; `unalloc` = ce qu'une ligne saisie à moins de 100 % laisse sans imputation.
+function exSplitTotals(v) {
+  const rows = exSplitRows(v), tot = Object.fromEntries(EX_SPLIT.map(([k]) => [k, rows.reduce((t, r) => t + r.x.total * r.ret.p[k], 0)])), grand = rows.reduce((t, r) => t + r.x.total, 0);
+  return {tot, grand, unalloc: grand - Object.values(tot).reduce((a, b) => a + b, 0)};
+}
 function exDrawSplit() {
   const el = document.getElementById('exp-split'); if (!el) return;
   if (ex.splitErr) { el.innerHTML = `<p class="neg">${esc(ex.splitErr)}</p>`; return; }
   const v = ex.vsplit; if (!v) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (v.empty) { el.innerHTML = '<p class="na">Aucun compte de la classe 615 : voir « Données source ».</p>'; return; }
   const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null, canEdit = !!v.can_edit;
-  const gen = (ex.general || v.general_vehicles || []).map(n => n.toLowerCase());
-  const rowsAll = v.vehicles.map(x0 => { const base = x0.identified !== false || !!x0.forced_general, forced = gen.includes(x0.vehicle.toLowerCase()), x = {...x0, base, identified: base && !forced, forced}; const ind = exIndicative(x, cal), ret = exRetained(x, ind); const sv = (ex.split || v.split || {})[x.vehicle] || {};
-    const sum = EX_SPLIT.reduce((t, [k]) => t + (sv[k] || 0), 0); return {x, ind, ret, sv, sum}; });
+  const rowsAll = exSplitRows(v);
   const id = rowsAll.filter(r => r.x.identified !== false), other = rowsAll.filter(r => r.x.identified === false);
   const cell = r => EX_SPLIT.map(([k]) => `<td class="sdind${r.ret.src === 'indicatif' ? ' on' : ''}">${r.ind[k] ? pct(r.ind[k]).replace(',0 %', ' %') : '–'}</td><td class="sdinp"><input class="sdin sdpct" type="text" inputmode="decimal" autocomplete="off" data-ex-split="${esc(r.x.vehicle)}" data-k="${k}" value="${r.sv[k] != null ? r.sv[k] : ''}"${canEdit ? '' : ' disabled'}></td>`).join('');
   const row = r => `<tr><td class="prod sdname">${esc(r.x.vehicle)}${r.x.merged && r.x.merged.length ? ` <small class="na">+ ${esc(r.x.merged.join(', '))}</small>` : ''}</td><td class="sdcost">${eur(r.x.total)}</td>${cell(r)}<td class="sdtot ${r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5 ? 'neg' : ''}">${r.ret.src === 'saisi' ? num(Math.round(r.sum * 10) / 10) + ' %' : '<small class="na">indicatif</small>'}</td><td>${canEdit && r.x.base ? `<button type="button" class="sdfill" data-ex-split-gen="${esc(r.x.vehicle)}" title="${r.x.forced ? 'C’est un véhicule : le ressortir des frais généraux' : 'Ce n’est pas un véhicule : classer en frais généraux'}">${r.x.forced ? '↥ véhicule' : '↧ frais gén.'}</button> ` : ''}${canEdit ? `<button type="button" class="sdfill" data-ex-split-fill="${esc(r.x.vehicle)}" title="Recopier la proposition indicative dans les cases">↤</button>` : ''}</td></tr>`;

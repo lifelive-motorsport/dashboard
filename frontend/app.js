@@ -9,7 +9,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
-  ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
+  ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
@@ -18,7 +18,7 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -408,6 +408,7 @@ const PAGES = {
     B('bu', 'Marge brute par BU', d => bars(busOf(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
   ],
+  'overview/nm': () => [NM_BLOCK('all', 'Marge nette par BU')],
   'overview/suppliers': () => [
     B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
       return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`
@@ -450,6 +451,7 @@ const PAGES = {
   ],
   'xc/general': () => [
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>` + encoursCards(d, 'XC'); }),
+    NM_BLOCK('xc', 'XC — marge nette'),
     B('decomp', 'XC — CA et coûts directs en détail', d => decompTable(d, [{label: 'XC', o: grp(d, 'XC')}])),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
     B('suppliers', 'Hit-parade fournisseurs XC', d => suppliers(d, ['XC'])),
@@ -477,6 +479,7 @@ const PAGES = {
   ],
   'cars/general': () => [
     B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Coûts directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>` + encoursCards(d, 'CARS'); }),
+    NM_BLOCK('cars', 'CARS — marge nette'),
     B('decomp', 'CARS et ses BU — CA et coûts directs en détail', d => decompTable(d, [{label: 'CARS', o: grp(d, 'CARS')}].concat(d.pnl.bus.filter(b => b.group === 'CARS').map(b => ({label: b.label, o: b}))))),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
     B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),
@@ -484,6 +487,7 @@ const PAGES = {
   ],
   'cars/bu': () => [
     B('bu', 'Marge brute par BU', d => bars(d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
+    NM_BLOCK('carsbu', 'Marge nette par BU'),
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     B('clients', 'Hit-parade clients', d => clients(d, ['CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'])),
     NOTE('Modern Rally : le CA est surtout de la main-d’œuvre atelier (le client achète les pièces), ce qui gonfle le taux de marge.'),

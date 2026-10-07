@@ -32,7 +32,7 @@ function gaBlocks(key, o = {}) {
         + kpi('Engagement', pct(c.engagementRate || 0), '', 'sessions engagées') + kpi('Durée moyenne', gaDur(c.averageSessionDuration), '', 'par session')
         + (shop ? kpi('Achats', num(c.ecommercePurchases), '', cmp('ecommercePurchases')) + kpi('Conversion', conv == null ? '–' : pct(conv), '', 'achats ÷ sessions') : '');
       return `<div class="kpis">${cards}</div>` + (shop && c.addToCarts ? `<small class="na">Parcours : ${num(c.addToCarts)} ajout${c.addToCarts > 1 ? 's' : ''} au panier → ${num(c.checkouts)} paiement${c.checkouts > 1 ? 's' : ''} lancé${c.checkouts > 1 ? 's' : ''} → ${num(c.ecommercePurchases)} achat${c.ecommercePurchases > 1 ? 's' : ''} (événements e-commerce envoyés par le site).</small>` : '')
-        + multiLineChart(s.series.points, [{key: 'sessions', label: 'Sessions', cls: 's1'}, {key: 'users', label: 'Utilisateurs', cls: 's2'}],
+        + multiLineChart(closedMonths(s.series.points, s.series.granularity), [{key: 'sessions', label: 'Sessions', cls: 's1'}, {key: 'users', label: 'Utilisateurs', cls: 's2'}],
           p => `${p.label} : ${num(p.sessions)} sessions, ${num(p.users)} utilisateurs, ${num(p.views)} pages vues` + (shop ? `, ${num(p.purchases)} achats` : ''),
           `Par ${s.series.granularity === 'week' ? 'semaine' : 'mois'}, ${esc(s.host || '')}${s.path ? ' · pages « ' + esc(s.path) + ' »' : ' · toutes les pages'}. Variation par rapport à la même période de ${yr}. Les visiteurs qui refusent les cookies ne sont pas comptés.`);
     }, 'totals')),
@@ -60,7 +60,7 @@ function marketingBlocks() {
   return [
     B('mk_kpi', 'Dépenses marketing', wrap(m => `<div class="kpis">${kpi('Total des dépenses', eur(m.total))}${m.accounts.map(a => kpi(a.name || a.code, eur(a.amount), '', `${a.code} · ${pct(a.share)} du total`)).join('')}</div>`
       + `<small class="na">Charges des comptes ${esc((m.codes || []).join(', '))} (factures fournisseurs comptabilisées, avoirs déduits), hors taxes.</small>`)),
-    B('mk_evol', 'Évolution des dépenses', wrap(m => lineChart(m.series.points, null, `Dépenses marketing par ${m.series.granularity === 'week' ? 'semaine' : 'mois'}. Survolez un point pour le détail.`,
+    B('mk_evol', 'Évolution des dépenses', wrap(m => lineChart(closedMonths(m.series.points, m.series.granularity), null, `Dépenses marketing par ${m.series.granularity === 'week' ? 'semaine' : 'mois'}. Survolez un point pour le détail.`,
       v => eur(Math.round(v)), p => `${p.label} : ${eur(p.total)}`, ''))),
     B('mk_acc', 'Par compte', wrap(m => m.accounts.length ? table(['Compte', 'Libellé', 'Montant HT', '% du total'], m.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.amount)}</td><td>${pct(a.share)}</td></tr>`)
       .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(m.total)}</td><td>100,0 %</td></tr>`]), 'prodtable') : '<p class="na">Aucune dépense sur la période.</p>')),

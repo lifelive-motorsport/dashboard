@@ -132,7 +132,7 @@ function exDrawSource() {
   const kindMode = el.dataset.kind || 'general', s = {...ex.src}, canEdit = !!s.can_edit, sums = exSums(), el2 = s.elsewhere || {};
   if (kindMode === 'vehicle') s.accounts = s.accounts.filter(a => ex.sel[a.code] === 'vehicle' || (s.vehicle_prefixes || []).some(p => a.code.startsWith(p)));      // comptes 615 et comptes déjà rangés en véhicules
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
-  const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur(a.total / (s.months_elapsed || 1))}</td><td>${sel(a)}</td></tr>`);
+  const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur((a.closed_total ?? a.total) / (s.months_elapsed || 1))}</td><td>${sel(a)}</td></tr>`);
   const bar = `<div class="sdbar">${canEdit ? `<button type="button" class="primary" data-ex-save${ex.dirty ? '' : ' disabled'}>Enregistrer</button> <button type="button" data-ex-reload>Annuler les modifications</button>` : ''}
     <span class="na">${esc(ex.msg || (s.saved ? 'Dernier enregistrement : ' + new Date(s.updated_at).toLocaleString('fr-BE') + (s.updated_by ? ' par ' + s.updated_by : '') + '.' : 'Proposition de départ (comptes 611, 612, 614 et 64x), pas encore enregistrée.'))}</span></div>`;
   const psel = (code, p) => `<select class="sdin" data-ex-part="${code}" data-pid="${esc(p.id)}"${canEdit ? '' : ' disabled'}>${exPartKinds.map(([v, l]) => `<option value="${v}"${((ex.part[code] || {})[p.id] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
@@ -173,8 +173,8 @@ function exDrawGeneral() {
   const kind = el.dataset.kind || 'general', name = EX_NAMES[kind], g = ex.genK[kind]; if (!g) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (g.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme ' + name.toLowerCase() + ' : choisissez-les dans « Données source ».</p>'; return; }
   const pts = g.series.map(p => ({label: exMonth(p.month), avg: p.amount, orders: 0, month: p.month}));
-  el.innerHTML = `<div class="kpis">${kpi(name + ' depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `lissée sur ${num(g.months)} mois écoulés`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
-    + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, name + ' par mois (€)', v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
+  el.innerHTML = `<div class="kpis">${kpi(name + ' depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `mois clos : ${num(g.months)} (moyenne lissée)`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
+    + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, name + ' par mois (€)' + (g.last_closed ? ' · mois en cours non tracé (incomplet)' : ''), v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
     + exOdNote(g)
     + exMonthBlock(g, kind)
     + '<h4 class="sub">Par compte</h4>' + table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Part'], g.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.total)}</td><td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, a.share) * 100)}%"></span><span>${pct(a.share)}</span></td></tr>`)

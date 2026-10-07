@@ -150,8 +150,12 @@ def test_rent_account_is_excluded_from_general_expenses_and_listed_apart():
 
 
 def test_months_elapsed_include_the_fraction_of_the_current_month_and_smooth_lumpy_costs():
-    assert round(expenses.months_elapsed(2026, date(2026, 10, 7)), 2) == 9.23 and expenses.months_elapsed(2026, date(2026, 4, 30)) == 4.0
+    assert expenses.closed_months(2026, date(2026, 10, 7)) == (9.0, "2026-09") and expenses.closed_months(2026, date(2026, 4, 30)) == (4.0, "2026-04")
     assert expenses.months_elapsed(2025, date(2026, 10, 7)) == 12.0
     one_off = [{"code": "615014", "name": "Entretien Util. TRUCK", "total": 2000.0, "by_month": {"2026-03": 2000.0}, "partners": {}}]
     assert expenses.kind_view(one_off, {"saved": True, "selected": {"615014": "vehicle"}}, 2026, "vehicle", today=date(2026, 4, 30))["monthly_avg"] == 500   # lissé sur 4 mois, pas 2000
     assert expenses.accounts_view(one_off, {}, 2026, today=date(2026, 4, 30))["months_elapsed"] == 4.0
+    partial = [{"code": "612000", "name": "Électricité", "total": 1300.0, "by_month": {"2026-08": 600.0, "2026-09": 600.0, "2026-10": 100.0}, "partners": {}}]
+    k = expenses.kind_view(partial, {"saved": True, "selected": {"612000": "general"}}, 2026, "general", today=date(2026, 10, 7))
+    assert [x["month"] for x in k["series"]] == ["2026-08", "2026-09"] and k["last_closed"] == "2026-09"             # octobre (incomplet) n'est pas tracé
+    assert k["total"] == 1300 and round(k["monthly_avg"], 2) == round(1200 / 9, 2) and round(k["projected"], 2) == 1600     # moyenne sur les 9 mois clos

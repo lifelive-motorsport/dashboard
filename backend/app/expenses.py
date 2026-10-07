@@ -125,15 +125,23 @@ def effective(config: dict, codes) -> dict[str, str]:  # noqa: D401
     return {c: s for c in codes if (s := suggestion(c))}
 
 
-def months_elapsed(year: int, today: date | None = None) -> float:
-    """Mois écoulés depuis le 1er janvier jusqu'à aujourd'hui, avec la fraction du mois en cours (7 octobre = 9,2 mois) ; 12 pour une année passée.
-    Sert à lisser les charges irrégulières (une facture d'entretien) sur toute la période, et non sur les seuls mois où il y a une écriture."""
+def closed_months(year: int, today: date | None = None) -> tuple[float, str | None]:
+    """(nombre de mois entièrement écoulés, dernier mois clos « AAAA-MM »). Le mois en cours est incomplet : on ne le compte pas et on ne le trace pas
+    (sinon la courbe semble descendre). 7 octobre : 9 mois, jusqu'à 2026-09. Dans le premier mois de l'année : la fraction écoulée, sans mois clos."""
     t = today or date.today()
     if year < t.year:
-        return 12.0
+        return 12.0, f"{year}-12"
     if year > t.year:
-        return 1.0
-    return (t.month - 1) + t.day / calendar.monthrange(t.year, t.month)[1]
+        return 1.0, None
+    last_day = calendar.monthrange(t.year, t.month)[1]
+    closed = t.month if t.day == last_day else t.month - 1
+    if closed < 1:
+        return max(t.day / last_day, 0.05), None
+    return float(closed), f"{t.year}-{closed:02d}"
+
+
+def months_elapsed(year: int, today: date | None = None) -> float:
+    return closed_months(year, today)[0]
 
 
 def _month_series(accounts: list[dict]) -> list[dict]:
@@ -172,8 +180,10 @@ def accounts_view(lines: list[dict], config: dict, year: int, today: date | None
         if f in ("bu", "staff", "marketing", "excluded"):
             elsewhere[f] = elsewhere.get(f, 0.0) + a["total"]
     accounts = []
+    last = closed_months(year, today)[1]
     for a in sorted(cand, key=lambda a: a["code"]):
-        row = {"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "months": len(a["by_month"]), "kind": sel.get(a["code"]), "suggested": suggestion(a["code"])}
+        row = {"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "closed_total": round(sum(v for m, v in a["by_month"].items() if last is None or m <= last), 2),
+               "months": len(a["by_month"]), "kind": sel.get(a["code"]), "suggested": suggestion(a["code"])}
         rules = (config.get("partners") or {}).get(a["code"], {})                                  # fournisseurs toujours fournis : on peut passer un compte en « selon le fournisseur » avant d'enregistrer
         row["partners"] = [{"id": str(pid), "name": p["name"], "total": round(p["amount"], 2), "kind": rules.get(str(pid))}
                            for pid, p in sorted(a["partners"].items(), key=lambda kv: -abs(kv[1]["amount"]))[:80]]
@@ -188,16 +198,17 @@ def kind_view(lines: list[dict], config: dict, year: int, kind: str, today: date
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
     sel = effective(config, [a["code"] for a in cand])
     mine = [x for a in cand if (x := _for_kind(a, sel, config, kind))]
-    series = _month_series(mine)
+    months, last = closed_months(year, today)
+    series = [x for x in _month_series(mine) if last is None or x["month"] <= last]                 # le mois en cours (incomplet) n'est pas tracé
     total = sum(a["total"] for a in mine)
-    months = max(1.0, months_elapsed(year, today))
+    closed_total = sum(x["amount"] for x in series) if last else total
     partners: dict[str, dict] = {}
     for a in mine:
         for pid, p in a["partners"].items():
             d = partners.setdefault(str(pid), {"name": p["name"], "amount": 0.0})
             d["amount"] += p["amount"]
     sup = sorted(partners.values(), key=lambda x: -x["amount"])[:15]
-    return {"year": year, "kind": kind, "total": round(total, 2), "months": round(months, 2), "monthly_avg": round(total / months, 2), "projected": round(total / months * 12, 2),
+    return {"year": year, "kind": kind, "total": round(total, 2), "months": round(months, 2), "last_closed": last, "monthly_avg": round(closed_total / months, 2), "projected": round(closed_total / months * 12, 2),
             "series": series,
             "accounts": [{"code": a["code"], "name": a["name"] + (" (fournisseurs choisis)" if sel.get(a["code"]) == "partners" else ""), "total": round(a["total"], 2), "share": (a["total"] / total) if total else 0.0}
                          for a in sorted(mine, key=lambda a: -a["total"])],

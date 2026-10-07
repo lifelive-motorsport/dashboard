@@ -253,6 +253,15 @@ function decompTable(d, cols) {
 }
 
 // Courbe d'évolution (une seule série, SVG adaptatif) : points = [{label, avg (ou null), orders}], ref = valeur de référence en pointillé.
+// Retire le mois en cours (incomplet) d'une série mensuelle : sinon la courbe semble descendre alors que les données ne sont pas complètes.
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+function closedMonths(points, granularity) {
+  if (granularity !== 'month' || !points || points.length < 3) return points;
+  const t = new Date(), last = points[points.length - 1], m = /^(\S+)\s+(\d{4})$/.exec(last.label || '');
+  if (!m || +m[2] !== t.getFullYear() || MOIS_COURTS.indexOf(m[1]) !== t.getMonth()) return points;
+  if (t.getDate() === new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()) return points;       // dernier jour du mois : le mois est complet
+  const out = points.slice(0, -1); out.trimmed = last.label; return out;
+}
 function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => `${p.label} : ${eur(p.avg)} (${p.orders} commande${p.orders > 1 ? 's' : ''})`, refLabel = 'moyenne') {
   const pts = points.map((p, i) => ({...p, i})), vals = pts.filter(p => p.avg != null);
   if (vals.length < 2) return '<p class="na">Pas assez de commandes sur la période pour tracer une évolution.</p>';
@@ -269,7 +278,7 @@ function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => 
     ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>
       <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(tip(p))}</title></circle>`).join('')}
     ${pts.map(p => p.i % every === 0 ? `<text class="ax" x="${x(p.i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
-  </svg><small class="na">${unit}</small></div>`;
+  </svg><small class="na">${unit}${points.trimmed ? ' · ' + esc(points.trimmed) + ' (mois en cours, incomplet) non tracé' : ''}</small></div>`;
 }
 
 // Répartition par mode (paiement, livraison) : tableau avec part en % et barre.
@@ -295,7 +304,7 @@ function multiLineChart(points, series, tip, note) {
     ${points.map((p, i) => series.map(s => `<circle class="dot ${s.cls}" cx="${x(i).toFixed(1)}" cy="${y(p[s.key] || 0).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>`).join('')
       + `<rect class="hit" x="${(x(i) - 10).toFixed(1)}" y="${T}" width="20" height="${H - T - B}"><title>${esc(tip(p))}</title></rect>`).join('')}
     ${points.map((p, i) => i % every === 0 ? `<text class="ax" x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
-  </svg><small class="na">${note}</small></div>`;
+  </svg><small class="na">${note}${points.trimmed ? ' ' + esc(points.trimmed) + ' (mois en cours, incomplet) non tracé.' : ''}</small></div>`;
 }
 
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.
@@ -308,7 +317,7 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
     B('basket', 'Évolution du panier moyen', d => {
       const w = shop(d); if (!w) return miss(d);
       const bs = w.basket_series;
-      return bs ? lineChart(bs.points, w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
+      return bs ? lineChart(closedMonths(bs.points, bs.granularity), w.avg_basket, `Panier moyen HT par ${bs.granularity === 'week' ? 'semaine' : 'mois'} (commandes confirmées) ; le pointillé = moyenne de la période. Survolez un point pour le détail.`)
         : '<p class="na">Évolution indisponible pour le moment.</p>';
     }),
     B('picking', 'Commandes préparées par semaine', d => {
@@ -350,7 +359,7 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
       const bs = a.series, per = bs.granularity === 'week' ? 'semaine' : 'mois';
       return (a.incomplete ? `<p class="neg">Historique incomplet avant le ${fmtDate(a.complete_from)} : Odoo ne conserve pas les anciens paniers non confirmés. Le taux d’abandon n’est calculé qu’à partir du ${fmtDate(a.rate_from || a.complete_from)} ; les mois précédents ne sont pas tracés.</p>` : '')
         + `<div class="kpis">${kpi('Paniers abandonnés', num(a.count), '', `dont ${num(a.identified)} avec client identifié (menu Odoo « Abandoned Carts ») et ${num(a.anonymous)} visiteurs non connectés`)}${kpi('Valeur HT non convertie', eur(a.amount))}${kpi('Taux d’abandon', pct(a.rate), a.rate > .7 ? 'neg' : '', a.incomplete ? `depuis le ${fmtDate(a.rate_from || a.complete_from)} (historique partiel)` : 'abandonnés ÷ (abandonnés + commandes)')}</div>`
-        + lineChart(bs.points, a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé, avec au moins un article, après le délai d’abandon d’Odoo (visiteurs non connectés compris). Survolez un point pour le détail.`,
+        + lineChart(closedMonths(bs.points, bs.granularity), a.rate, `Taux d’abandon par ${per} = paniers abandonnés ÷ (paniers abandonnés + commandes confirmées). Un panier abandonné = devis du site web non confirmé, avec au moins un article, après le délai d’abandon d’Odoo (visiteurs non connectés compris). Survolez un point pour le détail.`,
           v => pct(v), p => `${p.label} : ${pct(p.avg)} — ${p.abandoned} abandonné${p.abandoned > 1 ? 's' : ''} dont ${p.identified} identifié${p.identified > 1 ? 's' : ''} (${eur(p.amount)}) pour ${p.orders} commande${p.orders > 1 ? 's' : ''}`, 'moyenne');
     }),
     B('visits', 'Évolution des visites — 50 derniers jours', d => {
@@ -359,7 +368,7 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
       const conv = v.visitors && !v.incomplete ? (v.orders || 0) / v.visitors : null;       // faux si l'historique de visites est tronqué
       return (v.incomplete ? `<p class="neg">Historique incomplet avant le ${fmtDate(v.complete_from)} : Odoo supprime les visiteurs anonymes inactifs après environ 60 jours, et leurs pages vues avec. Les périodes antérieures ne sont pas tracées, et les totaux ci-dessous sont sous-estimés.</p>` : '')
         + `<div class="kpis">${kpi('Pages vues', num(v.views))}${kpi('Visiteurs uniques', v.visitors == null ? '–' : num(v.visitors))}${kpi('Taux de conversion', conv == null ? '–' : pct(conv), '', v.incomplete ? 'indisponible : historique de visites incomplet' : 'commandes ÷ visiteurs uniques')}</div>`
-        + lineChart(v.points, null, `Pages vues par ${v.granularity === 'week' ? 'semaine' : 'mois'}, limitées aux pages « ${esc(v.path)} » suivies par Odoo. Survolez un point pour le détail. Odoo ne suit que certaines pages (produits, pages marquées « suivre ») et exclut une partie des robots : ce sont des ordres de grandeur, à comparer plutôt qu’à lire en valeur absolue.`,
+        + lineChart(closedMonths(v.points, v.granularity), null, `Pages vues par ${v.granularity === 'week' ? 'semaine' : 'mois'}, limitées aux pages « ${esc(v.path)} » suivies par Odoo. Survolez un point pour le détail. Odoo ne suit que certaines pages (produits, pages marquées « suivre ») et exclut une partie des robots : ce sont des ordres de grandeur, à comparer plutôt qu’à lire en valeur absolue.`,
           x => num(Math.round(x)), p => `${p.label} : ${num(p.views)} pages vues${p.visitors == null ? '' : ', ' + num(p.visitors) + ' visiteurs'}`, '');
     }, true),
     B('toppages', 'Pages les plus visitées — 50 derniers jours', d => {

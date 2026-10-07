@@ -320,11 +320,25 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
         d["types"][t] = d["types"].get(t, 0.0) + a["total"]
         d["accounts"].append(a["code"])
         types[t] = types.get(t, 0.0) + a["total"]
+    # Deux comptes pour un même véhicule (« Quad Kodiak » / « YAMAHA/KODIAK 700 ») : la correspondance « A -> B » où B est un autre véhicule des comptes les fusionne en B.
+    for src, dst in (config.get("links") or {}).items():
+        a, b = veh.get(src.casefold()), veh.get(dst.casefold())
+        if a is None or b is None or a is b:
+            continue
+        for t, bm in a["by_month"].items():
+            for m, amt in bm.items():
+                b["by_month"].setdefault(t, {})[m] = b["by_month"].setdefault(t, {}).get(m, 0.0) + amt
+        for t, amt in a["types"].items():
+            b["types"][t] = b["types"].get(t, 0.0) + amt
+        b["total"] += a["total"]
+        b["accounts"] += a["accounts"]
+        b.setdefault("merged", []).append(a["vehicle"])
+        del veh[src.casefold()]
     total = sum(d["total"] for d in veh.values())
     order = [t for t, _ in sorted(types.items(), key=lambda kv: -kv[1])]
     return {"year": year, "total": round(total, 2), "types": order, "type_totals": {t: round(types[t], 2) for t in order},
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
-                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"],
+                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []),
                           "by_month": {t: {m: round(x, 2) for m, x in bm.items()} for t, bm in d["by_month"].items()}} for d in sorted(veh.values(), key=lambda d: -d["total"])],
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
 

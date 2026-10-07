@@ -173,3 +173,13 @@ def test_split_vehicle_account_sans_util():
 def test_links_config_roundtrip_and_preserved():
     c = expenses.Config.model_validate({"links": {" SEMI PAC ": " (TR)-LLM-PKG-Pacton Trailer #1 (1) ", "X": ""}})
     assert c.links == {"SEMI PAC": "(TR)-LLM-PKG-Pacton Trailer #1 (1)"}
+
+
+def test_vehicles_view_merges_linked_accounts():
+    lines = [{"code": "615100", "name": "Assurance Quad Kodiak", "total": 97.0, "by_month": {"2026-03": 97.0}},
+             {"code": "615101", "name": "Taxes YAMAHA/KODIAK 700", "total": 49.0, "by_month": {"2026-04": 49.0}}]
+    cfg = {"selected": {"615100": "vehicle", "615101": "vehicle"}, "saved": True, "links": {"YAMAHA/KODIAK 700": "Quad Kodiak"}}
+    out = expenses.vehicles_view(lines, cfg, 2026)
+    assert [v["vehicle"] for v in out["vehicles"]] == ["Quad Kodiak"]
+    assert out["vehicles"][0]["total"] == 146.0 and out["vehicles"][0]["merged"] == ["YAMAHA/KODIAK 700"]
+    assert out["vehicles"][0]["types"] == {"Assurance": 97.0, "Taxes": 49.0}

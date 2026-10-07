@@ -390,11 +390,12 @@ function exDrawSplit() {
   const v = ex.vsplit; if (!v) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (v.empty) { el.innerHTML = '<p class="na">Aucun compte de la classe 615 : voir « Données source ».</p>'; return; }
   const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null, canEdit = !!v.can_edit;
-  const rowsAll = v.vehicles.map(x => { const ind = exIndicative(x, cal), ret = exRetained(x, ind); const sv = (ex.split || v.split || {})[x.vehicle] || {};
+  const gen = (ex.general || v.general_vehicles || []).map(n => n.toLowerCase());
+  const rowsAll = v.vehicles.map(x0 => { const base = x0.identified !== false || !!x0.forced_general, forced = gen.includes(x0.vehicle.toLowerCase()), x = {...x0, base, identified: base && !forced, forced}; const ind = exIndicative(x, cal), ret = exRetained(x, ind); const sv = (ex.split || v.split || {})[x.vehicle] || {};
     const sum = EX_SPLIT.reduce((t, [k]) => t + (sv[k] || 0), 0); return {x, ind, ret, sv, sum}; });
   const id = rowsAll.filter(r => r.x.identified !== false), other = rowsAll.filter(r => r.x.identified === false);
   const cell = r => EX_SPLIT.map(([k]) => `<td class="sdind${r.ret.src === 'indicatif' ? ' on' : ''}">${r.ind[k] ? pct(r.ind[k]).replace(',0 %', ' %') : '–'}</td><td class="sdinp"><input class="sdin sdpct" type="text" inputmode="decimal" autocomplete="off" data-ex-split="${esc(r.x.vehicle)}" data-k="${k}" value="${r.sv[k] != null ? r.sv[k] : ''}"${canEdit ? '' : ' disabled'}></td>`).join('');
-  const row = r => `<tr><td class="prod sdname">${esc(r.x.vehicle)}${r.x.merged && r.x.merged.length ? ` <small class="na">+ ${esc(r.x.merged.join(', '))}</small>` : ''}</td><td class="sdcost">${eur(r.x.total)}</td>${cell(r)}<td class="sdtot ${r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5 ? 'neg' : ''}">${r.ret.src === 'saisi' ? num(Math.round(r.sum * 10) / 10) + ' %' : '<small class="na">indicatif</small>'}</td><td>${canEdit ? `<button type="button" class="sdfill" data-ex-split-fill="${esc(r.x.vehicle)}" title="Recopier la proposition indicative dans les cases">↤</button>` : ''}</td></tr>`;
+  const row = r => `<tr><td class="prod sdname">${esc(r.x.vehicle)}${r.x.merged && r.x.merged.length ? ` <small class="na">+ ${esc(r.x.merged.join(', '))}</small>` : ''}</td><td class="sdcost">${eur(r.x.total)}</td>${cell(r)}<td class="sdtot ${r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5 ? 'neg' : ''}">${r.ret.src === 'saisi' ? num(Math.round(r.sum * 10) / 10) + ' %' : '<small class="na">indicatif</small>'}</td><td>${canEdit && r.x.base ? `<button type="button" class="sdfill" data-ex-split-gen="${esc(r.x.vehicle)}" title="${r.x.forced ? 'C’est un véhicule : le ressortir des frais généraux' : 'Ce n’est pas un véhicule : classer en frais généraux'}">${r.x.forced ? '↥ véhicule' : '↧ frais gén.'}</button> ` : ''}${canEdit ? `<button type="button" class="sdfill" data-ex-split-fill="${esc(r.x.vehicle)}" title="Recopier la proposition indicative dans les cases">↤</button>` : ''}</td></tr>`;
   const head = ['Véhicule', 'Coût'].map(h => `<th rowspan="2">${h}</th>`).join('') + EX_SPLIT.map(([, l]) => `<th colspan="2" class="grp">${l}</th>`).join('') + '<th rowspan="2">Total saisi</th><th rowspan="2"></th>';
   const sub = EX_SPLIT.map(() => '<th class="sdsub">Indic.</th><th class="sdsub">Retenu</th>').join('');
   const sect = t => `<tr class="grp"><td colspan="${EX_SPLIT.length * 2 + 4}"><strong>${t}</strong></td></tr>`;
@@ -438,16 +439,18 @@ function exFillSplit(veh) {
 }
 document.addEventListener('click', async e => {
   const f = e.target.closest('button'); if (f && ex.vsplit && f.dataset.exSplitFill !== undefined) { exFillSplit(f.dataset.exSplitFill); exDrawSplit(); return; }
+  if (f && ex.vsplit && f.dataset.exSplitGen !== undefined) { const n = f.dataset.exSplitGen, cur = (ex.general || ex.vsplit.general_vehicles || []).slice(), i = cur.findIndex(y => y.toLowerCase() === n.toLowerCase()); if (i >= 0) cur.splice(i, 1); else cur.push(n);
+    ex.general = cur; if (ex.split && ex.split[n]) delete ex.split[n]; else if (!ex.split && (ex.vsplit.split || {})[n]) { ex.split = JSON.parse(JSON.stringify(ex.vsplit.split)); delete ex.split[n]; } ex.splitDirty = true; ex.splitMsg = ''; exDrawSplit(); return; }
   if (f && ex.vsplit && f.dataset.exSplitFillall !== undefined) { const cur = ex.split || ex.vsplit.split || {}; ex.vsplit.vehicles.forEach(x => { if (!cur[x.vehicle] || !Object.keys(cur[x.vehicle]).length) exFillSplit(x.vehicle); }); exDrawSplit(); return; }
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t || t.dataset.exSplitSave === undefined || !ex.vsplit) return;
   ex.splitMsg = 'Enregistrement…'; exDrawSplit();
   try {
-    const r = await fetch('/api/expenses/split', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({split: ex.split || ex.vsplit.split || {}, base: ex.vsplit.links_base})});
+    const r = await fetch('/api/expenses/split', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({split: ex.split || ex.vsplit.split || {}, general: ex.general || ex.vsplit.general_vehicles || [], base: ex.vsplit.links_base})});
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
-    ex.vsplit.split = j.split; ex.vsplit.links_base = j.updated_at; ex.split = JSON.parse(JSON.stringify(j.split)); ex.splitDirty = false; ex.splitMsg = 'Enregistré.';
+    ex.vsplit.split = j.split; ex.vsplit.general_vehicles = j.general_vehicles; ex.general = j.general_vehicles.slice(); ex.vsplit.links_base = j.updated_at; ex.split = JSON.parse(JSON.stringify(j.split)); ex.splitDirty = false; ex.splitMsg = 'Enregistré.';
   } catch (err) { ex.splitMsg = 'Échec de l’enregistrement : ' + err.message; }
   exDrawSplit();
 });

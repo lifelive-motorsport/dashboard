@@ -27,6 +27,7 @@ class Config(BaseModel):
     plates: dict[str, str] = Field(default_factory=dict)                                           # plaque (sans tiret, majuscules) -> libellé du véhicule de service (carte carburant)
     links: dict[str, str] = Field(default_factory=dict)                                            # véhicule tel que nommé dans Odoo (compte 615) -> ressource de l'agenda Google
     split: dict[str, dict[str, float]] = Field(default_factory=dict)                               # véhicule -> {XC|MODERN_RALLY|HISTORIC_RALLY|HISTORIC_RACING|GENERAL: % retenu} ; absent = proposition indicative
+    general_vehicles: list[str] = Field(default_factory=list)                                      # « véhicules » des comptes 615 qui sont en fait des frais généraux (BMW X5, machines…)
     key_mode: Literal["revenue", "pct"] = "revenue"                                                # clé d'imputation XC / CARS : prorata du CA, ou % encodé
     xc_pct: float = Field(default=50.0, ge=0, le=100)                                              # part XC en % pour la clé « pct » (CARS = le reste)
 
@@ -58,6 +59,13 @@ class Config(BaseModel):
                 raise ValueError("fournisseur ou compte invalide")
         return v
 
+
+    @field_validator("general_vehicles")
+    @classmethod
+    def _general(cls, v):
+        if len(v) > 200 or any(not n.strip() or len(n) > 120 for n in v):
+            raise ValueError("véhicule invalide")
+        return sorted({n.strip() for n in v})
 
     @field_validator("split")
     @classmethod
@@ -93,6 +101,7 @@ def is_identified(vehicle: str) -> bool:
 
 class SplitBody(BaseModel):
     split: dict[str, dict[str, float]]
+    general: list[str] | None = None
     base: str | None = None
 
 
@@ -364,7 +373,8 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
     order = [t for t, _ in sorted(types.items(), key=lambda kv: -kv[1])]
     return {"year": year, "total": round(total, 2), "types": order, "type_totals": {t: round(types[t], 2) for t in order},
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
-                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []), "identified": is_identified(d["vehicle"]),
+                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []), "identified": is_identified(d["vehicle"]) and d["vehicle"].casefold() not in {n.casefold() for n in config.get("general_vehicles") or []},
+                          "forced_general": d["vehicle"].casefold() in {n.casefold() for n in config.get("general_vehicles") or []},
                           "by_month": {t: {m: round(x, 2) for m, x in bm.items()} for t, bm in d["by_month"].items()}} for d in sorted(veh.values(), key=lambda d: -d["total"])],
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved")),
             "reconciliation": vehicle_reconciliation(lines, config, total) if scope == "all615" else None}

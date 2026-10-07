@@ -205,3 +205,10 @@ def test_vehicle_reconciliation_accounts_for_every_euro():
     r = out["reconciliation"]
     assert r["total"] == 200.0 and r["old"] == 40.0 and r["included"] == 160.0 and r["gap"] == 0.0
     assert [a["code"] for a in r["also_general"]] == ["615300"]
+
+
+def test_general_vehicles_are_not_identified():
+    lines = [{"code": "615100", "name": "Assurance Quad Kodiak", "total": 50.0, "by_month": {}}, {"code": "615101", "name": "Taxes BMW X5", "total": 20.0, "by_month": {}}]
+    out = expenses.vehicles_view(lines, {"saved": True, "selected": {}, "general_vehicles": ["bmw x5"]}, 2026, "all615")
+    by = {v["vehicle"]: v for v in out["vehicles"]}
+    assert by["BMW X5"]["identified"] is False and by["BMW X5"]["forced_general"] is True and by["Quad Kodiak"]["identified"] is True

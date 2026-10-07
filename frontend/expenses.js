@@ -28,9 +28,21 @@ async function exLoadGeneral(kind = 'general') {
 
 async function exLoadVehicles() {
   try { ex.veh = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}`); ex.vehErr = null; } catch (e) { ex.vehErr = e.message; }
+  try { ex.vusage = (await exGet(`/api/vehicles/usage?year=${EX_YEAR}`)); } catch (e) { ex.vusage = null; }
 }
 function vehiclesByBlocks() {
   return [{static: '<section class="block" data-bid="veh-by"><div class="block-head"><h3>Coût par véhicule de service</h3></div><div class="block-body" id="exp-vehicles"><p class="na">Chargement…</p></div></section>'}];
+}
+// Imputation du coût de chaque véhicule aux BU, au prorata de ses jours de déplacement dans les agendas (une réservation = une BU ; Logistics à part).
+function exVehicleByBu(v) {
+  const cal = ex.vusage; if (!cal || !cal.configured) return `<h4 class="sub">Imputation par BU</h4><p class="na">${esc((cal && cal.note) || 'Agenda indisponible : l’imputation par BU se base sur les réservations des véhicules.')}</p>`;
+  if (cal.error) return `<h4 class="sub">Imputation par BU</h4><p class="neg">${esc(cal.error)}</p>`;
+  const rows = v.vehicles.map(x => { const sh = exBuShares(exMatchUsage(cal.usage, x.vehicle)), has = Object.keys(sh).length; return {x, sh, has}; });
+  const tot = k => rows.reduce((t, r) => t + (r.sh[k] ? r.x.total * r.sh[k] : 0), 0), nr = rows.reduce((t, r) => t + (r.has ? 0 : r.x.total), 0);
+  return '<h4 class="sub">Imputation par BU (jours de déplacement de l’agenda)</h4>' + table(['Véhicule', 'Total'].concat(EX_BUS.map(b => b[1]), ['Sans réservation']),
+    rows.map(r => `<tr><td class="prod">${esc(r.x.vehicle)}</td><td>${eur(r.x.total)}</td>${EX_BUS.map(([k]) => `<td>${r.sh[k] ? eur(r.x.total * r.sh[k]) : '–'}</td>`).join('')}<td>${r.has ? '–' : eur(r.x.total)}</td></tr>`)
+      .concat([`<tr class="tot"><td>Total</td><td>${eur(v.total)}</td>${EX_BUS.map(([k]) => `<td>${eur(tot(k))}</td>`).join('')}<td>${eur(nr)}</td></tr>`]), 'prodtable')
+    + `<small class="na">Le coût de chaque véhicule est réparti selon ses jours de déplacement (réservation ± ${cal.buffer_days} jours) dans l’agenda de chaque BU. « Sans réservation » : véhicule absent de l’agenda sur la période, ou dont le nom ne ressemble à aucune ressource. Logistics (transports, enlèvements) reste à répartir entre les BU.</small>`;
 }
 function exDrawVehicles() {
   const el = document.getElementById('exp-vehicles'); if (!el) return;
@@ -41,6 +53,7 @@ function exDrawVehicles() {
     <td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, x.share) * 100)}%"></span><span>${pct(x.share)}</span></td></tr>`);
   el.innerHTML = `<div class="kpis">${kpi('Véhicules de service depuis le 1er janvier', eur(v.total), '', v.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Véhicules', num(v.vehicles.filter(x => x.vehicle !== '(non classé)').length), '', 'avec au moins une charge')}</div>`
     + table(['Véhicule'].concat(v.types, ['Total', 'Part']), rows.concat([`<tr class="tot"><td>Total</td>${v.types.map(t => `<td>${eur(v.type_totals[t])}</td>`).join('')}<td>${eur(v.total)}</td><td>100,0 %</td></tr>`]), 'prodtable')
+    + exVehicleByBu(v)
     + '<small class="na">Chaque compte de la classe 615 est un véhicule et une nature de dépense (libellé « Nature Util. Véhicule », par exemple « Carburant Util. CITAN »). Le carburant est à contrôler : voir la rubrique Carburant.</small>';
 }
 
@@ -51,19 +64,23 @@ async function exLoadFuel() {
 function fuelBlocks() {
   return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na">Chargement…</p></div></section>'}];
 }
+const EX_BUS = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['LOGISTICS', 'Logistics']];
+const exMatchUsage = (usage, veh) => (usage || []).find(u => { const a = exNorm(u.vehicle), b = exNorm(veh); return b !== '(non classe)' && (a.includes(b) || b.includes(a)); });
+// Part de chaque BU dans les jours de déplacement d'un véhicule (agenda) : {BU: part}, somme = 1 ; vide si le véhicule n'a aucune réservation.
+const exBuShares = u => { if (!u || !u.away_days) return {}; const t = Object.values(u.away_by_bu || {}).reduce((a, b) => a + b, 0) || 1; return Object.fromEntries(Object.entries(u.away_by_bu).map(([k, v]) => [k, v / t])); };
 const exNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 function exDrawFuel() {
   const el = document.getElementById('exp-fuel'); if (!el) return;
   if (ex.fuelErr) { el.innerHTML = `<p class="neg">${esc(ex.fuelErr)}</p>`; return; }
   const f = ex.fuel; if (!f) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
   const cal = f.calendar || {}, usage = cal.usage || [];
-  const match = veh => usage.find(u => { const a = exNorm(u.vehicle), b = exNorm(veh); return b !== '(non classe)' && (a.includes(b) || b.includes(a)); });
+  const match = veh => exMatchUsage(usage, veh);
   // 1. Carburant encodé dans Odoo, par véhicule, rapproché des jours de réservation de l'agenda
   const fuelBy = ex.veh ? ex.veh.vehicles.filter(v => v.types.Carburant).map(v => ({vehicle: v.vehicle, fuel: v.types.Carburant, u: match(v.vehicle)})) : [];
   const tfuel = fuelBy.reduce((t, x) => t + x.fuel, 0);
-  const sec1 = '<h4 class="sub">1. Carburant tel qu’encodé dans Odoo (comptes 615, nature « Carburant »)</h4>' + (fuelBy.length ? table(['Véhicule', 'Carburant depuis le 1er janvier', 'Part', 'Jours de déplacement (agenda)', 'Carburant par jour de déplacement'],
-      fuelBy.sort((a, b) => b.fuel - a.fuel).map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.u ? ` <small class="na">≈ ${esc(x.u.vehicle)}</small>` : ''}</td><td>${eur(x.fuel)}</td><td>${tfuel ? pct(x.fuel / tfuel) : '–'}</td><td>${x.u ? num(x.u.away_days) : '–'}</td><td>${x.u && x.u.away_days ? eur(x.fuel / x.u.away_days) : '–'}</td></tr>`)
-        .concat([`<tr class="tot"><td>Total</td><td>${eur(tfuel)}</td><td>100,0 %</td><td></td><td></td></tr>`]), 'prodtable')
+  const sec1 = '<h4 class="sub">1. Carburant tel qu’encodé dans Odoo (comptes 615, nature « Carburant »)</h4>' + (fuelBy.length ? table(['Véhicule', 'Carburant depuis le 1er janvier', 'Part', 'Jours de déplacement (agenda)', 'Carburant par jour de déplacement'].concat(EX_BUS.map(b => b[1])),
+      fuelBy.sort((a, b) => b.fuel - a.fuel).map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.u ? ` <small class="na">≈ ${esc(x.u.vehicle)}</small>` : ''}</td><td>${eur(x.fuel)}</td><td>${tfuel ? pct(x.fuel / tfuel) : '–'}</td><td>${x.u ? num(x.u.away_days) : '–'}</td><td>${x.u && x.u.away_days ? eur(x.fuel / x.u.away_days) : '–'}</td>${EX_BUS.map(([k]) => `<td>${exBuShares(x.u)[k] ? eur(x.fuel * exBuShares(x.u)[k]) : '–'}</td>`).join('')}</tr>`)
+        .concat([`<tr class="tot"><td>Total</td><td>${eur(tfuel)}</td><td>100,0 %</td><td></td><td></td>${EX_BUS.map(([k]) => `<td>${eur(fuelBy.reduce((t, x) => t + x.fuel * (exBuShares(x.u)[k] || 0), 0))}</td>`).join('')}</tr>`]), 'prodtable')
       + '<small class="na">Rapprochement indicatif par ressemblance de nom entre le véhicule du compte et la ressource de l’agenda.</small>' : '<p class="na">Aucun compte de nature « Carburant » parmi les véhicules de service (voir « Par véhicule »).</p>');
   // 2. Factures de la carte carburant
   const sumHt = f.invoices.reduce((t, i) => t + i.untaxed, 0), sum615 = f.invoices.reduce((t, i) => t + i.lines.reduce((u, l) => u + l.amount, 0), 0);
@@ -78,9 +95,9 @@ function exDrawFuel() {
   let sec3 = '<h4 class="sub">3. Réservations des véhicules dans l’agenda Google</h4>';
   if (!cal.configured) sec3 += `<p class="na">${esc(cal.note || 'Agenda non configuré.')}</p>`;
   else if (cal.error) sec3 += `<p class="neg">${esc(cal.error)}</p>`;
-  else sec3 += usage.length ? table(['Ressource (véhicule)', 'Réservations', 'Jours réservés', `Jours de déplacement (± ${cal.buffer_days} j)`, 'Derniers événements'],
-      usage.map(u => `<tr><td class="prod">${esc(u.vehicle)}</td><td>${num(u.events)}</td><td>${num(u.booked_days)}</td><td>${num(u.away_days)}</td><td class="prod"><small class="na">${u.list.slice(-3).map(e => esc(e.title) + ' (' + fmtDate(e.start) + (e.end !== e.start ? ' → ' + fmtDate(e.end) : '') + ')').join('<br>')}</small></td></tr>`), 'prodtable')
-      + `<small class="na">Un véhicule est « en déplacement » de ${cal.buffer_days} jours avant à ${cal.buffer_days} jours après sa réservation : le carburant de ces jours se rattache à l’événement. </small>` : '<p class="na">Aucun événement avec une ressource véhicule trouvé sur la période.</p>';
+  else sec3 += (cal.calendars && cal.calendars.length ? `<small class="na">Agendas lus : ${cal.calendars.map(c => esc(c.label)).join(', ')}.</small>` : '') + (usage.length ? table(['Ressource (véhicule)', 'Réservations', 'Jours réservés', `Jours de déplacement (± ${cal.buffer_days} j)`].concat(EX_BUS.map(b => b[1]), ['Derniers événements']),
+      usage.map(u => `<tr><td class="prod">${esc(u.vehicle)}</td><td>${num(u.events)}</td><td>${num(u.booked_days)}</td><td>${num(u.away_days)}</td>${EX_BUS.map(([k]) => `<td>${(u.away_by_bu || {})[k] ? num(u.away_by_bu[k]) : '–'}</td>`).join('')}<td class="prod"><small class="na">${u.list.slice(-3).map(e => esc(e.title) + ' (' + fmtDate(e.start) + (e.end !== e.start ? ' → ' + fmtDate(e.end) : '') + ')').join('<br>')}</small></td></tr>`), 'prodtable')
+      + `<small class="na">Un véhicule est « en déplacement » de ${cal.buffer_days} jours avant à ${cal.buffer_days} jours après sa réservation : le carburant de ces jours se rattache à l’événement. </small>` : '<p class="na">Aucun événement avec une ressource véhicule trouvé sur la période.</p>');
   el.innerHTML = sec1 + sec2 + sec3
     + '<small class="na">Le contrôle croisé (carburant DKV par carte ou plaque, véhicule réservé à la date) se branche une fois l’analyse des lignes de transaction calibrée sur une facture réelle : utilisez « Texte extrait » pour vérifier ce que l’application lit dans la pièce jointe.</small>';
 }

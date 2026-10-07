@@ -67,3 +67,13 @@ def test_fuel_api_in_demo_and_attachment_is_admin_only(monkeypatch):
         assert r["candidate_lines"] and "Diesel" in r["text"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_calendars_label_gives_the_bu_and_usage_splits_days_per_bu(monkeypatch):
+    monkeypatch.setattr(gcal.settings, "CALENDAR_IDS", ["Historic Racing=c_a@group.calendar.google.com", "Logistics=c_b@group.calendar.google.com", "XC=c_c@group.calendar.google.com", "c_d@x.be"])
+    assert [(c, b) for c, _l, b in gcal.calendars()] == [("c_a@group.calendar.google.com", "HISTORIC_RACING"), ("c_b@group.calendar.google.com", "LOGISTICS"), ("c_c@group.calendar.google.com", "XC"), ("c_d@x.be", "OTHER")]
+    evs = [{"title": "Spa", "start": "2026-06-10", "end": "2026-06-11", "resources": ["Sprinter"], "bu": "HISTORIC_RACING"},
+           {"title": "Enlèvement", "start": "2026-06-11", "end": "2026-06-11", "resources": ["Sprinter"], "bu": "LOGISTICS"}]
+    u = gcal.usage(evs, 0)[0]
+    assert u["booked_days"] == 2 and u["booked_by_bu"] == {"HISTORIC_RACING": 1.5, "LOGISTICS": 0.5}          # le 11 juin est partagé à parts égales
+    assert round(sum(u["away_by_bu"].values()), 2) == u["away_days"]

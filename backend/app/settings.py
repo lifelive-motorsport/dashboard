@@ -1,4 +1,5 @@
 import os
+import re
 
 
 def _list(name: str) -> list[str]:
@@ -81,7 +82,7 @@ STAFF_PAY_PREFIXES = [x.strip() for x in os.getenv("STAFF_PAY_PREFIXES", "620,62
 
 # Google Agenda (lecture seule) : réservations des véhicules (ressources) sur les événements de course. Compte de service du dashboard à inviter en lecture
 # sur les agendas listés ; sans CALENDAR_SERVICE_ACCOUNT on réutilise GA_SERVICE_ACCOUNT (usurpation de compte de service, aucune clé stockée).
-CALENDAR_IDS = [x.strip() for x in os.getenv("CALENDAR_IDS", "").split(",") if x.strip()]            # agendas où sont créés les événements de course (adresses d'agenda)
+CALENDAR_IDS = [x.strip() for x in re.split(r"[|;,]", os.getenv("CALENDAR_IDS", "")) if x.strip()]    # agendas où sont créés les événements : « Libellé=adresse » (libellé = BU : XC, Modern Rally, Historic Rally, Historic Racing, Logistics), séparés par « | »
 CALENDAR_SERVICE_ACCOUNT = os.getenv("CALENDAR_SERVICE_ACCOUNT", "") or GA_SERVICE_ACCOUNT
 CALENDAR_VEHICLE_REGEX = os.getenv("CALENDAR_VEHICLE_REGEX", "")                                       # ne garder que les ressources dont le nom correspond (vide : toutes les ressources)
 FUEL_SUPPLIER_NAME = os.getenv("FUEL_SUPPLIER_NAME", "DKV Euro Service")                               # fournisseur des cartes carburant (recherche par nom)

@@ -176,7 +176,13 @@ def _calendar(d_from: date, d_to: date) -> dict:
         except Exception as e:
             log.exception("Google Agenda indisponible")
             return {"configured": True, "error": str(e)[:300]}
-    return {"configured": True, "buffer_days": settings.FUEL_BUFFER_DAYS, "events": len(evs), "usage": gcal.usage(evs, settings.FUEL_BUFFER_DAYS)}
+    return {"configured": True, "buffer_days": settings.FUEL_BUFFER_DAYS, "events": len(evs), "usage": gcal.usage(evs, settings.FUEL_BUFFER_DAYS), "calendars": [{"label": l or c[:12], "bu": b} for c, l, b in gcal.calendars()] if settings.PROVIDER != "demo" else []}
+
+
+@app.get("/api/vehicles/usage")
+def vehicles_usage(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
+    today = date.today()
+    return _calendar(date(year, 1, 1), today if year == today.year else date(year, 12, 31))
 
 
 @app.get("/api/fuel")

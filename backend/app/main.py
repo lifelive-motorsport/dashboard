@@ -6,10 +6,10 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, ga, settings
+from . import adjustments, ga, settings, staff
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -125,6 +125,95 @@ def stock(refresh: bool = False, _user: str = Depends(require_user)):
         raise HTTPException(502, "Stock momentanément indisponible")
     _stock_cache["s"] = (time.time(), data)
     return data
+
+
+def admin(user: str = Depends(require_user)) -> str:
+    """Données du personnel : réservées aux administrateurs (ADMIN_EMAILS)."""
+    if not adjustments.can_edit(user):
+        raise HTTPException(403, "Réservé aux administrateurs du dashboard")
+    return user
+
+
+@app.get("/api/staff")
+def get_staff(user: str = Depends(require_user)):
+    if not adjustments.can_edit(user):
+        return {"restricted": True, "can_edit": False}
+    try:
+        doc = staff.store().get()
+    except Exception:
+        log.exception("Lecture des données du personnel impossible")
+        raise HTTPException(503, "Stockage des données du personnel inaccessible")
+    return {**doc, "can_edit": True, "upload": staff.files().enabled, "pay_prefixes": settings.STAFF_PAY_PREFIXES}
+
+
+@app.put("/api/staff")
+def put_staff(body: staff.SaveBody, user: str = Depends(admin)):
+    try:
+        doc = staff.store().put(body.data.model_dump(), user, body.base)
+    except Exception:
+        log.exception("Enregistrement des données du personnel impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {**doc, "can_edit": True}
+
+
+@app.put("/api/staff/payslip")
+async def put_payslip(request: Request, person: str, month: str, _user: str = Depends(admin)):
+    if not staff.files().enabled:
+        raise HTTPException(503, "Dépôt de fiches de paie non configuré (variable STAFF_BUCKET)")
+    content = await request.body()
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "Fichier trop volumineux (8 Mo maximum)")
+    if not content.startswith(b"%PDF"):
+        raise HTTPException(415, "Seuls les fichiers PDF sont acceptés")
+    try:
+        staff.files().put(person, month, content)
+    except ValueError:
+        raise HTTPException(422, "Personne ou mois invalide")
+    return {"size": len(content), "uploaded_at": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/api/staff/payslip")
+def get_payslip(person: str, month: str, _user: str = Depends(admin)):
+    try:
+        content = staff.files().get(person, month)
+    except ValueError:
+        raise HTTPException(422, "Personne ou mois invalide")
+    if content is None:
+        raise HTTPException(404, "Fiche introuvable")
+    return RawResponse(content, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="fiche-{month}.pdf"', "Cache-Control": "no-store"})
+
+
+@app.get("/api/staff/accounting")
+def staff_accounting(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(admin)):
+    try:
+        return provider().staff_accounting(year)
+    except Exception:
+        log.exception("Charges de personnel indisponibles")
+        return {"unavailable": "Données comptables momentanément indisponibles."}
+
+
+@app.get("/api/staff/partners")
+def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(admin)):
+    try:
+        return {"partners": provider().staff_partners(q)}
+    except Exception:
+        log.exception("Recherche de sociétés impossible")
+        return {"partners": [], "unavailable": "Recherche momentanément indisponible."}
+
+
+@app.get("/api/staff/invoices")
+def staff_invoices(ids: str = Query(..., max_length=200), year: int = Query(..., ge=2000, le=2100), _user: str = Depends(admin)):
+    try:
+        pids = [int(x) for x in ids.split(",") if x.strip()][:20]
+    except ValueError:
+        raise HTTPException(422, "Identifiants invalides")
+    try:
+        return {"invoices": provider().staff_invoices(pids, year)}
+    except Exception:
+        log.exception("Factures des indépendants indisponibles")
+        return {"invoices": [], "unavailable": "Factures momentanément indisponibles."}
 
 
 @app.get("/api/adjustments")

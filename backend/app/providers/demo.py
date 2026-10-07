@@ -113,6 +113,21 @@ class DemoProvider:
         return {"invest_tag": "invest marketing", "tags": [{"name": "regroup_client=Koramic / C.Dumolin", "kind": "client", "count": 3},
                 {"name": "regroup_fournisseur=Pirelli", "kind": "fournisseur", "count": 2}, {"name": "invest marketing", "kind": "invest", "count": 1}]}
 
+    def staff_accounting(self, year: int) -> dict:
+        months = [f"{year}-{m:02d}" for m in range(1, 10)]
+        pay = {m: 9000 + 100 * i for i, m in enumerate(months)}
+        other = {m: 1200 for m in months}
+        acc = [{"code": "620000", "name": "Rémunérations", "pay": True, "by_month": {m: round(v * .75) for m, v in pay.items()}, "total": round(sum(pay.values()) * .75)},
+               {"code": "621000", "name": "Cotisations patronales", "pay": True, "by_month": {m: round(v * .25) for m, v in pay.items()}, "total": round(sum(pay.values()) * .25)},
+               {"code": "623000", "name": "Autres frais de personnel", "pay": False, "by_month": other, "total": sum(other.values())}]
+        return {"year": year, "pay_prefixes": ["620", "621"], "accounts": acc, "pay_by_month": pay, "other_by_month": other}
+
+    def staff_partners(self, q: str) -> list[dict]:
+        return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]
+
+    def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
+        return [{"number": f"FACTU/{year}/0{i}", "ref": f"F{i}", "date": f"{year}-0{i}-15", "untaxed": 4500.0, "total": 5445.0, "paid": i < 4, "partner": "Société exemple SRL", "refund": False} for i in range(1, 6)]
+
     def stock_report(self) -> dict:
         from ..stock import build_report
         rnd = random.Random(5)

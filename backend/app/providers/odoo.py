@@ -512,6 +512,54 @@ class OdooProvider:
                 out.append({"name": name, "kind": kind, "count": counts.get(cid, 0)})
         return {"tags": sorted(out, key=lambda t: (t["kind"], t["name"].lower())), "invest_tag": settings.MARKETING_INVEST_TAG}
 
+    # ---- Personnel : données comptables pour contrôler les fiches de paie, sociétés d'indépendants ---------------------
+    def staff_accounting(self, year: int) -> dict:
+        """Charges de personnel (comptes 62…) par mois et par compte sur l'année ; la part « rémunération » (STAFF_PAY_PREFIXES, par défaut
+        620 et 621) sert à contrôler les fiches de paie. Lecture seule."""
+        lines = self._call("account.move.line", "search_read",
+                           domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"),
+                                   ("account_id.code", "=like", "62%")], fields=["date", "balance", "account_id"])
+        accounts: dict[str, dict] = {}
+        pay: dict[str, float] = {}
+        other: dict[str, float] = {}
+        for ln in lines:
+            code, name = self._code_name(ln["account_id"][1])
+            code = code or ""
+            m = str(ln["date"])[:7]
+            amt = float(ln["balance"] or 0.0)
+            a = accounts.setdefault(code, {"code": code, "name": name, "pay": any(code.startswith(x) for x in settings.STAFF_PAY_PREFIXES), "by_month": {}, "total": 0.0})
+            a["by_month"][m] = a["by_month"].get(m, 0.0) + amt
+            a["total"] += amt
+            tgt = pay if a["pay"] else other
+            tgt[m] = tgt.get(m, 0.0) + amt
+        return {"year": year, "pay_prefixes": settings.STAFF_PAY_PREFIXES,
+                "accounts": [{**a, "total": round(a["total"]), "by_month": {m: round(v) for m, v in a["by_month"].items()}} for a in sorted(accounts.values(), key=lambda a: a["code"])],
+                "pay_by_month": {m: round(v) for m, v in sorted(pay.items())}, "other_by_month": {m: round(v) for m, v in sorted(other.items())}}
+
+    def staff_partners(self, q: str) -> list[dict]:
+        """Sociétés Odoo dont le nom contient `q` (pour rattacher un indépendant)."""
+        rows = self._call("res.partner", "search_read", domain=[("is_company", "=", True), ("name", "ilike", q.strip())],
+                          fields=["name", "vat", "city"], limit=20, order="name")
+        return [{"id": r["id"], "name": r["name"], "vat": r.get("vat") or "", "city": r.get("city") or ""} for r in rows]
+
+    def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
+        """Factures et avoirs fournisseurs comptabilisés des sociétés données (et de leurs contacts) sur l'année."""
+        if not partner_ids:
+            return []
+        rows = self._call("account.move", "search_read",
+                          domain=[("move_type", "in", ["in_invoice", "in_refund"]), ("state", "=", "posted"), ("commercial_partner_id", "in", partner_ids),
+                                  ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")],
+                          fields=["name", "ref", "invoice_date", "date", "amount_untaxed", "amount_total", "payment_state", "move_type", "commercial_partner_id"],
+                          order="date desc", limit=500)
+        out = []
+        for r in rows:
+            sign = -1 if r["move_type"] == "in_refund" else 1
+            out.append({"number": r["name"], "ref": r.get("ref") or "", "date": str(r.get("invoice_date") or r["date"]),
+                        "untaxed": round(sign * float(r["amount_untaxed"] or 0), 2), "total": round(sign * float(r["amount_total"] or 0), 2),
+                        "paid": r.get("payment_state") in ("paid", "in_payment"), "partner": (r.get("commercial_partner_id") or [0, ""])[1],
+                        "refund": sign < 0})
+        return out
+
     # ---- Stock : valorisation au coût moyen -------------------------------------------------------------------------
     def _pif_field(self) -> str | None:
         """Champ « code PIF » des articles : STOCK_PIF_FIELD, sinon détecté (champ texte/sélection dont le nom ou le libellé contient « PIF »)."""

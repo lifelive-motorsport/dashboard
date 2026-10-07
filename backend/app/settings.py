@@ -69,3 +69,7 @@ MARKETING_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_ACCOUNTS", "602019
 MARKETING_INVEST_ACCOUNTS = [x.strip() for x in os.getenv("MARKETING_INVEST_ACCOUNTS", "240050").split(",") if x.strip()]   # comptes INVEST des investissements marketing
 MARKETING_INVEST_KEYWORDS = [x.strip().lower() for x in os.getenv("MARKETING_INVEST_KEYWORDS", "graphique,social media,marketing,communication,publicité,photo,vidéo,video").split(",") if x.strip()]   # le compte INVEST contient aussi du matériel : seules les lignes dont le libellé contient un de ces mots sont des investissements marketing
 MARKETING_INVEST_TAG = os.getenv("MARKETING_INVEST_TAG", "invest marketing")   # étiquette de contact des fournisseurs dont les lignes INVEST sont des investissements marketing
+
+# Personnel : bucket Cloud Storage PRIVÉ des fiches de paie (PDF). Sans lui, le dépôt de fichiers est désactivé (les chiffres se saisissent à la main).
+STAFF_BUCKET = os.getenv("STAFF_BUCKET", "")
+STAFF_PAY_PREFIXES = [x.strip() for x in os.getenv("STAFF_PAY_PREFIXES", "620,621").split(",") if x.strip()]   # comptes comparés aux fiches de paie : rémunérations et cotisations patronales

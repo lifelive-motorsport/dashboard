@@ -140,3 +140,54 @@ def test_analytics_unconfigured_then_filters_and_buckets(monkeypatch):
     assert any(e["filter"]["fieldName"] == "pagePath" for e in flt)                                                           # chemin /shop pour le webshop
     site = [b for _, b in seen if "dimensionFilter" in b and len(b["dimensionFilter"]["andGroup"]["expressions"]) == 1]
     assert site                                                                                                              # site vitrine : hôte seul
+
+
+def _staff_app(monkeypatch, role):
+    import app.adjustments as adj
+    import app.main as m
+    import app.staff as st
+    monkeypatch.setattr(st, "_store", st.Store())
+    monkeypatch.setattr(st, "_files", st.Files())
+    monkeypatch.setattr(adj.settings, "AUTH_ENABLED", True)
+    monkeypatch.setattr(adj.settings, "ADMIN_EMAILS", ["md@x.be"])
+    app.dependency_overrides[m.require_user] = lambda: role
+    return st
+
+
+def test_staff_data_is_admin_only_and_conflicts_are_detected(monkeypatch):
+    st = _staff_app(monkeypatch, "actionnaire@x.be")
+    try:
+        assert c.get("/api/staff").json() == {"restricted": True, "can_edit": False}                      # aucune donnée pour un actionnaire
+        assert c.put("/api/staff", json={"data": {}, "base": None}).status_code == 403
+        assert c.get("/api/staff/accounting?year=2026").status_code == 403 and c.get("/api/staff/payslip?person=a&month=2026-01").status_code == 403
+        import app.main as m
+        app.dependency_overrides[m.require_user] = lambda: "md@x.be"
+        person = {"id": "p1", "name": "Alice", "kind": "salarie", "alloc": {"XC": 60, "SHARED": 40}, "payslips": [{"month": "2026-01", "brut": 3000}]}
+        r = c.put("/api/staff", json={"data": {"people": [person]}, "base": None})
+        assert r.status_code == 200 and r.json()["updated_by"] == "md@x.be"
+        got = c.get("/api/staff").json()
+        assert got["data"]["people"][0]["name"] == "Alice" and got["data"]["params"]["annual_factor"] == 13.92
+        assert c.put("/api/staff", json={"data": {"people": [person]}, "base": None}).status_code == 409        # base périmée
+        assert c.put("/api/staff", json={"data": {"people": [person]}, "base": got["updated_at"]}).status_code == 200
+        bad = {**person, "alloc": {"XC": 80, "SHARED": 40}}
+        assert c.put("/api/staff", json={"data": {"people": [bad]}, "base": None}).status_code == 422          # > 100 %
+        assert c.put("/api/staff", json={"data": {"people": [{**person, "alloc": {"AUTRE": 10}}]}, "base": None}).status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_payslip_upload_accepts_only_small_pdfs_and_roundtrips(monkeypatch):
+    _staff_app(monkeypatch, "md@x.be")
+    try:
+        monkeypatch.setattr("app.main.settings.PROVIDER", "demo")
+        r = c.put("/api/staff/payslip?person=p1&month=2026-01", content=b"%PDF-1.4 test")
+        assert r.status_code == 200 and r.json()["size"] == 13
+        assert c.get("/api/staff/payslip?person=p1&month=2026-01").content == b"%PDF-1.4 test"
+        assert c.put("/api/staff/payslip?person=p1&month=2026-01", content=b"MZ not a pdf").status_code == 415
+        assert c.put("/api/staff/payslip?person=../x&month=2026-01", content=b"%PDF").status_code == 422     # pas de traversée de dossier
+        assert c.put("/api/staff/payslip?person=p1&month=2026-13", content=b"%PDF").status_code == 422
+        assert c.get("/api/staff/payslip?person=p1&month=2025-05").status_code == 404
+        assert c.get("/api/staff/accounting?year=2026").json()["pay_prefixes"] == ["620", "621"]
+        assert c.get("/api/staff/invoices?ids=9001&year=2026").json()["invoices"]
+    finally:
+        app.dependency_overrides.clear()

@@ -164,6 +164,17 @@ def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query
     return expenses.kind_view(_expense_lines(year), expenses.store().get()["data"], year, kind)
 
 
+@app.get("/api/expenses/month")
+def expenses_month(month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), kind: str = Query("general", pattern="^(general|vehicle)$"), _user: str = Depends(require_user)):
+    """Plus grosses écritures d'un mois pour les comptes retenus (pour comprendre un pic mensuel)."""
+    try:
+        raw = provider().expenses_month(month)
+    except Exception:
+        log.exception("Détail mensuel des frais généraux indisponible")
+        raise HTTPException(503, "Détail du mois indisponible pour le moment")
+    return expenses.month_lines(raw, expenses.store().get()["data"], kind, month)
+
+
 @app.get("/api/expenses/allocation")
 def expenses_allocation(year: int = Query(..., ge=2000, le=2100), user: str = Depends(require_user)):
     """Frais généraux (rubrique « general ») imputés à XC et CARS selon les deux clés ; le CA est celui du 1er janvier à aujourd'hui."""

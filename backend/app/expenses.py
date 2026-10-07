@@ -201,3 +201,19 @@ def allocation_view(general: dict, ca_xc: float, ca_cars: float, config: dict) -
     return {"key_mode": cfg.key_mode, "xc_pct": cfg.xc_pct, "ca": {"XC": round(ca_xc, 2), "CARS": round(ca_cars, 2)}, "shares": keys, "amounts": amounts,
             "total": general["total"], "monthly_avg": general["monthly_avg"], "projected": general["projected"], "months": general["months"], "empty": general["empty"],
             "series": general["series"], "accounts": general["accounts"], "configured": general["configured"]}
+
+
+def month_lines(raw: list[dict], config: dict, kind: str, month: str, limit: int = 15) -> dict:
+    """Plus grosses écritures d'un mois sur les comptes retenus pour la rubrique `kind` (comptes entiers ou fournisseurs choisis)."""
+    sel = effective(config, sorted({r["code"] for r in raw if family(r["code"], r["name"]) == "candidate"}))
+    rules = config.get("partners") or {}
+    keep = []
+    for r in raw:
+        if family(r["code"], r["name"]) != "candidate":
+            continue
+        mode = sel.get(r["code"])
+        if mode == kind or (mode == "partners" and (rules.get(r["code"]) or {}).get(str(r.get("partner_id") or 0)) == kind):
+            keep.append(r)
+    total = sum(r["amount"] for r in keep)
+    top = sorted(keep, key=lambda r: -abs(r["amount"]))[:limit]
+    return {"month": month, "total": round(total, 2), "count": len(keep), "lines": [{k: (round(v, 2) if k == "amount" else v) for k, v in r.items() if k != "partner_id"} for r in top]}

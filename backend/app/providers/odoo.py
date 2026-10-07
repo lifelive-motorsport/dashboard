@@ -570,6 +570,22 @@ class OdooProvider:
             p["by_month"][m] = p["by_month"].get(m, 0.0) + amt
         return list(accs.values())
 
+    def expenses_month(self, month: str) -> list[dict]:
+        """Écritures de charges (classe 6) d'un mois AAAA-MM : date, pièce, fournisseur, compte, libellé, montant. Comptes « old » ignorés. Lecture seule."""
+        y, m = int(month[:4]), int(month[5:7])
+        end = date(y + (m == 12), 1 if m == 12 else m + 1, 1)
+        lines = self._call("account.move.line", "search_read",
+                           domain=[("parent_state", "=", "posted"), ("date", ">=", f"{month}-01"), ("date", "<", end.isoformat()), ("account_id.code", "=like", "6%")],
+                           fields=["date", "balance", "account_id", "partner_id", "move_id", "name"])
+        out = []
+        for ln in lines:
+            code, name = self._code_name(ln["account_id"][1])
+            if not code:
+                continue
+            out.append({"code": code, "name": name, "date": str(ln["date"])[:10], "amount": float(ln["balance"] or 0.0), "partner_id": (ln["partner_id"] or [0, ""])[0],
+                        "partner": (ln["partner_id"] or [0, ""])[1] or "(sans fournisseur)", "move": (ln["move_id"] or [0, ""])[1], "label": (ln.get("name") or "")[:120]})
+        return out
+
     def staff_partners(self, q: str) -> list[dict]:
         """Sociétés Odoo dont le nom contient `q` (pour rattacher un indépendant)."""
         rows = self._call("res.partner", "search_read", domain=[("is_company", "=", True), ("name", "ilike", q.strip())],

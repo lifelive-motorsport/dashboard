@@ -135,6 +135,12 @@ class DemoProvider:
                                      2: {"name": "ADC St-Vith (comptable)" if code == "613000" else "Fournisseur B", "amount": sum(by.values()) * 0.4, "by_month": {m: v * 0.4 for m, v in by.items()}}}})
         return out
 
+    def expenses_month(self, month: str) -> list[dict]:
+        rnd = random.Random(int(month[5:7]))
+        return [{"code": c, "name": n, "date": f"{month}-{rnd.randint(1, 28):02d}", "amount": round(rnd.random() * (30000 if c == "611010" and month.endswith("07") else 1500), 2), "partner_id": 1 + i % 2,
+                 "partner": "Fournisseur A" if i % 2 == 0 else "ADC St-Vith", "move": f"FACT/{month}/{i:04d}", "label": f"Facture {n}"}
+                for i, (c, n) in enumerate([("611010", "Loyer"), ("612000", "Électricité"), ("612010", "Fournitures"), ("614000", "Publicité"), ("640000", "Taxes")])]
+
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]
 

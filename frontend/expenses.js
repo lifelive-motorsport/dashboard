@@ -17,8 +17,13 @@ async function exLoadSource() {
     if (!ex.dirty) { ex.sel = Object.fromEntries(j.accounts.filter(a => a.kind).map(a => [a.code, a.kind])); ex.part = JSON.parse(JSON.stringify(j.partner_rules || {})); } }
   catch (e) { ex.err = e.message; }
 }
+async function exLoadMonth(m) {
+  ex.monthSel = m; ex.month = null;
+  try { ex.month = await exGet(`/api/expenses/month?month=${m}&kind=general`); ex.monthErr = null; } catch (e) { ex.monthErr = e.message; }
+}
 async function exLoadGeneral() {
-  try { ex.gen = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`); ex.genErr = null; } catch (e) { ex.genErr = e.message; }
+  try { ex.gen = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`); ex.genErr = null;
+    if (!ex.monthSel && ex.gen.series.length) { const top = ex.gen.series.slice().sort((a, b) => b.amount - a.amount)[0]; await exLoadMonth(top.month); } } catch (e) { ex.genErr = e.message; }
 }
 
 async function exLoadAlloc() {
@@ -73,6 +78,14 @@ function exDrawSource() {
     + '<small class="na">Choisissez, pour chaque compte de charges, s’il compte dans les frais généraux, dans les véhicules de service (menu Service Vehicles) ou s’il est laissé de côté. Les comptes « old » sont ignorés. Un compte qui mélange des natures différentes (par exemple un compte 640 qui contient aussi des taxes de véhicules) se range en entier dans une seule rubrique ; dites-le-moi si un compte doit être scindé.</small>';
 }
 
+// Détail d'un mois : mois choisi (par défaut le plus élevé) et ses plus grosses écritures, pour expliquer un pic.
+function exMonthBlock(g) {
+  const sel = `<select class="sdin" data-ex-month>${g.series.map(p => `<option value="${p.month}"${p.month === ex.monthSel ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
+  const m = ex.month;
+  const body = ex.monthErr ? `<p class="neg">${esc(ex.monthErr)}</p>` : !m ? '<p class="na">Chargement…</p>' : m.lines.length ? table(['Date', 'Pièce', 'Fournisseur', 'Compte', 'Libellé', 'Montant'], m.lines.map(l => `<tr><td>${fmtDate(l.date)}</td><td>${esc(l.move)}</td><td class="prod">${esc(l.partner)}</td><td>${esc(l.code)} <small class="na">${esc(l.name)}</small></td><td class="prod">${esc(l.label)}</td><td>${exEur2(l.amount)}</td></tr>`)
+      .concat([`<tr class="tot"><td colspan="5">Total du mois (${num(m.count)} écritures, dont les ${num(m.lines.length)} plus grosses ci-dessus)</td><td>${exEur2(m.total)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune écriture ce mois-ci.</p>';
+  return `<h4 class="sub">Détail d’un mois ${sel}</h4>${body}`;
+}
 function exDrawGeneral() {
   const el = document.getElementById('exp-general'); if (!el) return;
   if (ex.genErr) { el.innerHTML = `<p class="neg">${esc(ex.genErr)}</p>`; return; }
@@ -81,6 +94,7 @@ function exDrawGeneral() {
   const pts = g.series.map(p => ({label: exMonth(p.month), avg: p.amount, orders: 0, month: p.month}));
   el.innerHTML = `<div class="kpis">${kpi('Frais généraux depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `sur ${num(g.months)} mois`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
     + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, 'Frais généraux par mois (€)', v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
+    + exMonthBlock(g)
     + '<h4 class="sub">Par compte</h4>' + table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Part'], g.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.total)}</td><td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, a.share) * 100)}%"></span><span>${pct(a.share)}</span></td></tr>`)
         .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(g.total)}</td><td>100,0 %</td></tr>`]), 'prodtable')
     + '<h4 class="sub">Principaux fournisseurs</h4>' + (g.suppliers.length ? table(['Fournisseur', 'Depuis le 1er janvier', 'Part'], g.suppliers.map(s => `<tr><td class="prod">${esc(s.name)}</td><td>${eur(s.amount)}</td><td>${pct(s.share)}</td></tr>`), 'prodtable') : '<p class="na">Aucun fournisseur identifié sur ces écritures.</p>')
@@ -124,8 +138,9 @@ document.addEventListener('input', e => {
   ex.keyPct = Math.min(100, Math.max(0, parseFloat(el.value) || 0)); ex.keyDirty = true; ex.msg = '';
   const keep = el.selectionStart; exDrawRules(); const n = document.querySelector('[data-ex-xcpct]'); if (n) { n.focus(); try { n.setSelectionRange(keep, keep); } catch {} }
 });
-document.addEventListener('change', e => {
+document.addEventListener('change', async e => {
   const el = e.target;
+  if (el.dataset && el.dataset.exMonth !== undefined) { await exLoadMonth(el.value); exDrawGeneral(); return; }
   if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
     const code = el.dataset.exPart, m = ex.part[code] || (ex.part[code] = {});
     if (el.value) m[el.dataset.pid] = el.value; else delete m[el.dataset.pid];

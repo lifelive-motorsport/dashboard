@@ -99,3 +99,14 @@ def test_key_endpoint_is_admin_only_and_keeps_account_choices(monkeypatch):
         assert c.get("/api/expenses/allocation?year=2026").json()["xc_pct"] == 30
     finally:
         app.dependency_overrides.clear()
+
+
+def test_month_lines_keep_chosen_accounts_and_suppliers_and_rank_by_amount():
+    raw = [{"code": "611000", "name": "Entretien", "date": "2026-07-03", "amount": 20000.0, "partner_id": 1, "partner": "Bailleur", "move": "F1", "label": "Loyer annuel"},
+           {"code": "612000", "name": "Électricité", "date": "2026-07-10", "amount": 300.0, "partner_id": 2, "partner": "Elec", "move": "F2", "label": "x"},
+           {"code": "613000", "name": "Honoraires", "date": "2026-07-11", "amount": 900.0, "partner_id": 7, "partner": "ADC St-Vith", "move": "F3", "label": "Compta"},
+           {"code": "613000", "name": "Honoraires", "date": "2026-07-12", "amount": 4000.0, "partner_id": 8, "partner": "Indépendant X", "move": "F4", "label": "Prestation"},
+           {"code": "604010", "name": "Achats XC", "date": "2026-07-12", "amount": 99999.0, "partner_id": 9, "partner": "Z", "move": "F5", "label": "hors périmètre"}]
+    cfg = {"saved": True, "selected": {"611000": "general", "612000": "general", "613000": "partners"}, "partners": {"613000": {"7": "general"}}}
+    r = expenses.month_lines(raw, cfg, "general", "2026-07")
+    assert [l["move"] for l in r["lines"]] == ["F1", "F3", "F2"] and r["total"] == 21200 and r["count"] == 3

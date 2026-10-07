@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from app import expenses
@@ -29,7 +31,7 @@ def test_saved_selection_overrides_default_and_vehicles_are_separate():
     assert g["total"] == 5000 and [a["code"] for a in g["accounts"]] == ["613000"] and g["configured"]
     v = expenses.kind_view(LINES, cfg, 2026, "vehicle")
     assert v["total"] == 900 and v["series"] == [{"month": "2026-01", "amount": 400.0}, {"month": "2026-02", "amount": 500.0}]
-    d = expenses.kind_view(LINES, {"saved": False, "selected": {}}, 2026, "general")
+    d = expenses.kind_view(LINES, {"saved": False, "selected": {}}, 2026, "general", today=date(2026, 2, 28))
     assert d["total"] == 1500 and d["months"] == 2 and d["monthly_avg"] == 750 and d["projected"] == 9000 and [s["name"] for s in d["suppliers"]] == ["A", "B"]
 
 
@@ -145,3 +147,11 @@ def test_rent_account_is_excluded_from_general_expenses_and_listed_apart():
     assert expenses.accounts_view(lines, {}, 2026)["elsewhere"]["excluded"] == 21000
     x = expenses.excluded_view([{"code": "611010", "name": "Loyer Batiment", "date": "2026-07-31", "amount": 21000.0, "move": "DIV/2026/07/0001", "label": "Loyer 01-07/26"}])
     assert x["total"] == 21000 and x["moves"][0]["move"] == "DIV/2026/07/0001"
+
+
+def test_months_elapsed_include_the_fraction_of_the_current_month_and_smooth_lumpy_costs():
+    assert round(expenses.months_elapsed(2026, date(2026, 10, 7)), 2) == 9.23 and expenses.months_elapsed(2026, date(2026, 4, 30)) == 4.0
+    assert expenses.months_elapsed(2025, date(2026, 10, 7)) == 12.0
+    one_off = [{"code": "615014", "name": "Entretien Util. TRUCK", "total": 2000.0, "by_month": {"2026-03": 2000.0}, "partners": {}}]
+    assert expenses.kind_view(one_off, {"saved": True, "selected": {"615014": "vehicle"}}, 2026, "vehicle", today=date(2026, 4, 30))["monthly_avg"] == 500   # lissé sur 4 mois, pas 2000
+    assert expenses.accounts_view(one_off, {}, 2026, today=date(2026, 4, 30))["months_elapsed"] == 4.0

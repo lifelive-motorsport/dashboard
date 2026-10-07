@@ -5,9 +5,10 @@ Un compte de charges (classe 6) est : traité ailleurs (achats 60x par BU, perso
 ou candidat : à ranger en « frais généraux », en « véhicules de service » (menu dédié) ou à laisser de côté."""
 from __future__ import annotations
 
+import calendar
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -124,6 +125,17 @@ def effective(config: dict, codes) -> dict[str, str]:  # noqa: D401
     return {c: s for c in codes if (s := suggestion(c))}
 
 
+def months_elapsed(year: int, today: date | None = None) -> float:
+    """Mois écoulés depuis le 1er janvier jusqu'à aujourd'hui, avec la fraction du mois en cours (7 octobre = 9,2 mois) ; 12 pour une année passée.
+    Sert à lisser les charges irrégulières (une facture d'entretien) sur toute la période, et non sur les seuls mois où il y a une écriture."""
+    t = today or date.today()
+    if year < t.year:
+        return 12.0
+    if year > t.year:
+        return 1.0
+    return (t.month - 1) + t.day / calendar.monthrange(t.year, t.month)[1]
+
+
 def _month_series(accounts: list[dict]) -> list[dict]:
     m: dict[str, float] = {}
     for a in accounts:
@@ -150,7 +162,7 @@ def _for_kind(a: dict, sel: dict, config: dict, kind: str) -> dict | None:
     return {"code": a["code"], "name": a["name"], "total": sum(p["amount"] for p in ps.values()), "by_month": by_month, "partners": ps}
 
 
-def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
+def accounts_view(lines: list[dict], config: dict, year: int, today: date | None = None) -> dict:
     """Page « Données source » : comptes candidats avec leur rubrique, fournisseurs des comptes « selon le fournisseur » et totaux des familles traitées ailleurs."""
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
     sel = effective(config, [a["code"] for a in cand])
@@ -166,26 +178,26 @@ def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
         row["partners"] = [{"id": str(pid), "name": p["name"], "total": round(p["amount"], 2), "kind": rules.get(str(pid))}
                            for pid, p in sorted(a["partners"].items(), key=lambda kv: -abs(kv[1]["amount"]))[:80]]
         accounts.append(row)
-    return {"year": year, "saved": bool(config.get("saved")), "accounts": accounts,
+    return {"year": year, "saved": bool(config.get("saved")), "accounts": accounts, "months_elapsed": round(months_elapsed(year, today), 2),
             "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS, "excluded_accounts": settings.EXPENSES_EXCLUDED_ACCOUNTS, "vehicle_prefixes": settings.EXPENSES_VEHICLE_PREFIXES,
             "partner_rules": config.get("partners") or {}}
 
 
-def kind_view(lines: list[dict], config: dict, year: int, kind: str) -> dict:
+def kind_view(lines: list[dict], config: dict, year: int, kind: str, today: date | None = None) -> dict:
     """Résultat pour une rubrique (« general » ou « vehicle ») : total, évolution mensuelle, comptes, principaux fournisseurs."""
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
     sel = effective(config, [a["code"] for a in cand])
     mine = [x for a in cand if (x := _for_kind(a, sel, config, kind))]
     series = _month_series(mine)
     total = sum(a["total"] for a in mine)
-    months = max(1, len([s for s in series if abs(s["amount"]) > 0.5])) if series else 1
+    months = max(1.0, months_elapsed(year, today))
     partners: dict[str, dict] = {}
     for a in mine:
         for pid, p in a["partners"].items():
             d = partners.setdefault(str(pid), {"name": p["name"], "amount": 0.0})
             d["amount"] += p["amount"]
     sup = sorted(partners.values(), key=lambda x: -x["amount"])[:15]
-    return {"year": year, "kind": kind, "total": round(total, 2), "months": months, "monthly_avg": round(total / months, 2), "projected": round(total / months * 12, 2),
+    return {"year": year, "kind": kind, "total": round(total, 2), "months": round(months, 2), "monthly_avg": round(total / months, 2), "projected": round(total / months * 12, 2),
             "series": series,
             "accounts": [{"code": a["code"], "name": a["name"] + (" (fournisseurs choisis)" if sel.get(a["code"]) == "partners" else ""), "total": round(a["total"], 2), "share": (a["total"] / total) if total else 0.0}
                          for a in sorted(mine, key=lambda a: -a["total"])],

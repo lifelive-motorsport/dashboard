@@ -47,3 +47,13 @@ def test_person_factor_overrides_global_factor():
     assert r["factor"] == 12 and r["remunAnnual"] == 36000
     p["factor"] = None
     assert run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")["remunAnnual"] == 3000 * 13.92
+
+
+def test_adjusted_cost_uses_billable_rate_and_hours_ratio():
+    p = {"brut_override": 3000, "patronal_pct": 0, "factor": 12, "monthly_other": 0, "fte": 100, "hours_week": 40, "billable_pct": 50, "hours_pct": 120, "payslips": [], "extras": []}
+    r = run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")
+    assert round(r["adjFactor"], 4) == 0.6 and round(r["hourlyAdj"], 4) == round(r["hourly"] / 0.6, 4)         # 50 % facturable, 120 % de temps presté
+    assert round(r["dailyAdj"], 2) == round(r["daily"] / 0.6, 2)
+    p.pop("billable_pct"); p.pop("hours_pct")
+    r = run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")
+    assert r["adjFactor"] == 1 and r["hourlyAdj"] == r["hourly"]

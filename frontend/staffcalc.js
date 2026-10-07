@@ -9,7 +9,10 @@ const SC = (() => {
 
   function finish(annual, p, params) {
     const days = (+params.days_per_year || 220) * (+p.fte || 100) / 100, hoursDay = (+p.hours_week || 38) / 5;
-    return {annual, monthly: annual / 12, daily: days ? annual / days : 0, hourly: days && hoursDay ? annual / days / hoursDay : 0};
+    const daily = days ? annual / days : 0, hourly = days && hoursDay ? annual / days / hoursDay : 0;
+    // Coût ajusté : le coût de base divisé par (taux facturable × temps presté / horaire de base). Ex. 50 % facturable et 120 % de temps presté : × 1 / (0,5 × 1,2).
+    const adj = ((+p.billable_pct || 100) / 100) * ((+p.hours_pct || 100) / 100);
+    return {annual, monthly: annual / 12, daily, hourly, adjFactor: adj, dailyAdj: daily / adj, hourlyAdj: hourly / adj};
   }
 
   function employeeCosts(p, params, socialMonthly = 0) {

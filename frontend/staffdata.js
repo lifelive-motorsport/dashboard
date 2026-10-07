@@ -67,11 +67,11 @@ function sdCalcCards(p) {
   const params = sd.doc.params;
   if (p.kind === 'salarie') {
     const c = SC.employeeCosts(p, params, sdSocial(p));
-    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}</div>`
+    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}${kpi('Coût société horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
   const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, c = SC.independentCosts(p, params, tot, sdMonthsElapsed());
-  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}</div>`;
+  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
 }
 
 function sdExtras(p) {
@@ -104,6 +104,7 @@ function sdPersonPanel(p) {
           + sdField('Cotisations patronales estimées (%)', sdIn('patronal_pct', p.patronal_pct, {pid: p.id}), 'si absentes de la fiche') + sdField('Coefficient d’annualisation', sdIn('factor', p.factor, {pid: p.id, ph: num(sd.doc.params.annual_factor)}), '13,92 employé (13e mois + double pécule) · 12 ouvrier / gérant') + sdField('Brut mensuel de référence (€)', sdIn('brut_override', p.brut_override, {pid: p.id, ph: 'dernière fiche'}), 'facultatif')
           + sdField('Autres coûts société récurrents (€ / mois)', sdIn('monthly_other', p.monthly_other, {pid: p.id}), 'chèques-repas, assurance groupe…')
         : sdField('Temps (jours facturables) (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))}
+    ${sdField('Taux facturable (%)', sdIn('billable_pct', p.billable_pct ?? 100, {pid: p.id, step: '1'}), 'part des heures facturables à des clients externes (50 = la moitié) : sert au coût ajusté')}${sdField('Temps presté / horaire de base (%)', sdIn('hours_pct', p.hours_pct ?? 100, {pid: p.id, step: '1'}), '120 = preste en moyenne 20 % de plus que l’horaire de base')}
     ${emp ? sdField('Rémunération en 620/621', `<input type="checkbox" class="sdin" data-f="in_payroll" data-pid="${p.id}"${p.in_payroll !== false ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`, 'à décocher pour le gérant (payé via un autre compte)') : ''}${sdField('Actif', `<input type="checkbox" class="sdin" data-f="active" data-pid="${p.id}"${p.active ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`)}${sdField('Note', sdIn('note', p.note, {type: 'text', pid: p.id}))}</div>`;
   let body = base + `<div id="sd-kpi">${sdCalcCards(p)}</div>`;
   if (emp) body += sdPayslips(p);
@@ -242,6 +243,7 @@ document.addEventListener('change', e => {
     else if (sub === 'extra') p.extras[i][f] = (f === 'monthly') ? (v || 0) : v;
     else if (sub === 'slip') p.payslips[i][f] = (f === 'brut' || f === 'other') ? (v || 0) : v;
     else if (f === 'fte' || f === 'hours_week' || f === 'patronal_pct' || f === 'monthly_other') p[f] = v == null ? 0 : v;
+    else if (f === 'billable_pct' || f === 'hours_pct') p[f] = v > 0 ? v : 100;
     else if (f === 'factor') p.factor = v;
     else p[f] = (f === 'brut_override') ? v : v;
   }

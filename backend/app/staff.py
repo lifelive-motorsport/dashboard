@@ -65,6 +65,8 @@ class Person(BaseModel):
     end: str | None = None
     fte: float = Field(default=100.0, gt=0, le=100)                     # temps de travail en % (le brut des fiches en tient déjà compte)
     hours_week: float = Field(default=38.0, gt=0, le=80)
+    billable_pct: float = Field(default=100.0, gt=0, le=100)            # part des heures facturables à des clients externes (coût ajusté = coût ÷ taux)
+    hours_pct: float = Field(default=100.0, gt=0, le=300)               # temps réellement presté par rapport à l'horaire de base (120 = 20 % de dépassement)
     patronal_pct: float = Field(default=25.0, ge=0, le=100)             # cotisations patronales estimées quand elles ne sont pas sur la fiche
     factor: float | None = Field(default=None, gt=0, le=20)            # coefficient d'annualisation propre à la personne (sinon celui des paramètres) : 13,92 employé, 12 ouvrier / gérant
     brut_override: float | None = Field(default=None, ge=0, le=1e7)    # brut mensuel de référence (sinon dernière fiche)

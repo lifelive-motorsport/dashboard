@@ -14,11 +14,11 @@ const MENU = [
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
-  ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Taux d’utilisation']]],
+  ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -36,8 +36,8 @@ const PLAN = {
   'expenses/general': ['Frais généraux (loyer, IT, assurances, divers, véhicules) : total et évolution.',
     'Liste des comptes à inclure et à exclure (honoraires, personnel, véhicules de service).'],
   'expenses/rules': ['Tableau des clés de répartition des frais généraux.', 'Où stocker ces clés et qui peut les modifier.'],
-  'vehicles/usage': ['Taux d’utilisation de chaque véhicule d’après les agendas Google des ressources.',
-    'Un accès en lecture aux agendas Google des véhicules et leur convention de nommage.'],
+  'vehicles/usage': ['Imputation indicative des frais de chaque véhicule aux BU et aux frais généraux, d’après les agendas Google des ressources.',
+    'Les pourcentages retenus, saisis par un administrateur.'],
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
@@ -428,6 +428,7 @@ const PAGES = {
   'vehicles/general': () => expensesGeneralBlocks('vehicle'),
   'vehicles/byvehicle': () => vehiclesByBlocks(),
   'vehicles/fuel': () => fuelBlocks(),
+  'vehicles/usage': () => splitBlocks(),
   'staff/source': () => staffSourceBlocks(),
   'staff/people': () => staffPeopleBlocks(),
   'staff/general': () => staffViewBlocks('general'),
@@ -554,6 +555,7 @@ function render(force) {
   if (key === 'vehicles/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'vehicles/general') { exDrawGeneral(); exLoadGeneral('vehicle').then(exDrawGeneral); }
   if (key === 'vehicles/fuel') { exDrawFuel(); exLoadFuel().then(() => { exDrawFuel(); exParseDkv(exDrawFuel); }); }
+  if (key === 'vehicles/usage') { exDrawSplit(); exLoadSplit().then(exDrawSplit); }
   if (key === 'vehicles/byvehicle') { exDrawVehicles(); exLoadVehicles().then(exDrawVehicles); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }

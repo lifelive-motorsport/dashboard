@@ -183,3 +183,14 @@ def test_vehicles_view_merges_linked_accounts():
     assert [v["vehicle"] for v in out["vehicles"]] == ["Quad Kodiak"]
     assert out["vehicles"][0]["total"] == 146.0 and out["vehicles"][0]["merged"] == ["YAMAHA/KODIAK 700"]
     assert out["vehicles"][0]["types"] == {"Assurance": 97.0, "Taxes": 49.0}
+
+
+def test_split_config_and_identified():
+    c = expenses.Config.model_validate({"split": {"CITAN": {"XC": 40, "GENERAL": 60}, "vide": {}}})
+    assert c.split == {"CITAN": {"XC": 40.0, "GENERAL": 60.0}}
+    import pytest
+    with pytest.raises(ValueError):
+        expenses.Config.model_validate({"split": {"CITAN": {"XC": 140}}})
+    with pytest.raises(ValueError):
+        expenses.Config.model_validate({"split": {"CITAN": {"LOGISTICS": 10}}})
+    assert expenses.is_identified("SPRINTER 1") and not expenses.is_identified("véhicules loués") and not expenses.is_identified("(non classé)")

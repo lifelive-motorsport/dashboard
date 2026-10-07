@@ -26,6 +26,7 @@ class Config(BaseModel):
     saved: bool = False
     plates: dict[str, str] = Field(default_factory=dict)                                           # plaque (sans tiret, majuscules) -> libellé du véhicule de service (carte carburant)
     links: dict[str, str] = Field(default_factory=dict)                                            # véhicule tel que nommé dans Odoo (compte 615) -> ressource de l'agenda Google
+    split: dict[str, dict[str, float]] = Field(default_factory=dict)                               # véhicule -> {XC|MODERN_RALLY|HISTORIC_RALLY|HISTORIC_RACING|GENERAL: % retenu} ; absent = proposition indicative
     key_mode: Literal["revenue", "pct"] = "revenue"                                                # clé d'imputation XC / CARS : prorata du CA, ou % encodé
     xc_pct: float = Field(default=50.0, ge=0, le=100)                                              # part XC en % pour la clé « pct » (CARS = le reste)
 
@@ -58,6 +59,17 @@ class Config(BaseModel):
         return v
 
 
+    @field_validator("split")
+    @classmethod
+    def _split(cls, v):
+        out = {}
+        for veh, d in v.items():
+            if not veh.strip() or len(veh) > 120 or any(k not in SPLIT_KEYS or not (0 <= x <= 100) for k, x in d.items()):
+                raise ValueError("imputation invalide")
+            if d:
+                out[veh.strip()] = {k: round(x, 2) for k, x in d.items()}
+        return out
+
     @field_validator("links")
     @classmethod
     def _links(cls, v):
@@ -68,6 +80,20 @@ class Config(BaseModel):
             if name.strip():
                 out[k.strip()] = name.strip()
         return out
+
+
+SPLIT_KEYS = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "GENERAL")
+_NOT_A_VEHICLE = re.compile(r"lou[ée]s?\b|location|divers|autres?\b|non class|g[ée]n[ée]ra|flotte", re.I)
+
+
+def is_identified(vehicle: str) -> bool:
+    """Un véhicule identifié a un nom propre ; « véhicules loués », « divers », « (non classé) »… sont des frais non liés à un véhicule précis."""
+    return not _NOT_A_VEHICLE.search(vehicle or "")
+
+
+class SplitBody(BaseModel):
+    split: dict[str, dict[str, float]]
+    base: str | None = None
 
 
 class LinksBody(BaseModel):
@@ -338,7 +364,7 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
     order = [t for t, _ in sorted(types.items(), key=lambda kv: -kv[1])]
     return {"year": year, "total": round(total, 2), "types": order, "type_totals": {t: round(types[t], 2) for t in order},
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
-                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []),
+                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []), "identified": is_identified(d["vehicle"]),
                           "by_month": {t: {m: round(x, 2) for m, x in bm.items()} for t, bm in d["by_month"].items()}} for d in sorted(veh.values(), key=lambda d: -d["total"])],
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
 

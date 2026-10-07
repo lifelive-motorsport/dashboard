@@ -13,13 +13,13 @@ const MENU = [
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
-  ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux'], ['xc','XC'], ['cars','CARS']]],
+  ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
   ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','expenses/xc','expenses/cars','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -36,8 +36,6 @@ const PLAN = {
   'staff/shared': ['Coûts des Shared Services (indépendante, polyvalent, Managing Director).', 'Décider si ces coûts sont affichés et comment ils sont répartis.'],
   'expenses/general': ['Frais généraux (loyer, IT, assurances, divers, véhicules) : total et évolution.',
     'Liste des comptes à inclure et à exclure (honoraires, personnel, véhicules de service).'],
-  'expenses/xc': ['Part des frais généraux imputée à XC (50 % dans l’analyse de septembre).', 'La règle de répartition validée.'],
-  'expenses/cars': ['Part des frais généraux imputée à CARS (au prorata du CA).', 'La règle de répartition validée.'],
   'expenses/rules': ['Tableau des clés de répartition des frais généraux.', 'Où stocker ces clés et qui peut les modifier.'],
   'vehicles/general': ['Coûts des véhicules de service (comptes 615xxx) : carburant, entretien, taxes, assurance, péages.',
     'Confirmer le périmètre des véhicules et le regroupement des comptes 615.'],
@@ -50,7 +48,7 @@ const PLAN = {
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site');   // ancienne adresse
+const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -424,8 +422,6 @@ const PAGES = {
   'expenses/source': () => expensesSourceBlocks(),
   'expenses/general': () => expensesGeneralBlocks(),
   'expenses/rules': () => expensesRulesBlocks(),
-  'expenses/xc': () => expensesViewBlocks('xc'),
-  'expenses/cars': () => expensesViewBlocks('cars'),
   'staff/source': () => staffSourceBlocks(),
   'staff/people': () => staffPeopleBlocks(),
   'staff/general': () => staffViewBlocks('general'),
@@ -549,7 +545,6 @@ function render(force) {
   if (/^staff\/(source|people|general|xc|cars|shared)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'expenses/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
-  if (key === 'expenses/xc' || key === 'expenses/cars') { exDrawView(); exLoadAlloc().then(exDrawView); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');

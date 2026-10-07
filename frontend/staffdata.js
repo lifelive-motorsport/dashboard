@@ -145,7 +145,7 @@ function sdMatchRows(pay, accM) {
   const rows = all.filter(m => m < cur).map(m => {
     const mine = pay[m] || 0; let am = m;
     if (mine) { const n = next(m), dn = n && !used.has(n) && accM[n] ? Math.abs(mine - accM[n]) : Infinity, d0 = used.has(m) ? Infinity : Math.abs(mine - (accM[m] || 0));
-      if (dn < d0 && d0 >= 1) am = n; }
+      if (dn <= mine * 0.02 && d0 > mine * 0.02) am = n; }      // décalage seulement si le mois ne colle pas (> 2 %) et que le suivant colle (≤ 2 %)
     else if (used.has(m)) return '';
     const acc = used.has(am) ? 0 : (accM[am] || 0); if (!mine && !acc) return ''; used.add(am); tp += mine; ta += acc;
     const diff = mine - acc;

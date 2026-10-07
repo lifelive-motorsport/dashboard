@@ -37,6 +37,8 @@ def test_independent_allocation_and_payroll_by_month():
     m = run("SC.payrollByMonth([{kind:'salarie', patronal_pct:25, payslips:[{month:'2026-01', brut:1000},{month:'2026-02', brut:1000, patronal:300}]},"
             "{kind:'independant', payslips:[{month:'2026-01', brut:5000}]}])")
     assert m == {"2026-01": 1250, "2026-02": 1300}
+    m2 = run("SC.payrollByMonth([{kind:'salarie', patronal_pct:25, payslips:[{month:'2026-01', brut:1000}]},{kind:'salarie', in_payroll:false, payslips:[{month:'2026-01', brut:5000}]}])")
+    assert m2 == {"2026-01": 1250}                                                       # gérant exclu du contrôle 620/621
 
 
 def test_person_factor_overrides_global_factor():

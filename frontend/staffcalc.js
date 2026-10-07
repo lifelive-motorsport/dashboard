@@ -35,10 +35,10 @@ const SC = (() => {
     return out;
   }
 
-  // Contrôle comptable : par mois, coût « rémunération » des fiches de paie (brut + patronal) face aux comptes 620/621 ; seuls les salariés comptent.
+  // Contrôle comptable : par mois, coût « rémunération » des fiches de paie (brut + patronal) face aux comptes 620/621 ; seuls les salariés comptent, hors ceux dont la rémunération n'est pas en 620/621 (gérant).
   function payrollByMonth(people) {
     const m = {};
-    people.filter(p => p.kind === 'salarie').forEach(p => (p.payslips || []).forEach(s => { m[s.month] = (m[s.month] || 0) + (+s.brut || 0) + slipPatronal(p, s); }));
+    people.filter(p => p.kind === 'salarie' && p.in_payroll !== false).forEach(p => (p.payslips || []).forEach(s => { m[s.month] = (m[s.month] || 0) + (+s.brut || 0) + slipPatronal(p, s); }));
     return m;
   }
 

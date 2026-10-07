@@ -60,6 +60,7 @@ class Person(BaseModel):
     kind: Literal["salarie", "independant"]
     function: str = Field(default="", max_length=120)
     active: bool = True
+    in_payroll: bool = True                                             # rémunération comptabilisée en 620/621 (faux pour un gérant payé via un autre compte)
     start: str | None = None
     end: str | None = None
     fte: float = Field(default=100.0, gt=0, le=100)                     # temps de travail en % (le brut des fiches en tient déjà compte)

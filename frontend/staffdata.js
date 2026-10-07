@@ -99,7 +99,7 @@ function sdPersonPanel(p) {
           + sdField('Cotisations patronales estimées (%)', sdIn('patronal_pct', p.patronal_pct, {pid: p.id}), 'si absentes de la fiche') + sdField('Coefficient d’annualisation', sdIn('factor', p.factor, {pid: p.id, ph: num(sd.doc.params.annual_factor)}), '13,92 employé (13e mois + double pécule) · 12 ouvrier / gérant') + sdField('Brut mensuel de référence (€)', sdIn('brut_override', p.brut_override, {pid: p.id, ph: 'dernière fiche'}), 'facultatif')
           + sdField('Autres coûts société récurrents (€ / mois)', sdIn('monthly_other', p.monthly_other, {pid: p.id}), 'chèques-repas, assurance groupe…')
         : sdField('Temps (jours facturables) (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))}
-    ${sdField('Actif', `<input type="checkbox" class="sdin" data-f="active" data-pid="${p.id}"${p.active ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`)}${sdField('Note', sdIn('note', p.note, {type: 'text', pid: p.id}))}</div>`;
+    ${emp ? sdField('Rémunération en 620/621', `<input type="checkbox" class="sdin" data-f="in_payroll" data-pid="${p.id}"${p.in_payroll !== false ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`, 'à décocher pour le gérant (payé via un autre compte)') : ''}${sdField('Actif', `<input type="checkbox" class="sdin" data-f="active" data-pid="${p.id}"${p.active ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`)}${sdField('Note', sdIn('note', p.note, {type: 'text', pid: p.id}))}</div>`;
   let body = base + `<div id="sd-kpi">${sdCalcCards(p)}</div>`;
   if (emp) body += sdPayslips(p);
   else body += sdIndependentCompanies(p);
@@ -136,12 +136,12 @@ function sdControl() {
   const a = sd.acc;
   if (!a) return '<p class="na">Chargement des données comptables…</p>';
   if (a.unavailable) return `<p class="na">${esc(a.unavailable)}</p>`;
-  const pay = SC.payrollByMonth(sd.doc.people), months = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`);
+  const pay = SC.payrollByMonth(sd.doc.people), cur = new Date().toISOString().slice(0, 7), months = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`).filter(m => m < cur);   // mois clôturés seulement
   let tp = 0, ta = 0;
   const rows = months.map(m => { const mine = pay[m] || 0, acc = (a.pay_by_month || {})[m] || 0; if (!mine && !acc) return ''; tp += mine; ta += acc;
     const diff = mine - acc; return `<tr><td>${m}</td><td>${sdEur2(mine)}</td><td>${sdEur2(acc)}</td><td class="${Math.abs(diff) < 1 ? '' : 'neg'}">${sdEur2(diff)}</td></tr>`; }).filter(Boolean);
   return (rows.length ? table(['Mois', 'Fiches de paie (brut + patronal)', `Comptabilité (comptes ${esc((a.pay_prefixes || []).join(', '))})`, 'Écart'], rows.concat([`<tr class="tot"><td>Total</td><td>${sdEur2(tp)}</td><td>${sdEur2(ta)}</td><td>${sdEur2(tp - ta)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune donnée à comparer pour ' + SD_YEAR + '.</p>')
-    + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Des écarts sont normaux quand la comptabilité provisionne le 13e mois et le pécule de vacances, ou quand une fiche manque. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
+    + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Le mois en cours n'est pas comparé. Les personnes dont la rémunération n'est pas en 620/621 (case décochée dans leur fiche, ex. le gérant) sont exclues. Un écart peut venir d'une écriture passée avec un mois de décalage, d'un pécule ou d'une prime comptabilisés autrement, ou d'une fiche manquante. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
 }
 
 function sdDrawSource() {

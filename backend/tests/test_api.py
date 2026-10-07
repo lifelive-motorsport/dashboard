@@ -254,3 +254,15 @@ def test_reference_values_can_only_be_saved_by_their_owner(monkeypatch):
         assert c.put("/api/staff", json={"data": {}, "base": None}).status_code == 200
     finally:
         app.dependency_overrides.clear()
+
+
+def test_staff_common_split_is_validated(monkeypatch):
+    _staff_app(monkeypatch, "md@x.be")
+    try:
+        person = {"id": "p1", "name": "Alice", "kind": "salarie", "alloc": {"SHARED": 100}, "common_split": {"XC": 50, "MODERN_RALLY": 50}}
+        assert c.put("/api/staff", json={"data": {"people": [person]}, "base": None}).status_code == 200
+        assert c.get("/api/staff").json()["data"]["people"][0]["common_split"] == {"XC": 50.0, "MODERN_RALLY": 50.0}
+        assert c.put("/api/staff", json={"data": {"people": [{**person, "common_split": {"XC": 80, "MODERN_RALLY": 40}}]}, "base": None}).status_code == 422
+        assert c.put("/api/staff", json={"data": {"people": [{**person, "common_split": {"SHARED": 10}}]}, "base": None}).status_code == 422
+    finally:
+        app.dependency_overrides.clear()

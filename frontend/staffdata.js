@@ -244,10 +244,22 @@ function sdDrawPeople() {
       + SD_SHARES.map(([k]) => `<td>${sdIn('alloc:' + k, a[k], {pid: p.id, sub: 'alloc', step: '1'})}</td>`).join('') + `<td data-pct="${p.id}" class="${used > 100.0001 ? 'neg' : used < 99.9999 ? 'na' : ''}">${num(used)} %</td></tr>`; });
   el.innerHTML = sdBar()
     + (rows.length ? table(['Personne', 'Coût annualisé'].concat(SD_SHARES.map(s => s[1] + ' (%)'), ['Total']), rows, 'prodtable sdtable sdalloc') : '<p class="na">Aucune personne : créez d’abord les salariés et indépendants dans « Données source ».</p>')
+    + '<h4 class="sub">Répartition de Shared Services et de Management sur les 4 BU</h4><div id="sd-common">' + sdCommonHtml() + '</div>'
+    + '<small class="na">Pour chaque personne de Shared Services ou de Management, indiquez ici comment sa part se répartit sur XC et les 3 BU de CARS (Modern Rally, Historic Rally, Historic Racing). Le total doit faire 100 % ; le solde est « non imputé ». Case vide sur toute la ligne : la part suit la clé générale des frais communs (XC / CARS selon la clé des frais généraux, puis les BU de CARS au prorata du chiffre d’affaires).</small>'
     + '<h4 class="sub">Coût imputé (personnes actives, annualisé)</h4><div id="sd-alloc-tot">' + sdAllocTotals() + '</div>'
     + '<small class="na">Pour chaque personne, indiquez le pourcentage de son coût imputé sur chacune des 4 BU et sur Shared Services (fonctions de support et de management). Le total ne doit pas dépasser 100 % ; ce qui n’est pas imputé apparaît en « non imputé ». Les personnes inactives (sorties, missions ponctuelles) sont listées en dessous des actifs : leur imputation sert au mode « Coût réel à ce jour » des pages XC, CARS, Shared Services et Général.</small>';
 }
 
+// Répartition, pour chaque personne de Shared Services ou de Management, de cette part de son coût sur les 4 BU (vide = clé générale des frais communs).
+const SD_BU4 = SD_SHARES.slice(0, 4);
+function sdCommonHtml() {
+  const list = sd.doc.people.filter(p => ((+(p.alloc || {}).SHARED || 0) + (+(p.alloc || {}).MANAGEMENT || 0)) > 0).sort((x, y) => (y.active - x.active) || sdByName(x, y));
+  if (!list.length) return '<p class="na">Aucune personne n’est imputée à Shared Services ou à Management.</p>';
+  const rows = list.map(p => { const cs = p.common_split || {}, used = SD_BU4.reduce((t, [k]) => t + (+cs[k] || 0), 0), part = (+p.alloc.SHARED || 0) + (+p.alloc.MANAGEMENT || 0), annual = p.active ? sdPersonAnnual(p) : sdPersonReal(p);
+    return `<tr><td class="prod">${esc(p.name)}<br><small class="na">${esc(p.function || '')}${p.alloc.MANAGEMENT ? ' · Management ' + num(p.alloc.MANAGEMENT) + ' %' : ''}${p.alloc.SHARED ? ' · Shared Services ' + num(p.alloc.SHARED) + ' %' : ''}</small></td><td>${eur(annual * part / 100)}</td>`
+      + SD_BU4.map(([k]) => `<td>${sdIn('split:' + k, cs[k], {pid: p.id, sub: 'split', step: '1'})}</td>`).join('') + `<td data-spct="${p.id}" class="${used > 100.0001 ? 'neg' : used > 0 && used < 99.9999 ? 'neg' : 'na'}">${used ? num(used) + ' %' : 'clé générale'}</td></tr>`; });
+  return table(['Personne', 'Part Shared Services + Management'].concat(SD_BU4.map(s => s[1] + ' (%)'), ['Total']), rows, 'prodtable sdtable sdalloc');
+}
 function sdAllocTotals() {
   const tot = {XC: 0, MODERN_RALLY: 0, HISTORIC_RALLY: 0, HISTORIC_RACING: 0, SHARED: 0, MANAGEMENT: 0, UNALLOCATED: 0}; let all = 0;
   sd.doc.people.filter(p => p.active).forEach(p => { const annual = sdPersonAnnual(p), a = SC.allocate(annual, p.alloc); all += annual; Object.keys(tot).forEach(k => { tot[k] += a[k] || 0; }); });
@@ -272,6 +284,7 @@ document.addEventListener('change', e => {
   else {
     const p = sdPerson(pid); if (!p) return;
     if (sub === 'alloc') { const k = f.split(':')[1]; if (v == null || v === 0) delete p.alloc[k]; else p.alloc[k] = v; }
+    else if (sub === 'split') { const k = f.split(':')[1]; p.common_split = p.common_split || {}; if (v == null || v === 0) delete p.common_split[k]; else p.common_split[k] = Math.min(100, Math.max(0, v)); }
     else if (sub === 'extra') p.extras[i][f] = (f === 'monthly') ? (v || 0) : v;
     else if (sub === 'slip') p.payslips[i][f] = (f === 'brut' || f === 'other') ? (v || 0) : v;
     else if (f === 'fte' || f === 'hours_week' || f === 'patronal_pct' || f === 'monthly_other') p[f] = v == null ? 0 : v;
@@ -287,7 +300,9 @@ document.addEventListener('change', e => {
     const used = SD_SHARES.reduce((t, [kk]) => t + (+cur.alloc[kk] || 0), 0), c = document.querySelector(`[data-pct="${pid}"]`);
     if (c) { c.textContent = num(used) + ' %'; c.className = used > 100.0001 ? 'neg' : used < 99.9999 ? 'na' : ''; }
     const t = document.getElementById('sd-alloc-tot'); if (t) t.innerHTML = sdAllocTotals();
+    const cm = document.getElementById('sd-common'); if (cm) cm.innerHTML = sdCommonHtml();
   }
+  if (sub === 'split' && cur) { const used = SD_BU4.reduce((t, [kk]) => t + (+(cur.common_split || {})[kk] || 0), 0), c = document.querySelector(`[data-spct="${pid}"]`); if (c) { c.textContent = used ? num(used) + ' %' : 'clé générale'; c.className = used > 100.0001 || (used > 0 && used < 99.9999) ? 'neg' : 'na'; } }
   if (f === 'name' || sub === 'params' || f === 'kind') { if (f === 'name') document.querySelectorAll('[data-sd-sel="' + pid + '"]').forEach(b => { b.textContent = v || '(sans nom)'; }); }
 });
 

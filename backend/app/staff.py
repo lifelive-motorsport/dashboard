@@ -77,6 +77,7 @@ class Person(BaseModel):
     extras: list[Extra] = Field(default_factory=list, max_length=30)
     partners: list[Partner] = Field(default_factory=list, max_length=20)   # indépendants : sociétés Odoo dont on remonte les factures
     alloc: dict[str, float] = Field(default_factory=dict)               # % d'imputation : XC, MODERN_RALLY, HISTORIC_RALLY, HISTORIC_RACING, SHARED, MANAGEMENT
+    common_split: dict[str, float] = Field(default_factory=dict)       # répartition (en %) de la part Shared Services + Management de cette personne sur les 4 BU ; vide = clé générale des frais communs
     note: str = Field(default="", max_length=500)
 
     @field_validator("id")
@@ -93,6 +94,11 @@ class Person(BaseModel):
                 raise ValueError(f"imputation invalide : {k}")
         if sum(self.alloc.values()) > 100.0001:
             raise ValueError("l'imputation dépasse 100 %")
+        for k, v in self.common_split.items():
+            if k not in SHARES[:4] or not (0 <= v <= 100):
+                raise ValueError(f"répartition invalide : {k}")
+        if sum(self.common_split.values()) > 100.0001:
+            raise ValueError("la répartition dépasse 100 %")
         months = [p.month for p in self.payslips]
         if len(set(months)) != len(months):
             raise ValueError("deux fiches pour le même mois")

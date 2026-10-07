@@ -37,11 +37,17 @@ function nmCompute(d) {
   [...NM_BU, 'UNASSIGNED', 'UNALLOC'].forEach(k => { cols[k] = z(); });
   d.pnl.bus.forEach(b => { const c = cols[b.key] || (cols[b.key] = z()); c.ca += b.ca; c.dc += b.direct_costs; });
   // Personnel : coût réel à ce jour × % d'imputation de chaque personne ; Shared Services = frais communs ; le reste (< 100 %) = non imputé.
-  let sharedStaff = 0, mgmtStaff = 0, staffTotal = 0;
-  sdViewRows(true).forEach(r => { staffTotal += r.annual; mgmtStaff += r.a.MANAGEMENT || 0; NM_BU.forEach(k => { if (r.a[k]) cols[k].staff += r.a[k]; }); sharedStaff += r.a.SHARED || 0; cols.UNALLOC.staff += r.a.UNALLOCATED || 0; });
+  let sharedStaff = 0, mgmtStaff = 0, mgmtOut = 0, staffTotal = 0;
+  const BU4 = NM_BU.slice(0, 4);
+  sdViewRows(true).forEach(r => { staffTotal += r.annual; NM_BU.forEach(k => { if (r.a[k]) cols[k].staff += r.a[k]; }); cols.UNALLOC.staff += r.a.UNALLOCATED || 0;
+    // Part Shared Services / Management : répartition propre à la personne sur les 4 BU si elle est renseignée (le solde est « non imputé »), sinon clé générale des frais communs.
+    const cs = r.p.common_split || {}, used = BU4.reduce((t, k) => t + (+cs[k] || 0), 0), sh = r.a.SHARED || 0, mg = nm.withMgmt ? (r.a.MANAGEMENT || 0) : 0;
+    if (!nm.withMgmt) mgmtOut += r.a.MANAGEMENT || 0;
+    if (used > 0) { BU4.forEach(k => { cols[k].shared += sh * (+cs[k] || 0) / 100; cols[k].mgmt += mg * (+cs[k] || 0) / 100; }); cols.UNALLOC.shared += sh * (100 - used) / 100; cols.UNALLOC.mgmt += mg * (100 - used) / 100; }
+    else { sharedStaff += sh; mgmtStaff += mg; } });
   // Véhicules : % retenus par véhicule ; la part « frais généraux » est commune.
   const vt = exSplitTotals(ex.vsplit); NM_BU.forEach(k => { if (vt.tot[k]) cols[k].veh += vt.tot[k]; }); cols.UNALLOC.veh += vt.unalloc;
-  const commons = {shared: sharedStaff, mgmt: nm.withMgmt ? mgmtStaff : 0, general: nm.gen.total || 0, vehgen: vt.tot.GENERAL || 0, mkt: (nm.mk || {}).common || 0};
+  const commons = {shared: sharedStaff, mgmt: mgmtStaff, general: nm.gen.total || 0, vehgen: vt.tot.GENERAL || 0, mkt: (nm.mk || {}).common || 0};
   const al = ex.alloc || nm.alloc, mode = ex.keyMode || al.key_mode, xcp = Math.min(100, Math.max(0, +ex.keyPct || 0)) / 100, sh = mode === 'pct' ? {XC: xcp, CARS: 1 - xcp} : ((al.shares || {}).revenue || {}), shXC = +sh.XC || 0, shCARS = +sh.CARS || 0, shT = shXC + shCARS;
   const carsCa = NM_CARS.reduce((t, k) => t + Math.max(0, cols[k].ca), 0);
   Object.entries(commons).forEach(([row, amt]) => {
@@ -50,7 +56,7 @@ function nmCompute(d) {
     const cars = amt * shCARS / shT;
     NM_CARS.forEach(k => { cols[k][row] += carsCa > 0 ? cars * Math.max(0, cols[k].ca) / carsCa : cars / NM_CARS.length; });
   });
-  return {cols, sources: {staff: staffTotal - (nm.withMgmt ? 0 : mgmtStaff), mgmtOut: nm.withMgmt ? 0 : mgmtStaff, general: commons.general, veh: vt.grand, mkt: commons.mkt}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode};
+  return {cols, sources: {staff: staffTotal - mgmtOut, mgmtOut, general: commons.general, veh: vt.grand, mkt: commons.mkt}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode};
 }
 const nmSum = (cols, keys) => keys.reduce((o, k) => { const c = cols[k] || {}; ['ca', 'dc', 'staff', 'veh', 'shared', 'mgmt', 'general', 'vehgen', 'mkt'].forEach(f => { o[f] = (o[f] || 0) + (c[f] || 0); }); return o; }, {});
 const nmNet = o => (o.ca - o.dc) - o.staff - o.veh - o.shared - o.mgmt - o.general - o.vehgen - o.mkt;

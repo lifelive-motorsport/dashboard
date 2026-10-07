@@ -122,7 +122,7 @@ function sdIndependentCompanies(p) {
     : !inv ? '<p class="na">Chargement des factures…</p>'
     : inv.error ? `<p class="neg">${esc(inv.error)}</p>`
     : inv.list.length ? table(['Date', 'Facture', 'Référence', 'Société', 'HT', 'TTC', 'Payée'], inv.list.map(x => `<tr><td>${fmtDate(x.date)}</td><td>${esc(x.number)}${x.refund ? ' <small class="na">(avoir)</small>' : ''}</td><td>${esc(x.ref)}</td><td>${esc(x.partner)}</td><td>${sdEur2(x.untaxed)}</td><td>${sdEur2(x.total)}</td><td>${x.paid ? '✓' : '–'}</td></tr>`)
-        .concat([`<tr class="tot"><td colspan="4">Total ${SD_YEAR}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.untaxed, 0))}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.total, 0))}</td><td></td></tr>`]), 'prodtable sdtable')
+        .concat([`<tr class="tot"><td>Total ${SD_YEAR}</td><td></td><td></td><td></td><td>${sdEur2(inv.list.reduce((t, x) => t + x.untaxed, 0))}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.total, 0))}</td><td></td></tr>`]), 'prodtable sdtable')
       : `<p class="na">Aucune facture comptabilisée en ${SD_YEAR}.</p>`;
   return `<h4 class="sub">Sociétés et factures</h4><div>${chips || '<small class="na">Aucune société rattachée.</small>'}</div>`
     + (sd.canEdit ? `<div class="sdadd"><input type="text" id="sd-q" placeholder="Rechercher une société Odoo" value="${esc(sd.q)}"> <button type="button" data-sd-search data-pid="${p.id}">Rechercher</button></div>${res}` : '') + list;

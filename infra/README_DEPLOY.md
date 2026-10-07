@@ -117,3 +117,15 @@ Les comptes de charges retenus se choisissent dans l'application (GENERAL EXPENS
 - Réglages facultatifs : `CALENDAR_VEHICLE_REGEX` (ne garder que les ressources dont le nom correspond, par exemple `sprinter|citan|camion|remorque`) et `FUEL_BUFFER_DAYS` (jours avant et après un événement pendant lesquels le véhicule est en déplacement, 3 par défaut).
 
 `EXPENSES_EXCLUDED_ACCOUNTS` (par défaut `611010`, loyer du bâtiment mis gratuitement à disposition) : comptes sortis des frais généraux et mentionnés sous le graphique de la page Général.
+
+
+## Hypothèses d'imputation : référence et simulation
+
+Les imputations (personnel, véhicules, clé des frais généraux, comptes retenus) servent de référence à la marge nette. Par défaut tous les administrateurs (`ADMIN_EMAILS`) peuvent les enregistrer.
+Pour réserver l'enregistrement à une ou plusieurs personnes, définissez `REFERENCE_EDITORS` (adresses séparées par des virgules, sous-ensemble de `ADMIN_EMAILS`) :
+
+```
+gcloud run services update dashboard --region=europe-west1 --update-env-vars REFERENCE_EDITORS=prenom.nom@lifelive-motorsport.com
+```
+
+Les autres administrateurs peuvent alors modifier les pourcentages pour simuler la marge nette, sans rien enregistrer (les modifications restent dans leur navigateur), et revenir aux valeurs de référence avec « Restaurer les valeurs par défaut ».

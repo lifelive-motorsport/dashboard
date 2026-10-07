@@ -234,3 +234,23 @@ def test_pnl_unassigned_demo():
     c = TestClient(app)
     r = c.get("/api/pnl/unassigned?year=2026")
     assert r.status_code == 200 and r.json()["accounts"][0]["code"] == "700099"
+
+
+def test_reference_values_can_only_be_saved_by_their_owner(monkeypatch):
+    st = _staff_app(monkeypatch, "md@x.be")
+    import app.main as m
+    monkeypatch.setattr(m.settings, "ADMIN_EMAILS", ["md@x.be", "autre@x.be"])
+    monkeypatch.setattr(m.adjustments.settings, "ADMIN_EMAILS", ["md@x.be", "autre@x.be"])
+    monkeypatch.setattr(m.adjustments.settings, "REFERENCE_EDITORS", ["md@x.be"])
+    try:
+        app.dependency_overrides[m.require_user] = lambda: "autre@x.be"
+        got = c.get("/api/staff").json()
+        assert got["can_edit"] is True and got["can_save"] is False                                         # il peut simuler, pas enregistrer
+        assert c.put("/api/staff", json={"data": {}, "base": None}).status_code == 403
+        assert c.put("/api/expenses/split", json={"split": {}, "base": None}).status_code == 403
+        assert c.put("/api/expenses/key", json={"key_mode": "pct", "xc_pct": 40}).status_code == 403
+        app.dependency_overrides[m.require_user] = lambda: "md@x.be"
+        assert c.get("/api/staff").json()["can_save"] is True
+        assert c.put("/api/staff", json={"data": {}, "base": None}).status_code == 200
+    finally:
+        app.dependency_overrides.clear()

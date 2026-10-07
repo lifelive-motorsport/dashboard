@@ -4,7 +4,7 @@ const SD_YEAR = new Date().getFullYear();
 let sd = {view: (() => { try { return localStorage.getItem('lm_staff_view') === 'real' ? 'real' : 'annual'; } catch { return 'annual'; } })(), loaded: false, restricted: false, error: null, doc: null, base: null, canEdit: false, upload: false, dirty: false, msg: '',
           tab: 'salarie', sel: {salarie: null, independant: null}, acc: null, inv: {}, q: '', results: null};
 const SD_KINDS = {vehicule: 'Véhicule', carte_essence: 'Carte essence', telephone: 'Abonnement téléphone', autre: 'Autre avantage'};
-const SD_SHARES = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['SHARED', 'Shared Services']];
+const SD_SHARES = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['SHARED', 'Shared Services'], ['MANAGEMENT', 'Management']];
 const sdAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const sdId = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const sdPeople = k => (sd.doc ? sd.doc.people.filter(p => p.kind === k) : []);
@@ -20,7 +20,7 @@ async function sdLoad() {
     if (!r.ok) throw new Error('Erreur ' + r.status);
     const j = await r.json();
     sd.loaded = true; sd.error = null; sd.restricted = !!j.restricted;
-    if (!j.restricted && !sd.dirty) { sd.doc = j.data; sd.base = j.updated_at; sd.updatedBy = j.updated_by; sd.canEdit = !!j.can_edit; sd.upload = !!j.upload; }
+    if (!j.restricted && !sd.dirty) { sd.doc = j.data; sd.base = j.updated_at; sd.updatedBy = j.updated_by; sd.canEdit = !!j.can_edit; sd.canSave = j.can_save !== false; sd.upload = !!j.upload && sd.canSave; }
   } catch (e) { sd.loaded = true; sd.error = e.message; }
 }
 
@@ -36,7 +36,7 @@ async function sdSave() {
 }
 
 const sdTouch = () => { sd.dirty = true; sd.msg = ''; const b = document.querySelector('[data-sd-save]'); if (b) b.disabled = false; };
-window.addEventListener('beforeunload', e => { if (sd.dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (sd.dirty && sd.canSave !== false) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---- Pages -------------------------------------------------------------------------------------------------------
 function staffSourceBlocks() {
@@ -52,7 +52,7 @@ function sdGate() {
   if (sd.restricted) return '<p class="na">Ces données (rémunérations, coûts par personne) sont réservées aux administrateurs du dashboard.</p>';
   return '';
 }
-const sdBar = () => `<div class="sdbar"><button type="button" class="primary" data-sd-save${sd.dirty ? '' : ' disabled'}>Enregistrer</button>
+const sdBar = () => sd.canSave === false ? `<div class="sdbar sim"><span class="chip bad">Simulation</span><span class="na">Vos modifications ne sont pas enregistrées : elles disparaissent à la fermeture de la page. Les valeurs de référence sont celles de leur propriétaire (les fiches de paie et les imports ne sont pas modifiables).</span><button type="button" data-sd-reload>Restaurer les valeurs par défaut</button></div>` : `<div class="sdbar"><button type="button" class="primary" data-sd-save${sd.dirty ? '' : ' disabled'}>Enregistrer</button>
   <button type="button" data-sd-reload>Annuler les modifications</button>${sd.canEdit ? ' <label class="btn" title="Archive ZIP préparée pour le premier remplissage (staff.json + fiches PDF)">Importer (ZIP)<input type="file" accept=".zip,application/zip" data-sd-import hidden></label>' : ''}<span class="na">${esc(sd.msg || (sd.base ? 'Dernier enregistrement : ' + new Date(sd.base).toLocaleString('fr-BE') + (sd.updatedBy ? ' par ' + sd.updatedBy : '') + '.' : 'Rien d’enregistré pour le moment.'))}</span></div>`;
 
 const sdIn = (field, val, o = {}) => `<input class="sdin" ${o.type === 'text' ? 'type="text"' : 'type="number" step="' + (o.step || '0.01') + '"'} data-f="${field}"${o.pid ? ` data-pid="${o.pid}"` : ''}${o.i != null ? ` data-i="${o.i}"` : ''}${o.sub ? ` data-sub="${o.sub}"` : ''} value="${esc(val ?? '')}"${sd.canEdit ? '' : ' disabled'}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>`;
@@ -245,7 +245,7 @@ function sdDrawPeople() {
 }
 
 function sdAllocTotals() {
-  const tot = {XC: 0, MODERN_RALLY: 0, HISTORIC_RALLY: 0, HISTORIC_RACING: 0, SHARED: 0, UNALLOCATED: 0}; let all = 0;
+  const tot = {XC: 0, MODERN_RALLY: 0, HISTORIC_RALLY: 0, HISTORIC_RACING: 0, SHARED: 0, MANAGEMENT: 0, UNALLOCATED: 0}; let all = 0;
   sd.doc.people.filter(p => p.active).forEach(p => { const annual = sdPersonAnnual(p), a = SC.allocate(annual, p.alloc); all += annual; Object.keys(tot).forEach(k => { tot[k] += a[k] || 0; }); });
   return `<div class="kpis">${SD_SHARES.map(([k, l]) => kpi(l, eur(tot[k]), '', all ? pct(tot[k] / all) + ' du coût du personnel' : '')).join('')}${tot.UNALLOCATED > 1 ? kpi('Non imputé', eur(tot.UNALLOCATED), 'neg', 'à répartir') : ''}</div>`;
 }
@@ -346,6 +346,7 @@ const SD_VIEWS = {
   xc: {title: 'Coûts du personnel imputés à XC', scope: ['XC']},
   cars: {title: 'Coûts du personnel imputés à CARS', scope: ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']},
   shared: {title: 'Coûts du personnel des Shared Services', scope: ['SHARED']},
+  management: {title: 'Coûts du personnel du Management', scope: ['MANAGEMENT']},
 };
 function staffViewBlocks(view) {
   return [{static: `<section class="block" data-bid="staff-view-${view}"><div class="block-head"><h3>${esc(SD_VIEWS[view].title)}</h3></div><div class="block-body" id="staff-view" data-view="${view}"><p class="na">Chargement…</p></div></section>`}];
@@ -371,7 +372,7 @@ function sdDrawView() {
   const toggle = `<div class="sdbar sdview"><button type="button" data-sd-view="annual" class="${real ? '' : 'primary'}">Coût annualisé (projeté sur 1 an)</button><button type="button" data-sd-view="real" class="${real ? 'primary' : ''}">Coût réel à ce jour (depuis le 1er janvier)</button></div>`;
   const note = (v.scope ? '<small class="na">Les coûts journalier et horaire sont ceux de la personne entière (base annualisée, hors imputation) ; « ajusté » tient compte du taux facturable et du temps presté.</small> ' : '') + (real ? '<small class="na">Coût réel à ce jour : somme des fiches de paie saisies (primes et pécule compris) et des honoraires facturés depuis le 1er janvier ' + SD_YEAR + ', plus les coûts récurrents et hors salaire des mois travaillés ; sans 13e mois ni pécule provisionnés. Les personnes sorties en cours d’année sont incluses. </small>' : '') + '<small class="na">Coût annualisé : voir « Données source » (rémunération × coefficient d’annualisation + coûts récurrents et hors salaire ; indépendants : facturé depuis le 1er janvier ramené sur 12 mois). L’imputation provient de « Imputation du personnel ». Attention : les avantages hors salaire (véhicule, carte essence) peuvent aussi figurer dans les pages Service Vehicles ; ne pas les compter deux fois en cumulant les vues.</small>';
   if (!v.scope) {
-    const groups = [['XC', ['XC']], ['CARS', ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']], ['Shared Services', ['SHARED']], ['Non imputé', ['UNALLOCATED']]];
+    const groups = [['XC', ['XC']], ['CARS', ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']], ['Shared Services', ['SHARED']], ['Management', ['MANAGEMENT']], ['Non imputé', ['UNALLOCATED']]];
     const gt = groups.map(([l, ks]) => [l, rows.reduce((t, r) => t + sum(r, ks), 0)]);
     const acc = sd.acc && !sd.acc.unavailable ? Object.values(sd.acc.pay_by_month || {}).concat(Object.values((sd.acc.director || {}).pay_by_month || {}), Object.values((sd.acc.director || {}).social_by_month || {})).reduce((t, x) => t + x, 0) : null;
     const bu = SD_SHARES.map(([k, l]) => { const amt = rows.reduce((t, r) => t + (r.a[k] || 0), 0), who = rows.filter(r => (r.a[k] || 0) > 0);
@@ -379,8 +380,8 @@ function sdDrawView() {
     const un = rows.reduce((t, r) => t + r.a.UNALLOCATED, 0);
     el.innerHTML = toggle + `<div class="kpis">${kpi(L + ' du personnel', eur(total), '', people(rows))}${gt.filter(([l, x]) => l !== 'Non imputé' || x > 1).map(([l, x]) => kpi(l, eur(x), l === 'Non imputé' ? 'neg' : '', total ? pct(x / total) : '')).join('')}${acc != null ? kpi('Réalisé en comptabilité ' + SD_YEAR, eur(acc), '', 'comptes 620/621 + 618000/618001, depuis le 1er janvier') : ''}</div>`
       + '<h4 class="sub">Répartition par BU</h4>' + table(['Entité', L + ' imputé', 'Part', 'Personnes concernées'], bu.concat(un > 1 ? [`<tr><td>Non imputé</td><td class="neg">${eur(un)}</td><td>${pct(un / total)}</td><td><small class="na">à répartir dans « Imputation du personnel »</small></td></tr>`] : []), 'prodtable')
-      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', L, 'XC', 'CARS', 'Shared Services', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
-          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small><br><small class="na">${esc(sdOccupation(r.p))}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
+      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', L, 'XC', 'CARS', 'Shared Services', 'Management', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
+          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small><br><small class="na">${esc(sdOccupation(r.p))}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td>${eur(r.a.MANAGEMENT || 0)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td><td>${eur(gt[4][1])}</td></tr>`]), 'prodtable') + note;
     return;
   }
   const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sum(y, v.scope) - sum(x, v.scope)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);

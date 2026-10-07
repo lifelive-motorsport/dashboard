@@ -128,6 +128,13 @@ def stock(refresh: bool = False, _user: str = Depends(require_user)):
     return data
 
 
+def reference(user: str = Depends(require_user)) -> str:
+    """Enregistrement des hypothèses de référence : propriétaires uniquement (REFERENCE_EDITORS)."""
+    if not adjustments.can_reference(user):
+        raise HTTPException(403, "Ces valeurs de référence ne peuvent être enregistrées que par leur propriétaire : vos modifications restent des simulations dans votre navigateur.")
+    return user
+
+
 def admin(user: str = Depends(require_user)) -> str:
     """Données du personnel : réservées aux administrateurs (ADMIN_EMAILS)."""
     if not adjustments.can_edit(user):
@@ -146,11 +153,11 @@ def _expense_lines(year: int) -> list[dict]:
 @app.get("/api/expenses/accounts")
 def expenses_accounts(year: int = Query(..., ge=2000, le=2100), user: str = Depends(require_user)):
     cfg = expenses.store().get()
-    return {**expenses.accounts_view(_expense_lines(year), cfg["data"], year), "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user)}
+    return {**expenses.accounts_view(_expense_lines(year), cfg["data"], year), "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
 
 
 @app.put("/api/expenses/config")
-def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
+def put_expenses_config(body: expenses.SaveBody, user: str = Depends(reference)):
     cur = expenses.Config.model_validate(expenses.store().get()["data"])
     data = body.data.model_copy(update={"saved": True, "key_mode": cur.key_mode, "xc_pct": cur.xc_pct, "plates": cur.plates, "links": cur.links, "split": cur.split, "general_vehicles": cur.general_vehicles}).model_dump()      # la clé d'imputation a son propre enregistrement
     doc = expenses.store().put(data, user, body.base)
@@ -229,7 +236,7 @@ def fuel_parse(att: int, year: int = Query(..., ge=2000, le=2100), _user: str = 
 
 
 @app.put("/api/expenses/plates")
-def put_plates(body: expenses.PlatesBody, user: str = Depends(admin)):
+def put_plates(body: expenses.PlatesBody, user: str = Depends(reference)):
     """Correspondance plaque de la carte carburant -> véhicule de service (sans toucher au reste de la configuration)."""
     cur = expenses.store().get()
     try:
@@ -243,7 +250,7 @@ def put_plates(body: expenses.PlatesBody, user: str = Depends(admin)):
 
 
 @app.put("/api/expenses/split")
-def put_split(body: expenses.SplitBody, user: str = Depends(admin)):
+def put_split(body: expenses.SplitBody, user: str = Depends(reference)):
     """Imputation retenue (en %) du coût de chaque véhicule aux BU et aux frais généraux (sans toucher au reste de la configuration)."""
     cur = expenses.store().get()
     try:
@@ -266,7 +273,7 @@ def fuel(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_
         raise HTTPException(503, "Factures de la carte carburant indisponibles pour le moment")
     today = date.today()
     cfg = expenses.store().get()
-    return {"year": year, "supplier": settings.FUEL_SUPPLIER_NAME, "invoices": invoices, "plates": cfg["data"].get("plates") or {}, "plates_base": cfg["updated_at"], "can_edit": adjustments.can_edit(_user),
+    return {"year": year, "supplier": settings.FUEL_SUPPLIER_NAME, "invoices": invoices, "plates": cfg["data"].get("plates") or {}, "plates_base": cfg["updated_at"], "can_edit": adjustments.can_reference(_user),
             "calendar": _calendar(date(year, 1, 1), today if year == today.year else date(year, 12, 31))}
 
 
@@ -288,11 +295,11 @@ def fuel_attachment(att: int, year: int = Query(..., ge=2000, le=2100), text: bo
 @app.get("/api/expenses/vehicles")
 def expenses_vehicles(year: int = Query(..., ge=2000, le=2100), scope: str = Query("config", pattern="^(config|all615)$"), _user: str = Depends(require_user)):
     cfg = expenses.store().get()
-    return {**expenses.vehicles_view(_expense_lines(year), cfg["data"], year, scope), "links": cfg["data"].get("links") or {}, "split": cfg["data"].get("split") or {}, "general_vehicles": cfg["data"].get("general_vehicles") or [], "links_base": cfg["updated_at"], "can_edit": adjustments.can_edit(_user)}
+    return {**expenses.vehicles_view(_expense_lines(year), cfg["data"], year, scope), "links": cfg["data"].get("links") or {}, "split": cfg["data"].get("split") or {}, "general_vehicles": cfg["data"].get("general_vehicles") or [], "links_base": cfg["updated_at"], "can_edit": adjustments.can_edit(_user), "can_save": adjustments.can_reference(_user)}
 
 
 @app.put("/api/expenses/links")
-def put_links(body: expenses.LinksBody, user: str = Depends(admin)):
+def put_links(body: expenses.LinksBody, user: str = Depends(reference)):
     """Correspondance véhicule Odoo (compte 615) -> ressource de l'agenda Google (sans toucher au reste de la configuration)."""
     cur = expenses.store().get()
     try:
@@ -347,11 +354,11 @@ def expenses_allocation(year: int = Query(..., ge=2000, le=2100), user: str = De
         log.exception("CA indisponible pour la clé d'imputation")
         raise HTTPException(503, "Chiffre d'affaires indisponible pour le moment")
     out = expenses.allocation_view(general, groups.get("XC", {}).get("ca", 0.0), groups.get("CARS", {}).get("ca", 0.0), cfg["data"])
-    return {**out, "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user)}
+    return {**out, "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
 
 
 @app.put("/api/expenses/key")
-def put_expenses_key(body: expenses.KeyBody, user: str = Depends(admin)):
+def put_expenses_key(body: expenses.KeyBody, user: str = Depends(reference)):
     """Enregistre la clé d'imputation (prorata du CA ou % encodé) sans toucher aux comptes retenus."""
     cur = expenses.store().get()
     data = {**expenses.Config.model_validate(cur["data"]).model_dump(), "key_mode": body.key_mode, "xc_pct": body.xc_pct}
@@ -370,11 +377,11 @@ def get_staff(user: str = Depends(require_user)):
     except Exception:
         log.exception("Lecture des données du personnel impossible")
         raise HTTPException(503, "Stockage des données du personnel inaccessible")
-    return {**doc, "can_edit": True, "upload": staff.files().enabled, "pay_prefixes": settings.STAFF_PAY_PREFIXES}
+    return {**doc, "can_edit": True, "can_save": adjustments.can_reference(user), "upload": staff.files().enabled, "pay_prefixes": settings.STAFF_PAY_PREFIXES}
 
 
 @app.put("/api/staff")
-def put_staff(body: staff.SaveBody, user: str = Depends(admin)):
+def put_staff(body: staff.SaveBody, user: str = Depends(reference)):
     try:
         doc = staff.store().put(body.data.model_dump(), user, body.base)
     except Exception:
@@ -386,7 +393,7 @@ def put_staff(body: staff.SaveBody, user: str = Depends(admin)):
 
 
 @app.put("/api/staff/payslip")
-async def put_payslip(request: Request, person: str, month: str, _user: str = Depends(admin)):
+async def put_payslip(request: Request, person: str, month: str, _user: str = Depends(reference)):
     if not staff.files().enabled:
         raise HTTPException(503, "Dépôt de fiches de paie non configuré (variable STAFF_BUCKET)")
     content = await request.body()
@@ -402,7 +409,7 @@ async def put_payslip(request: Request, person: str, month: str, _user: str = De
 
 
 @app.post("/api/staff/import")
-async def import_staff(request: Request, user: str = Depends(admin)):
+async def import_staff(request: Request, user: str = Depends(reference)):
     """Import initial : archive ZIP contenant staff.json et payslips/{personne}/{AAAA-MM}.pdf (voir scripts d'import)."""
     import io
     import json as _json

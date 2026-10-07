@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from . import settings
 
-SHARES = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "SHARED")     # les 4 BU + Shared Services (support, management)
+SHARES = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "SHARED", "MANAGEMENT")     # les 4 BU + Shared Services (support) + Management (isolé pour afficher la marge nette avec ou sans)
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
@@ -76,7 +76,7 @@ class Person(BaseModel):
     payslips: list[Payslip] = Field(default_factory=list, max_length=240)
     extras: list[Extra] = Field(default_factory=list, max_length=30)
     partners: list[Partner] = Field(default_factory=list, max_length=20)   # indépendants : sociétés Odoo dont on remonte les factures
-    alloc: dict[str, float] = Field(default_factory=dict)               # % d'imputation : XC, MODERN_RALLY, HISTORIC_RALLY, HISTORIC_RACING, SHARED
+    alloc: dict[str, float] = Field(default_factory=dict)               # % d'imputation : XC, MODERN_RALLY, HISTORIC_RALLY, HISTORIC_RACING, SHARED, MANAGEMENT
     note: str = Field(default="", max_length=500)
 
     @field_validator("id")

@@ -40,7 +40,7 @@ const SC = (() => {
 
   // Imputation : coût annuel × % par entité ; le reste (jusqu'à 100 %) est « non imputé ».
   function allocate(annual, alloc) {
-    const keys = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'SHARED'], out = {};
+    const keys = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'SHARED', 'MANAGEMENT'], out = {};
     let used = 0;
     keys.forEach(k => { const v = +((alloc || {})[k]) || 0; out[k] = annual * v / 100; used += v; });
     out.UNALLOCATED = annual * Math.max(0, 100 - used) / 100; out.pct = used;

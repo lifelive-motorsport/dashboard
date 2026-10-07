@@ -93,3 +93,9 @@ def store():
 def can_edit(user: str) -> bool:
     """Sans authentification (démo / essai local) tout le monde peut éditer ; sinon seules les adresses ADMIN_EMAILS."""
     return (not settings.AUTH_ENABLED) or user in settings.ADMIN_EMAILS
+
+
+def can_reference(user: str) -> bool:
+    """Peut enregistrer les hypothèses de référence (imputations du personnel, des véhicules, clé des frais généraux) : REFERENCE_EDITORS, ou tous les administrateurs s'il est vide.
+    Les autres administrateurs peuvent simuler dans leur navigateur, sans rien enregistrer."""
+    return can_edit(user) and (not settings.AUTH_ENABLED or not settings.REFERENCE_EDITORS or user in settings.REFERENCE_EDITORS)

@@ -47,7 +47,7 @@ function exVehicleByBu(v) {
 }
 // Correspondance manuelle véhicule Odoo -> ressource de l'agenda, pour les noms que le rapprochement automatique ne reconnaît pas.
 function exLinksEditor(v, cal) {
-  const links = ex.links || v.links || {}, res = [...new Set((cal.usage || []).map(u => u.vehicle))].sort(), canEdit = !!v.can_edit;
+  const links = ex.links || v.links || {}, res = [...new Set((cal.usage || []).map(u => u.vehicle))].sort(), canEdit = !!v.can_edit && v.can_save !== false;
   const todo = v.vehicles.filter(x => x.vehicle !== '(non classé)').map(x => x.vehicle);
   const odooNames = todo.concat(Object.keys(links).filter(k => !todo.some(t => t.toLowerCase() === k.toLowerCase())));      // les véhicules fusionnés restent listés pour pouvoir défaire la fusion
   const GEN = new Set(['util', 'utilitaire', 'truck', 'semi', 'trailer', 'remorque', 'camion', 'vehicule']);
@@ -213,7 +213,7 @@ function exDrawSource() {
   const el = document.getElementById('exp-source'); if (!el) return;
   if (ex.err) { el.innerHTML = `<p class="neg">${esc(ex.err)}</p>`; return; }
   if (!ex.src) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
-  const kindMode = el.dataset.kind || 'general', s = {...ex.src}, canEdit = !!s.can_edit, sums = exSums(), el2 = s.elsewhere || {};
+  const kindMode = el.dataset.kind || 'general', s = {...ex.src}, canEdit = !!s.can_edit && s.can_save !== false, sums = exSums(), el2 = s.elsewhere || {};
   if (kindMode === 'vehicle') s.accounts = s.accounts.filter(a => ex.sel[a.code] === 'vehicle' || (s.vehicle_prefixes || []).some(p => a.code.startsWith(p)));      // comptes 615 et comptes déjà rangés en véhicules
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur((a.closed_total ?? a.total) / (s.months_elapsed || 1))}</td><td>${sel(a)}</td></tr>`);
@@ -275,7 +275,7 @@ function exDrawRules() {
   const shares = {revenue: a.shares.revenue, pct: {XC: pctXc / 100, CARS: 1 - pctXc / 100}};
   const amt = (m, g) => a.total * shares[m][g];
   const bar = `<div class="sdbar exkey"><button type="button" data-ex-key="revenue" class="${mode === 'revenue' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur le CA, au prorata</button><button type="button" data-ex-key="pct" class="${mode === 'pct' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur base d’un % encodé</button>
-    ${canEdit ? `<button type="button" class="primary" data-ex-key-save${ex.keyDirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<span class="na">${esc(ex.msg || (a.updated_at ? 'Dernier enregistrement : ' + new Date(a.updated_at).toLocaleString('fr-BE') + (a.updated_by ? ' par ' + a.updated_by : '') + '.' : 'Clé par défaut : prorata du CA.'))}</span></div>`;
+    ${canEdit && a.can_save === false ? exSimBar('data-ex-restore-key') : canEdit ? `<button type="button" class="primary" data-ex-key-save${ex.keyDirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<span class="na">${esc(ex.msg || (a.updated_at ? 'Dernier enregistrement : ' + new Date(a.updated_at).toLocaleString('fr-BE') + (a.updated_by ? ' par ' + a.updated_by : '') + '.' : 'Clé par défaut : prorata du CA.'))}</span></div>`;
   const cell = (m, g) => `<td class="${mode === m ? 'exactive' : ''}">${pct(shares[m][g])}</td><td class="${mode === m ? 'exactive' : ''}">${eur(amt(m, g))}</td>`;
   el.innerHTML = bar
     + (mode === 'pct' ? `<div class="sdgrid exkeyin"><label class="sdfield"><span>Part XC (%)</span><input class="sdin" type="number" step="1" min="0" max="100" data-ex-xcpct value="${esc(pctXc)}"${canEdit ? '' : ' disabled'}></label><label class="sdfield"><span>Part CARS (%)</span><input class="sdin" type="number" value="${esc(100 - pctXc)}" disabled></label></div>` : '')
@@ -363,7 +363,7 @@ document.addEventListener('click', async e => {
   }
   if (t.dataset.exReload !== undefined) { ex.dirty = false; ex.msg = ''; await exLoadSource(); exDrawSource(); }
 });
-window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty || ex.platesDirty || ex.linksDirty || ex.splitDirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (ex.dirty || ((ex.keyDirty || ex.splitDirty) && !exSim()) || ex.platesDirty || ex.linksDirty) { e.preventDefault(); e.returnValue = ''; } });
 
 // ---- SERVICE VEHICLES › Imputation des frais véhicules : % indicatif (agendas) et % retenu (saisi) par véhicule, BU et frais généraux ----
 const EX_SPLIT = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['GENERAL', 'Frais généraux']];
@@ -389,6 +389,8 @@ function exIndicative(x, cal) {
 // % retenu d'une ligne : ceux que vous avez saisis (case vide = 0) ; si rien n'est saisi, la proposition indicative.
 function exRetained(x, ind) { const sv = (ex.split || (ex.vsplit || {}).split || {})[x.vehicle]; return sv && Object.keys(sv).length ? {src: 'saisi', p: Object.fromEntries(EX_SPLIT.map(([k]) => [k, (sv[k] || 0) / 100]))} : {src: 'indicatif', p: ind}; }
 // Lignes de l'imputation des frais véhicules (indicatif, retenu, total saisi) : partagées avec le calcul de la marge nette.
+// Simulation : un administrateur qui n'est pas propriétaire des hypothèses peut les modifier dans son navigateur, sans rien enregistrer.
+const exSimBar = (attr, what = 'Vos modifications') => `<span class="chip bad">Simulation</span><span class="na">${what} ne sont pas enregistrées : elles disparaissent à la fermeture de la page. Les valeurs de référence sont celles de leur propriétaire.</span><button type="button" ${attr}>Restaurer les valeurs par défaut</button>`;
 function exSplitRows(v) {
   const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null;
   const gen = (ex.general || v.general_vehicles || []).map(n => n.toLowerCase());
@@ -436,7 +438,7 @@ function exDrawSplit() {
   el.innerHTML = `<div class="kpis">${kpi('Frais véhicules depuis le 1er janvier', eur(grand), '', 'tous les comptes de la classe 615')}${kpi('Imputé aux BU', eur(grand - tot.GENERAL), '', 'avec les % retenus')}${kpi('Frais généraux', eur(tot.GENERAL))}</div>`
     + (cal ? '' : `<p class="na">Agenda indisponible : les propositions indicatives placent tout en frais généraux.</p>`)
     + control + tbl
-    + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><button type="button" data-ex-split-fillall title="Recopier la proposition indicative dans toutes les lignes sans saisie">Reprendre l’indicatif partout</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
+    + (canEdit && v.can_save === false ? `<div class="sdbar sim">${exSimBar('data-ex-restore-split')}<button type="button" data-ex-split-fillall title="Recopier la proposition indicative dans toutes les lignes sans saisie">Reprendre l’indicatif partout</button></div>` : '') + (canEdit && v.can_save !== false ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><button type="button" data-ex-split-fillall title="Recopier la proposition indicative dans toutes les lignes sans saisie">Reprendre l’indicatif partout</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
     + '<h4 class="sub">Résultat avec les pourcentages retenus</h4>' + res
     + `<small class="na">« Indicatif » : jours de déplacement du véhicule dans l’agenda de chaque BU (réservation ± ${cal ? cal.buffer_days : 3} jours). Les jours Logistics (transports, enlèvements) sont répartis entre les 4 BU au prorata de leurs jours de déplacement sur le véhicule (à défaut, sur l’ensemble des véhicules). Les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple le carburant des véhicules loués) sont proposés en frais généraux. Dans une ligne que vous renseignez, une case vide compte pour 0 % et le total doit faire 100 %. Les montants couvrent tous les comptes de la classe 615, y compris ceux que vous auriez laissés de côté dans « Données source ».</small>`;
 }
@@ -456,6 +458,7 @@ function exFillSplit(veh) {
   r[big] += diff; ex.split = ex.split || JSON.parse(JSON.stringify(v.split || {})); ex.split[veh] = Object.fromEntries(Object.entries(r).filter(([, n]) => n > 0)); ex.splitDirty = true; ex.splitMsg = '';
 }
 document.addEventListener('click', async e => {
+  const rb = e.target.closest('button'); if (rb && rb.dataset.exRestoreSplit !== undefined) { await exRestoreSplit(); return; } if (rb && rb.dataset.exRestoreKey !== undefined) { await exRestoreKey(); return; }
   const f = e.target.closest('button'); if (f && ex.vsplit && f.dataset.exSplitFill !== undefined) { exFillSplit(f.dataset.exSplitFill); exDrawSplit(); return; }
   if (f && ex.vsplit && f.dataset.exSplitGen !== undefined) { const n = f.dataset.exSplitGen, cur = (ex.general || ex.vsplit.general_vehicles || []).slice(), i = cur.findIndex(y => y.toLowerCase() === n.toLowerCase()); if (i >= 0) cur.splice(i, 1); else cur.push(n);
     ex.general = cur; if (ex.split && ex.split[n]) delete ex.split[n]; else if (!ex.split && (ex.vsplit.split || {})[n]) { ex.split = JSON.parse(JSON.stringify(ex.vsplit.split)); delete ex.split[n]; } ex.splitDirty = true; ex.splitMsg = ''; exDrawSplit(); return; }
@@ -472,3 +475,8 @@ document.addEventListener('click', async e => {
   } catch (err) { ex.splitMsg = 'Échec de l’enregistrement : ' + err.message; }
   exDrawSplit();
 });
+
+// Retour aux valeurs de référence (celles enregistrées par leur propriétaire) : on jette les modifications locales et on relit le serveur.
+async function exRestoreSplit() { ex.split = null; ex.general = null; ex.links = null; ex.splitDirty = false; ex.linksDirty = false; ex.splitMsg = ''; await exLoadSplit(); exDrawSplit(); }
+async function exRestoreKey() { ex.keyDirty = false; ex.msg = ''; await exLoadAlloc(); exDrawRules(); }
+const exSim = () => ((ex.vsplit || {}).can_save === false) || ((ex.alloc || {}).can_save === false);

@@ -33,6 +33,7 @@ VEHICLE_PLAN = os.getenv("VEHICLE_PLAN", "CARS")        # axe analytique dont ch
 
 # Ajustements de marge brute : édition réservée à ces adresses ; stockage « firestore » (production) ou « memory » (démo/essais)
 ADMIN_EMAILS = _list("ADMIN_EMAILS")
+REFERENCE_EDITORS = _list("REFERENCE_EDITORS")        # qui peut ENREGISTRER les hypothèses d'imputation (référence) ; vide = tous les administrateurs. Les autres administrateurs simulent sans enregistrer.
 ADJUSTMENTS_STORE = os.getenv("ADJUSTMENTS_STORE", "memory" if PROVIDER == "demo" else "firestore")
 
 # Chemin des pages du webshop dans le suivi des visites d'Odoo (visites et pages les plus vues ne comptent que ces pages)

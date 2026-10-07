@@ -174,3 +174,4 @@ input.sdin[type=checkbox]{width:auto}.sdtable td{vertical-align:middle}.sdtable 
 .sdadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}.sdadd input{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font:inherit}
 .sdres{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}.sdpeople{margin-top:8px}
 td.adjv{text-decoration:underline dotted;cursor:help}
+td.exactive{background:rgba(220,20,60,.08);font-weight:600}.exkeyin{max-width:420px;margin:0 0 10px}

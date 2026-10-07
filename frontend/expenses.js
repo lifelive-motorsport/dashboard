@@ -1,6 +1,6 @@
 // GENERAL EXPENSES › Données source (choix des comptes) et Général (résultat). Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, lineChart) à l'appel.
 const EX_YEAR = new Date().getFullYear();
-let ex = {src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
+let ex = {alloc: null, allocErr: null, keyMode: null, keyPct: 50, keyDirty: false, src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
 const exAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const exKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service'], ['partners', 'Selon le fournisseur']];
 const exPartKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service']];
@@ -21,6 +21,17 @@ async function exLoadGeneral() {
   try { ex.gen = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`); ex.genErr = null; } catch (e) { ex.genErr = e.message; }
 }
 
+async function exLoadAlloc() {
+  try { const j = await exGet(`/api/expenses/allocation?year=${EX_YEAR}`); ex.alloc = j; ex.allocErr = null;
+    if (!ex.keyDirty) { ex.keyMode = j.key_mode; ex.keyPct = j.xc_pct; } } catch (e) { ex.allocErr = e.message; }
+}
+function expensesRulesBlocks() {
+  return [{static: '<section class="block" data-bid="exp-rules"><div class="block-head"><h3>Imputation des frais généraux entre XC et CARS</h3></div><div class="block-body" id="exp-rules"><p class="na">Chargement…</p></div></section>'}];
+}
+function expensesViewBlocks(view) {
+  const t = view === 'xc' ? 'Frais généraux imputés à XC' : 'Frais généraux imputés à CARS';
+  return [{static: `<section class="block" data-bid="exp-view-${view}"><div class="block-head"><h3>${t}</h3></div><div class="block-body" id="exp-view" data-view="${view}"><p class="na">Chargement…</p></div></section>`}];
+}
 function expensesSourceBlocks() {
   return [{static: '<section class="block" data-bid="exp-src"><div class="block-head"><h3>Frais généraux : comptes retenus</h3></div><div class="block-body" id="exp-source"><p class="na">Chargement…</p></div></section>'}];
 }
@@ -76,6 +87,43 @@ function exDrawGeneral() {
     + '<small class="na">Charges des comptes retenus dans « Données source » (débit net, depuis le 1er janvier ' + EX_YEAR + '). Les véhicules de service, le personnel, le marketing et les achats par BU sont traités dans leurs propres rubriques. La projection suppose des frais réguliers ; les charges annuelles (assurances…) la déforment en début d’année.</small>';
 }
 
+const exShare = (a, mode, g) => (a.shares[mode] || {})[g] || 0;
+function exDrawRules() {
+  const el = document.getElementById('exp-rules'); if (!el) return;
+  if (ex.allocErr) { el.innerHTML = `<p class="neg">${esc(ex.allocErr)}</p>`; return; }
+  const a = ex.alloc; if (!a) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const mode = ex.keyMode || a.key_mode, canEdit = !!a.can_edit, pctXc = Math.min(100, Math.max(0, +ex.keyPct || 0));
+  const shares = {revenue: a.shares.revenue, pct: {XC: pctXc / 100, CARS: 1 - pctXc / 100}};
+  const amt = (m, g) => a.total * shares[m][g];
+  const bar = `<div class="sdbar exkey"><button type="button" data-ex-key="revenue" class="${mode === 'revenue' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur le CA, au prorata</button><button type="button" data-ex-key="pct" class="${mode === 'pct' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur base d’un % encodé</button>
+    ${canEdit ? `<button type="button" class="primary" data-ex-key-save${ex.keyDirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<span class="na">${esc(ex.msg || (a.updated_at ? 'Dernier enregistrement : ' + new Date(a.updated_at).toLocaleString('fr-BE') + (a.updated_by ? ' par ' + a.updated_by : '') + '.' : 'Clé par défaut : prorata du CA.'))}</span></div>`;
+  const cell = (m, g) => `<td class="${mode === m ? 'exactive' : ''}">${pct(shares[m][g])}</td><td class="${mode === m ? 'exactive' : ''}">${eur(amt(m, g))}</td>`;
+  el.innerHTML = bar
+    + (mode === 'pct' ? `<div class="sdgrid exkeyin"><label class="sdfield"><span>Part XC (%)</span><input class="sdin" type="number" step="1" min="0" max="100" data-ex-xcpct value="${esc(pctXc)}"${canEdit ? '' : ' disabled'}></label><label class="sdfield"><span>Part CARS (%)</span><input class="sdin" type="number" value="${esc(100 - pctXc)}" disabled></label></div>` : '')
+    + `<div class="kpis">${kpi('Frais généraux depuis le 1er janvier', eur(a.total), '', a.configured ? 'comptes retenus dans « Données source »' : 'proposition de départ (non enregistrée)')}${kpi('Imputé à XC', eur(amt(mode, 'XC')), '', pct(shares[mode].XC))}${kpi('Imputé à CARS', eur(amt(mode, 'CARS')), '', pct(shares[mode].CARS))}</div>`
+    + '<h4 class="sub">Les deux clés côte à côte</h4>' + table(['', 'Prorata du CA : part', 'Montant', '% encodé : part', 'Montant'], ['XC', 'CARS'].map(g => `<tr><td class="prod">${g === 'XC' ? 'XC' : 'CARS'} <small class="na">CA ${eur(a.ca[g])}</small></td>${cell('revenue', g)}${cell('pct', g)}</tr>`)
+        .concat([`<tr class="tot"><td>Total</td><td>100,0 %</td><td>${eur(a.total)}</td><td>100,0 %</td><td>${eur(a.total)}</td></tr>`]), 'prodtable sdtable')
+    + `<small class="na">Prorata du CA : part de chaque famille dans le chiffre d’affaires XC + CARS depuis le 1er janvier ${EX_YEAR} (hors « Others »). % encodé : la part XC saisie ici, CARS recevant le reste. La clé choisie (colonne en évidence) s’applique aux pages XC et CARS de GENERAL EXPENSES ; elle est appliquée au total depuis le 1er janvier et à chaque mois de la même façon.</small>`;
+}
+function exDrawView() {
+  const el = document.getElementById('exp-view'); if (!el) return;
+  if (ex.allocErr) { el.innerHTML = `<p class="neg">${esc(ex.allocErr)}</p>`; return; }
+  const a = ex.alloc; if (!a) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const g = el.dataset.view === 'xc' ? 'XC' : 'CARS', mode = a.key_mode, share = a.shares[mode][g];
+  if (a.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme frais généraux : voir « Données source ».</p>'; return; }
+  const pts = a.series.map(p => ({label: exMonth(p.month), avg: p.amount * share, orders: 0, month: p.month}));
+  el.innerHTML = `<div class="kpis">${kpi('Imputé depuis le 1er janvier', eur(a.total * share), '', pct(share) + ' des frais généraux')}${kpi('Moyenne mensuelle', eur(a.monthly_avg * share), '', `sur ${num(a.months)} mois`)}${kpi('Projeté sur 1 an', eur(a.projected * share), '', 'moyenne mensuelle × 12')}${kpi('Clé appliquée', mode === 'revenue' ? 'Prorata du CA' : '% encodé', '', mode === 'revenue' ? `CA ${g} ${eur(a.ca[g])}` : `${pct(share)} pour ${g}`)}</div>`
+    + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, a.monthly_avg * share, `Frais généraux imputés à ${g} par mois (€)`, v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
+    + '<h4 class="sub">Par compte</h4>' + table(['Compte', 'Libellé', 'Frais généraux', 'Imputé à ' + g], a.accounts.map(x => `<tr><td>${esc(x.code)}</td><td class="prod">${esc(x.name)}</td><td>${eur(x.total)}</td><td>${eur(x.total * share)}</td></tr>`)
+        .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(a.total)}</td><td>${eur(a.total * share)}</td></tr>`]), 'prodtable')
+    + '<small class="na">Le montant de chaque compte est multiplié par la part de ' + g + ' (clé choisie dans « Imputation des frais généraux »).</small>';
+}
+
+document.addEventListener('input', e => {
+  const el = e.target; if (!el.dataset || el.dataset.exXcpct === undefined || !ex.alloc) return;
+  ex.keyPct = Math.min(100, Math.max(0, parseFloat(el.value) || 0)); ex.keyDirty = true; ex.msg = '';
+  const keep = el.selectionStart; exDrawRules(); const n = document.querySelector('[data-ex-xcpct]'); if (n) { n.focus(); try { n.setSelectionRange(keep, keep); } catch {} }
+});
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
@@ -89,6 +137,17 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.exKey !== undefined && ex.alloc) { ex.keyMode = t.dataset.exKey; ex.keyDirty = true; ex.msg = ''; exDrawRules(); return; }
+  if (t.dataset.exKeySave !== undefined) {
+    ex.msg = 'Enregistrement…'; exDrawRules();
+    try {
+      const r = await fetch('/api/expenses/key', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({key_mode: ex.keyMode, xc_pct: +ex.keyPct || 0, base: ex.alloc.updated_at})});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+      ex.keyDirty = false; await exLoadAlloc(); ex.msg = 'Enregistré.';
+    } catch (err) { ex.msg = 'Échec de l’enregistrement : ' + err.message; }
+    exDrawRules(); return;
+  }
   if (t.dataset.exSave !== undefined) {
     ex.msg = 'Enregistrement…'; exDrawSource();
     try {
@@ -101,4 +160,4 @@ document.addEventListener('click', async e => {
   }
   if (t.dataset.exReload !== undefined) { ex.dirty = false; ex.msg = ''; await exLoadSource(); exDrawSource(); }
 });
-window.addEventListener('beforeunload', e => { if (ex.dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty) { e.preventDefault(); e.returnValue = ''; } });

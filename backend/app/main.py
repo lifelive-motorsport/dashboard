@@ -151,7 +151,8 @@ def expenses_accounts(year: int = Query(..., ge=2000, le=2100), user: str = Depe
 
 @app.put("/api/expenses/config")
 def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
-    data = body.data.model_copy(update={"saved": True}).model_dump()
+    cur = expenses.Config.model_validate(expenses.store().get()["data"])
+    data = body.data.model_copy(update={"saved": True, "key_mode": cur.key_mode, "xc_pct": cur.xc_pct}).model_dump()      # la clé d'imputation a son propre enregistrement
     doc = expenses.store().put(data, user, body.base)
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
@@ -161,6 +162,33 @@ def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
 @app.get("/api/expenses/general")
 def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query("general", pattern="^(general|vehicle)$"), _user: str = Depends(require_user)):
     return expenses.kind_view(_expense_lines(year), expenses.store().get()["data"], year, kind)
+
+
+@app.get("/api/expenses/allocation")
+def expenses_allocation(year: int = Query(..., ge=2000, le=2100), user: str = Depends(require_user)):
+    """Frais généraux (rubrique « general ») imputés à XC et CARS selon les deux clés ; le CA est celui du 1er janvier à aujourd'hui."""
+    cfg = expenses.store().get()
+    general = expenses.kind_view(_expense_lines(year), cfg["data"], year, "general")
+    try:
+        today = date.today()
+        to = today if year == today.year else date(year, 12, 31)
+        groups = {g["key"]: g for g in aggregate(provider().pnl_balances(date(year, 1, 1), to))["groups"]}
+    except Exception:
+        log.exception("CA indisponible pour la clé d'imputation")
+        raise HTTPException(503, "Chiffre d'affaires indisponible pour le moment")
+    out = expenses.allocation_view(general, groups.get("XC", {}).get("ca", 0.0), groups.get("CARS", {}).get("ca", 0.0), cfg["data"])
+    return {**out, "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user)}
+
+
+@app.put("/api/expenses/key")
+def put_expenses_key(body: expenses.KeyBody, user: str = Depends(admin)):
+    """Enregistre la clé d'imputation (prorata du CA ou % encodé) sans toucher aux comptes retenus."""
+    cur = expenses.store().get()
+    data = {**expenses.Config.model_validate(cur["data"]).model_dump(), "key_mode": body.key_mode, "xc_pct": body.xc_pct}
+    doc = expenses.store().put(data, user, body.base if body.base is not None else cur["updated_at"])
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {**doc, "can_edit": True}
 
 
 @app.get("/api/staff")

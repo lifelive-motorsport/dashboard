@@ -64,3 +64,38 @@ def test_account_by_supplier_keeps_only_chosen_suppliers():
     assert g["total"] == 1400 and [a["code"] for a in g["accounts"]] == ["613000", "612000"]                                   # 600 + 800 (ADC seulement)
     assert g["series"] == [{"month": "2026-01", "amount": 700.0}, {"month": "2026-02", "amount": 700.0}]
     assert expenses.kind_view(LINES, cfg, 2026, "vehicle")["empty"]
+
+
+def test_allocation_view_supports_revenue_and_percentage_keys():
+    g = expenses.kind_view(LINES, {"saved": False, "selected": {}}, 2026, "general")             # 1 500 € de frais généraux
+    a = expenses.allocation_view(g, 300000.0, 100000.0, {"key_mode": "revenue", "xc_pct": 40})
+    assert a["shares"]["revenue"] == {"XC": 0.75, "CARS": 0.25} and a["amounts"]["revenue"] == {"XC": 1125.0, "CARS": 375.0}
+    assert a["shares"]["pct"] == {"XC": 0.4, "CARS": 0.6} and a["amounts"]["pct"] == {"XC": 600.0, "CARS": 900.0} and a["key_mode"] == "revenue"
+    zero = expenses.allocation_view(g, 0.0, 0.0, {})
+    assert zero["shares"]["revenue"] == {"XC": 0.5, "CARS": 0.5} and zero["xc_pct"] == 50                  # sans CA : 50/50, % par défaut 50
+
+
+def test_key_endpoint_is_admin_only_and_keeps_account_choices(monkeypatch):
+    import app.adjustments as adj
+    import app.main as m
+    monkeypatch.setattr(expenses, "_store", expenses.Store())
+    monkeypatch.setattr(adj.settings, "AUTH_ENABLED", True)
+    monkeypatch.setattr(adj.settings, "ADMIN_EMAILS", ["md@x.be"])
+    try:
+        app.dependency_overrides[m.require_user] = lambda: "actionnaire@x.be"
+        c = TestClient(app)
+        assert c.put("/api/expenses/key", json={"key_mode": "pct", "xc_pct": 30}).status_code == 403
+        assert c.get("/api/expenses/allocation?year=2026").json()["key_mode"] == "revenue"
+        app.dependency_overrides[m.require_user] = lambda: "md@x.be"
+        assert c.put("/api/expenses/config", json={"data": {"selected": {"611000": "general"}}, "base": None}).status_code == 200
+        r = c.put("/api/expenses/key", json={"key_mode": "pct", "xc_pct": 30})
+        assert r.status_code == 200
+        al = c.get("/api/expenses/allocation?year=2026").json()
+        assert al["key_mode"] == "pct" and al["xc_pct"] == 30 and [a["code"] for a in al["accounts"]] == ["611000"]       # le choix des comptes est conservé
+        assert c.put("/api/expenses/key", json={"key_mode": "pct", "xc_pct": 130}).status_code == 422
+        # enregistrer à nouveau les comptes ne remet pas la clé à zéro
+        cur = c.get("/api/expenses/accounts?year=2026").json()
+        assert c.put("/api/expenses/config", json={"data": {"selected": {"611000": "general", "612000": "general"}}, "base": cur["updated_at"]}).status_code == 200
+        assert c.get("/api/expenses/allocation?year=2026").json()["xc_pct"] == 30
+    finally:
+        app.dependency_overrides.clear()

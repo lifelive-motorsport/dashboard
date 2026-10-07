@@ -23,6 +23,8 @@ class Config(BaseModel):
     selected: dict[str, Literal["general", "vehicle", "partners"]] = Field(default_factory=dict)   # compte -> rubrique ; « partners » : selon le fournisseur ; absent = laissé de côté
     partners: dict[str, dict[str, Literal["general", "vehicle"]]] = Field(default_factory=dict)    # compte « partners » -> {id fournisseur -> rubrique} ; les autres fournisseurs sont laissés de côté
     saved: bool = False
+    key_mode: Literal["revenue", "pct"] = "revenue"                                                # clé d'imputation XC / CARS : prorata du CA, ou % encodé
+    xc_pct: float = Field(default=50.0, ge=0, le=100)                                              # part XC en % pour la clé « pct » (CARS = le reste)
 
     @field_validator("selected")
     @classmethod
@@ -39,6 +41,12 @@ class Config(BaseModel):
             if not CODE.match(k) or any(not re.match(r"^\d{1,12}$", pid) for pid in d):
                 raise ValueError("fournisseur ou compte invalide")
         return v
+
+
+class KeyBody(BaseModel):
+    key_mode: Literal["revenue", "pct"]
+    xc_pct: float = Field(ge=0, le=100)
+    base: str | None = None
 
 
 class SaveBody(BaseModel):
@@ -179,3 +187,17 @@ def kind_view(lines: list[dict], config: dict, year: int, kind: str) -> dict:
                          for a in sorted(mine, key=lambda a: -a["total"])],
             "suppliers": [{"name": s["name"], "amount": round(s["amount"], 2), "share": (s["amount"] / total) if total else 0.0} for s in sup],
             "configured": bool(config.get("saved")), "empty": not mine}
+
+
+def allocation_view(general: dict, ca_xc: float, ca_cars: float, config: dict) -> dict:
+    """Imputation des frais généraux entre XC et CARS selon les deux clés possibles ; la clé active est celle de la configuration."""
+    cfg = Config.model_validate({**config})
+    ca = max(ca_xc, 0.0) + max(ca_cars, 0.0)
+    rev_xc = (max(ca_xc, 0.0) / ca) if ca else 0.5
+    pct_xc = cfg.xc_pct / 100
+    keys = {"revenue": {"XC": rev_xc, "CARS": 1 - rev_xc}, "pct": {"XC": pct_xc, "CARS": 1 - pct_xc}}
+    total = general["total"]
+    amounts = {k: {g: round(total * v, 2) for g, v in sh.items()} for k, sh in keys.items()}
+    return {"key_mode": cfg.key_mode, "xc_pct": cfg.xc_pct, "ca": {"XC": round(ca_xc, 2), "CARS": round(ca_cars, 2)}, "shares": keys, "amounts": amounts,
+            "total": general["total"], "monthly_avg": general["monthly_avg"], "projected": general["projected"], "months": general["months"], "empty": general["empty"],
+            "series": general["series"], "accounts": general["accounts"], "configured": general["configured"]}

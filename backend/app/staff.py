@@ -38,6 +38,7 @@ class Payslip(BaseModel):
     patronal: float | None = Field(default=None, ge=0, le=1e7)          # cotisations patronales réelles du mois, si connues
     net: float | None = Field(default=None, ge=0, le=1e7)
     other: float = Field(default=0.0, ge=0, le=1e7)                     # autres coûts société du mois (chèques-repas, assurance groupe…)
+    days: float | None = Field(default=None, ge=0, le=31)              # jours prestés dans le mois (fiche de paie) : utile pour le travail ponctuel
     note: str = Field(default="", max_length=300)
     file: FileMeta | None = None
 

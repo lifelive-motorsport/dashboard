@@ -209,6 +209,19 @@ function sdServiceMonths(inv) {
   return Array.from({length: n}, (_, i) => { const k = m - (n - 1) + i; return `${y}-${String(k).padStart(2, '0')}`; });
 }
 const sdActiveMonths = (p, inv) => p.active_months > 0 ? +p.active_months : (sdServiceMonths(inv).length || sdMonthsElapsed());
+const sdMonthName = m => { try { return new Date(m + '-15').toLocaleDateString('fr-BE', {month: 'long', year: 'numeric'}); } catch { return m; } };
+// Période d'occupation : salarié = du … au … (ou en cours) ; travail ponctuel d'une personne sortie = nombre de jours prestés ; indépendant = mois de prestation.
+function sdOccupation(p) {
+  if (p.kind === 'independant') {
+    const ms = sdServiceMonths(sd.inv[p.id]);
+    return ms.length ? `${sdMonthName(ms[0])} → ${sdMonthName(ms[ms.length - 1])} (${ms.length} mois)` : (p.start ? `depuis le ${fmtDate(p.start)}` : '');
+  }
+  const slips = SC.sortedSlips(p).filter(x => String(x.month).startsWith(String(SD_YEAR))), days = slips.reduce((t, x) => t + (+x.days || 0), 0);
+  if (!p.active && days > 0 && days <= 20 && slips.every(x => x.days != null))
+    return `${num(days)} jour${days > 1 ? 's' : ''} prestés (${slips.filter(x => x.days > 0).map(x => `${num(x.days)} en ${sdMonthName(x.month).split(' ')[0]}`).join(', ')} ${SD_YEAR})`;
+  const to = p.end ? fmtDate(p.end) : p.active ? 'en cours' : slips.length ? 'dernière fiche : ' + sdMonthName(slips[slips.length - 1].month) : '';
+  return p.start ? `du ${fmtDate(p.start)} → ${to || '?'}` : to;
+}
 const sdFees = inv => inv ? inv.list.reduce((t, x) => t + (+x.fees || 0), 0) : 0;      // honoraires : lignes des comptes 613 (hors frais avancés)
 function sdPersonCosts(p) {
   if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p));
@@ -223,7 +236,7 @@ function sdDrawPeople() {
   const people = sd.doc.people.slice().sort((x, y) => (y.active - x.active));      // actifs d'abord ; les personnes sorties ou ponctuelles restent imputables (coût réel)
   people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).forEach(p => sdLoadInvoices(p).then(() => { const t = document.getElementById('sd-alloc-tot'); if (t) t.innerHTML = sdAllocTotals(); }));
   const rows = people.map(p => { const a = p.alloc || {}, used = SD_SHARES.reduce((t, [k]) => t + (+a[k] || 0), 0);
-    return `<tr data-row="${p.id}"><td class="prod">${esc(p.name)}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}${p.function ? ' · ' + esc(p.function) : ''}${p.active ? '' : ' · <b>inactif</b>'}</small></td><td data-annual="${p.id}">${p.active ? eur(sdPersonAnnual(p)) : eur(sdPersonReal(p)) + '<br><small class="na">réel à ce jour</small>'}</td>`
+    return `<tr data-row="${p.id}"><td class="prod">${esc(p.name)}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}${p.function ? ' · ' + esc(p.function) : ''}${p.active ? '' : ' · <b>inactif</b>'}</small><br><small class="na">${esc(sdOccupation(p))}</small></td><td data-annual="${p.id}">${p.active ? eur(sdPersonAnnual(p)) : eur(sdPersonReal(p)) + '<br><small class="na">réel à ce jour</small>'}</td>`
       + SD_SHARES.map(([k]) => `<td>${sdIn('alloc:' + k, a[k], {pid: p.id, sub: 'alloc', step: '1'})}</td>`).join('') + `<td data-pct="${p.id}" class="${used > 100.0001 ? 'neg' : used < 99.9999 ? 'na' : ''}">${num(used)} %</td></tr>`; });
   el.innerHTML = sdBar()
     + (rows.length ? table(['Personne', 'Coût annualisé'].concat(SD_SHARES.map(s => s[1] + ' (%)'), ['Total']), rows, 'prodtable sdtable sdalloc') : '<p class="na">Aucune personne : créez d’abord les salariés et indépendants dans « Données source ».</p>')
@@ -351,6 +364,7 @@ function sdDrawView() {
   const el = document.getElementById('staff-view'); if (!el) return;
   const gate = sdGate(); if (gate) { el.innerHTML = gate; return; }
   if (!sd.acc) sdLoadAcc();
+  sd.doc.people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).forEach(p => { sd.inv[p.id] = {list: []}; sdLoadInvoices(p).then(sdDrawView); });      // coûts et périodes des indépendants
   const real = sd.view === 'real', L = real ? 'Coût réel à ce jour' : 'Coût annualisé', v = SD_VIEWS[el.dataset.view], rows = sdViewRows(real), total = rows.reduce((t, r) => t + r.annual, 0), sum = (r, ks) => ks.reduce((t, k) => t + (r.a[k] || 0), 0);
   const people = (list, n = rows.length) => `${sdPlural(list.filter(r => r.p.kind === 'salarie').length, 'salarié')} · ${sdPlural(list.filter(r => r.p.kind === 'independant').length, 'indépendant')}`;
   if (!rows.length) { el.innerHTML = '<p class="na">Aucune personne active : renseignez d’abord « Données source » puis « Imputation du personnel ».</p>'; return; }
@@ -366,14 +380,14 @@ function sdDrawView() {
     el.innerHTML = toggle + `<div class="kpis">${kpi(L + ' du personnel', eur(total), '', people(rows))}${gt.filter(([l, x]) => l !== 'Non imputé' || x > 1).map(([l, x]) => kpi(l, eur(x), l === 'Non imputé' ? 'neg' : '', total ? pct(x / total) : '')).join('')}${acc != null ? kpi('Réalisé en comptabilité ' + SD_YEAR, eur(acc), '', 'comptes 620/621 + 618000/618001, depuis le 1er janvier') : ''}</div>`
       + '<h4 class="sub">Répartition par BU</h4>' + table(['Entité', L + ' imputé', 'Part', 'Personnes concernées'], bu.concat(un > 1 ? [`<tr><td>Non imputé</td><td class="neg">${eur(un)}</td><td>${pct(un / total)}</td><td><small class="na">à répartir dans « Imputation du personnel »</small></td></tr>`] : []), 'prodtable')
       + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', L, 'XC', 'CARS', 'Shared Services', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
-          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
+          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small><br><small class="na">${esc(sdOccupation(r.p))}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
     return;
   }
   const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sum(y, v.scope) - sum(x, v.scope)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);
   const fte = mine.reduce((t, r) => t + v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0) / 100, 0);
   const multi = v.scope.length > 1, head = ['Personne', 'Type'].concat(multi ? v.scope.map(k => sdLabel(k) + ' (%)') : [], ['Imputé (%)', L + ' imputé', 'Coût journalier', 'Journalier ajusté', 'Coût horaire', 'Horaire ajusté']);
   const body = mine.map(r => { const pc = v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0);
-    return `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td>${multi ? v.scope.map(k => `<td>${num(+r.p.alloc[k] || 0)} %</td>`).join('') : ''}<td>${num(pc)} %</td><td>${eur(sum(r, v.scope))}</td><td>${sdEur2(r.c.daily)}</td><td title="facturable ${num(r.p.billable_pct ?? 100)} % · temps presté ${num(r.p.hours_pct ?? 100)} %">${sdEur2(r.c.dailyAdj)}</td><td>${sdEur2(r.c.hourly)}</td><td title="facturable ${num(r.p.billable_pct ?? 100)} % · temps presté ${num(r.p.hours_pct ?? 100)} %">${sdEur2(r.c.hourlyAdj)}</td></tr>`; });
+    return `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small><br><small class="na">${esc(sdOccupation(r.p))}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td>${multi ? v.scope.map(k => `<td>${num(+r.p.alloc[k] || 0)} %</td>`).join('') : ''}<td>${num(pc)} %</td><td>${eur(sum(r, v.scope))}</td><td>${sdEur2(r.c.daily)}</td><td title="facturable ${num(r.p.billable_pct ?? 100)} % · temps presté ${num(r.p.hours_pct ?? 100)} %">${sdEur2(r.c.dailyAdj)}</td><td>${sdEur2(r.c.hourly)}</td><td title="facturable ${num(r.p.billable_pct ?? 100)} % · temps presté ${num(r.p.hours_pct ?? 100)} %">${sdEur2(r.c.hourlyAdj)}</td></tr>`; });
   const tail = `<tr class="tot"><td>Total</td><td></td>${multi ? v.scope.map(k => `<td>${num(mine.reduce((t, r) => t + (+r.p.alloc[k] || 0) / 100, 0))} ETP</td>`).join('') : ''}<td>${num(fte)} ETP</td><td>${eur(amt)}</td><td></td><td></td><td></td><td></td></tr>`;
   const split = multi ? '<h4 class="sub">Par BU</h4><div class="kpis">' + v.scope.map(k => { const x = rows.reduce((t, r) => t + (r.a[k] || 0), 0); return kpi(sdLabel(k), eur(x), '', amt ? pct(x / amt) + ' de CARS' : ''); }).join('') + '</div>' : '';
   el.innerHTML = toggle + `<div class="kpis">${kpi(L + ' imputé', eur(amt), '', total ? pct(amt / total) + ' du coût du personnel' : '')}${kpi('Équivalents temps plein imputés', num(fte), '', sdPlural(mine.length, 'personne'))}${kpi('Coût moyen par ETP', fte ? eur(amt / fte) : '–')}</div>`

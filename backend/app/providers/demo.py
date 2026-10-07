@@ -126,7 +126,7 @@ class DemoProvider:
     def expenses_lines(self, year: int) -> list[dict]:
         rnd = random.Random(11)
         spec = [("611000", "Entretien et réparations", 900), ("611100", "Entretien véhicules", 700), ("612000", "Électricité, gaz, eau", 1500), ("612010", "Fournitures de bureau", 400),
-                ("613000", "Honoraires", 6000), ("614000", "Publicité", 300), ("640000", "Taxes diverses", 450), ("604010", "Achats XC", 30000), ("620000", "Rémunérations", 40000), ("612050", "Marketing", 800)]
+                ("613000", "Honoraires", 6000), ("614000", "Publicité", 300), ("640000", "Taxes diverses", 450), ("615021", "Carburant Util. CITAN", 380), ("615022", "Assurance Util. CITAN", 110), ("615031", "Carburant Util. SPRINTER", 900), ("615032", "Entretien Util. SPRINTER", 350), ("604010", "Achats XC", 30000), ("620000", "Rémunérations", 40000), ("612050", "Marketing", 800)]
         out = []
         for code, name, base in spec:
             by = {f"{year}-{m:02d}": round(base * (0.8 + rnd.random() * 0.4), 2) for m in range(1, 10)}

@@ -110,3 +110,17 @@ def test_month_lines_keep_chosen_accounts_and_suppliers_and_rank_by_amount():
     cfg = {"saved": True, "selected": {"611000": "general", "612000": "general", "613000": "partners"}, "partners": {"613000": {"7": "general"}}}
     r = expenses.month_lines(raw, cfg, "general", "2026-07")
     assert [l["move"] for l in r["lines"]] == ["F1", "F3", "F2"] and r["total"] == 21200 and r["count"] == 3
+
+
+def test_vehicle_accounts_are_proposed_and_split_by_vehicle_and_nature():
+    lines = [{"code": "615021", "name": "Carburant Util. CITAN", "total": 3000.0, "by_month": {"2026-01": 3000.0}, "partners": {}},
+             {"code": "615022", "name": "Assurance Util. CITAN", "total": 800.0, "by_month": {"2026-01": 800.0}, "partners": {}},
+             {"code": "615031", "name": "Carburant Util. SPRINTER", "total": 5000.0, "by_month": {"2026-01": 5000.0}, "partners": {}},
+             {"code": "615999", "name": "Divers véhicules", "total": 100.0, "by_month": {"2026-01": 100.0}, "partners": {}}]
+    assert expenses.suggestion("615021") == "vehicle" and expenses.suggestion("611000") == "general"
+    assert expenses.split_vehicle_account("Carburant Util. CITAN") == ("CITAN", "Carburant") and expenses.split_vehicle_account("Divers")[0] == "(non classé)"
+    v = expenses.vehicles_view(lines, {"saved": False, "selected": {}}, 2026)
+    assert v["total"] == 8900 and v["types"][0] == "Carburant" and [x["vehicle"] for x in v["vehicles"]] == ["SPRINTER", "CITAN", "(non classé)"]
+    citan = next(x for x in v["vehicles"] if x["vehicle"] == "CITAN")
+    assert citan["types"] == {"Carburant": 3000.0, "Assurance": 800.0}
+    assert expenses.kind_view(lines, {"saved": False, "selected": {}}, 2026, "general")["empty"]            # les 615 ne tombent pas dans les frais généraux

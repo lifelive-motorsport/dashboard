@@ -110,7 +110,9 @@ def family(code: str, name: str) -> str:
 
 def suggestion(code: str) -> str | None:
     """Proposition de départ (avant tout enregistrement) : les comptes dont le code commence par EXPENSES_DEFAULT_PREFIXES."""
-    return "general" if any(code.startswith(p) for p in settings.EXPENSES_DEFAULT_PREFIXES) else None
+    if any(code.startswith(p) for p in settings.EXPENSES_DEFAULT_PREFIXES):
+        return "general"
+    return "vehicle" if any(code.startswith(p) for p in settings.EXPENSES_VEHICLE_PREFIXES) else None
 
 
 def effective(config: dict, codes) -> dict[str, str]:  # noqa: D401
@@ -163,7 +165,7 @@ def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
                            for pid, p in sorted(a["partners"].items(), key=lambda kv: -abs(kv[1]["amount"]))[:80]]
         accounts.append(row)
     return {"year": year, "saved": bool(config.get("saved")), "accounts": accounts,
-            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS,
+            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS, "vehicle_prefixes": settings.EXPENSES_VEHICLE_PREFIXES,
             "partner_rules": config.get("partners") or {}}
 
 
@@ -217,3 +219,36 @@ def month_lines(raw: list[dict], config: dict, kind: str, month: str, limit: int
     total = sum(r["amount"] for r in keep)
     top = sorted(keep, key=lambda r: -abs(r["amount"]))[:limit]
     return {"month": month, "total": round(total, 2), "count": len(keep), "lines": [{k: (round(v, 2) if k == "amount" else v) for k, v in r.items() if k != "partner_id"} for r in top]}
+
+
+_VEHICLE_NAME = re.compile(r"^(?P<type>.+?)\s+(?:util\.?|utilitaire|véhicule|veh\.?)\s+(?P<veh>.+)$", re.I)
+
+
+def split_vehicle_account(name: str) -> tuple[str, str]:
+    """Libellé de compte 615 « Carburant Util. CITAN » -> (véhicule « CITAN », nature « Carburant »). Sans motif reconnu : véhicule « (non classé) »."""
+    m = _VEHICLE_NAME.match((name or "").strip())
+    if not m:
+        return "(non classé)", (name or "").strip()
+    return m["veh"].strip(), m["type"].strip().capitalize()
+
+
+def vehicles_view(lines: list[dict], config: dict, year: int) -> dict:
+    """Coût par véhicule et par nature (carburant, entretien, assurance…) d'après les comptes rangés en « véhicules de service »."""
+    cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
+    sel = effective(config, [a["code"] for a in cand])
+    mine = [x for a in cand if (x := _for_kind(a, sel, config, "vehicle"))]
+    veh: dict[str, dict] = {}
+    types: dict[str, float] = {}
+    for a in mine:
+        v, t = split_vehicle_account(a["name"])
+        d = veh.setdefault(v, {"vehicle": v, "total": 0.0, "types": {}, "accounts": []})
+        d["total"] += a["total"]
+        d["types"][t] = d["types"].get(t, 0.0) + a["total"]
+        d["accounts"].append(a["code"])
+        types[t] = types.get(t, 0.0) + a["total"]
+    total = sum(d["total"] for d in veh.values())
+    order = [t for t, _ in sorted(types.items(), key=lambda kv: -kv[1])]
+    return {"year": year, "total": round(total, 2), "types": order, "type_totals": {t: round(types[t], 2) for t in order},
+            "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
+                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"]} for d in sorted(veh.values(), key=lambda d: -d["total"])],
+            "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}

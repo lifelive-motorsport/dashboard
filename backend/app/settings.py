@@ -74,6 +74,7 @@ MARKETING_INVEST_TAG = os.getenv("MARKETING_INVEST_TAG", "invest marketing")   #
 STAFF_BUCKET = os.getenv("STAFF_BUCKET", "")
 STAFF_DIRECTOR_PAY = [x.strip() for x in os.getenv("STAFF_DIRECTOR_PAY", "618000").split(",") if x.strip()]         # rémunération des administrateurs / gérants (hors 620/621)
 STAFF_DIRECTOR_SOCIAL = [x.strip() for x in os.getenv("STAFF_DIRECTOR_SOCIAL", "618001").split(",") if x.strip()]   # cotisations sociales des administrateurs payées par la société
+EXPENSES_VEHICLE_PREFIXES = [x.strip() for x in os.getenv("EXPENSES_VEHICLE_PREFIXES", "615").split(",") if x.strip()]   # comptes des véhicules de service (un compte par véhicule et par nature)
 EXPENSES_DEFAULT_PREFIXES = [x.strip() for x in os.getenv("EXPENSES_DEFAULT_PREFIXES", "611,612,614,64").split(",") if x.strip()]   # comptes proposés au départ comme frais généraux
 STAFF_FEE_PREFIXES = [x.strip() for x in os.getenv("STAFF_FEE_PREFIXES", "613").split(",") if x.strip()]   # comptes des honoraires des indépendants (hors frais avancés, refacturés)
 STAFF_PAY_PREFIXES = [x.strip() for x in os.getenv("STAFF_PAY_PREFIXES", "620,621").split(",") if x.strip()]   # comptes comparés aux fiches de paie : rémunérations et cotisations patronales

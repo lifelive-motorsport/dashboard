@@ -1,6 +1,6 @@
 // GENERAL EXPENSES › Données source (choix des comptes) et Général (résultat). Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, lineChart) à l'appel.
 const EX_YEAR = new Date().getFullYear();
-let ex = {alloc: null, allocErr: null, keyMode: null, keyPct: 50, keyDirty: false, src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
+let ex = {genK: {}, monthK: {}, monthSelK: {}, alloc: null, allocErr: null, keyMode: null, keyPct: 50, keyDirty: false, src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
 const exAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const exKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service'], ['partners', 'Selon le fournisseur']];
 const exPartKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service']];
@@ -17,13 +17,31 @@ async function exLoadSource() {
     if (!ex.dirty) { ex.sel = Object.fromEntries(j.accounts.filter(a => a.kind).map(a => [a.code, a.kind])); ex.part = JSON.parse(JSON.stringify(j.partner_rules || {})); } }
   catch (e) { ex.err = e.message; }
 }
-async function exLoadMonth(m) {
-  ex.monthSel = m; ex.month = null;
-  try { ex.month = await exGet(`/api/expenses/month?month=${m}&kind=general`); ex.monthErr = null; } catch (e) { ex.monthErr = e.message; }
+async function exLoadMonth(m, kind) {
+  ex.monthSelK[kind] = m; ex.monthK[kind] = null;
+  try { ex.monthK[kind] = await exGet(`/api/expenses/month?month=${m}&kind=${kind}`); ex.monthErr = null; } catch (e) { ex.monthErr = e.message; }
 }
-async function exLoadGeneral() {
-  try { ex.gen = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`); ex.genErr = null;
-    if (!ex.monthSel && ex.gen.series.length) { const top = ex.gen.series.slice().sort((a, b) => b.amount - a.amount)[0]; await exLoadMonth(top.month); } } catch (e) { ex.genErr = e.message; }
+async function exLoadGeneral(kind = 'general') {
+  try { const g = ex.genK[kind] = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=${kind}`); ex.genErr = null;
+    if (!ex.monthSelK[kind] && g.series.length) { const top = g.series.slice().sort((x, y) => y.amount - x.amount)[0]; await exLoadMonth(top.month, kind); } } catch (e) { ex.genErr = e.message; }
+}
+
+async function exLoadVehicles() {
+  try { ex.veh = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}`); ex.vehErr = null; } catch (e) { ex.vehErr = e.message; }
+}
+function vehiclesByBlocks() {
+  return [{static: '<section class="block" data-bid="veh-by"><div class="block-head"><h3>Coût par véhicule de service</h3></div><div class="block-body" id="exp-vehicles"><p class="na">Chargement…</p></div></section>'}];
+}
+function exDrawVehicles() {
+  const el = document.getElementById('exp-vehicles'); if (!el) return;
+  if (ex.vehErr) { el.innerHTML = `<p class="neg">${esc(ex.vehErr)}</p>`; return; }
+  const v = ex.veh; if (!v) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (v.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme véhicule de service : voir « Données source ».</p>'; return; }
+  const rows = v.vehicles.map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.vehicle === '(non classé)' ? ' <small class="na" title="Libellé de compte sans le motif « Nature Util. Véhicule »">comptes ' + esc(x.accounts.join(', ')) + '</small>' : ''}</td>${v.types.map(t => `<td>${x.types[t] ? eur(x.types[t]) : '–'}</td>`).join('')}<td>${eur(x.total)}</td>
+    <td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, x.share) * 100)}%"></span><span>${pct(x.share)}</span></td></tr>`);
+  el.innerHTML = `<div class="kpis">${kpi('Véhicules de service depuis le 1er janvier', eur(v.total), '', v.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Véhicules', num(v.vehicles.filter(x => x.vehicle !== '(non classé)').length), '', 'avec au moins une charge')}</div>`
+    + table(['Véhicule'].concat(v.types, ['Total', 'Part']), rows.concat([`<tr class="tot"><td>Total</td>${v.types.map(t => `<td>${eur(v.type_totals[t])}</td>`).join('')}<td>${eur(v.total)}</td><td>100,0 %</td></tr>`]), 'prodtable')
+    + '<small class="na">Chaque compte de la classe 615 est un véhicule et une nature de dépense (libellé « Nature Util. Véhicule », par exemple « Carburant Util. CITAN »). Le carburant est à contrôler : voir la rubrique Carburant.</small>';
 }
 
 async function exLoadAlloc() {
@@ -33,11 +51,12 @@ async function exLoadAlloc() {
 function expensesRulesBlocks() {
   return [{static: '<section class="block" data-bid="exp-rules"><div class="block-head"><h3>Imputation des frais généraux entre XC et CARS</h3></div><div class="block-body" id="exp-rules"><p class="na">Chargement…</p></div></section>'}];
 }
-function expensesSourceBlocks() {
-  return [{static: '<section class="block" data-bid="exp-src"><div class="block-head"><h3>Frais généraux : comptes retenus</h3></div><div class="block-body" id="exp-source"><p class="na">Chargement…</p></div></section>'}];
+const EX_NAMES = {general: 'Frais généraux', vehicle: 'Véhicules de service'};
+function expensesSourceBlocks(kind = 'general') {
+  return [{static: `<section class="block" data-bid="exp-src-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : comptes retenus</h3></div><div class="block-body" id="exp-source" data-kind="${kind}"><p class="na">Chargement…</p></div></section>`}];
 }
-function expensesGeneralBlocks() {
-  return [{static: '<section class="block" data-bid="exp-gen"><div class="block-head"><h3>Frais généraux : résultat depuis le 1er janvier</h3></div><div class="block-body" id="exp-general"><p class="na">Chargement…</p></div></section>'}];
+function expensesGeneralBlocks(kind = 'general') {
+  return [{static: `<section class="block" data-bid="exp-gen-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : résultat depuis le 1er janvier</h3></div><div class="block-body" id="exp-general" data-kind="${kind}"><p class="na">Chargement…</p></div></section>`}];
 }
 
 function exSums() {
@@ -52,7 +71,8 @@ function exDrawSource() {
   const el = document.getElementById('exp-source'); if (!el) return;
   if (ex.err) { el.innerHTML = `<p class="neg">${esc(ex.err)}</p>`; return; }
   if (!ex.src) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
-  const s = ex.src, canEdit = !!s.can_edit, sums = exSums(), el2 = s.elsewhere || {};
+  const kindMode = el.dataset.kind || 'general', s = {...ex.src}, canEdit = !!s.can_edit, sums = exSums(), el2 = s.elsewhere || {};
+  if (kindMode === 'vehicle') s.accounts = s.accounts.filter(a => ex.sel[a.code] === 'vehicle' || (s.vehicle_prefixes || []).some(p => a.code.startsWith(p)));      // comptes 615 et comptes déjà rangés en véhicules
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur(a.months ? a.total / a.months : 0)}</td><td>${sel(a)}</td></tr>`);
   const bar = `<div class="sdbar">${canEdit ? `<button type="button" class="primary" data-ex-save${ex.dirty ? '' : ' disabled'}>Enregistrer</button> <button type="button" data-ex-reload>Annuler les modifications</button>` : ''}
@@ -75,9 +95,9 @@ function exDrawSource() {
 }
 
 // Détail d'un mois : mois choisi (par défaut le plus élevé) et ses plus grosses écritures, pour expliquer un pic.
-function exMonthBlock(g) {
-  const sel = `<select class="sdin" data-ex-month>${g.series.map(p => `<option value="${p.month}"${p.month === ex.monthSel ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
-  const m = ex.month;
+function exMonthBlock(g, kind) {
+  const sel = `<select class="sdin" data-ex-month data-kind="${kind}">${g.series.map(p => `<option value="${p.month}"${p.month === ex.monthSelK[kind] ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
+  const m = ex.monthK[kind];
   const body = ex.monthErr ? `<p class="neg">${esc(ex.monthErr)}</p>` : !m ? '<p class="na">Chargement…</p>' : m.lines.length ? table(['Date', 'Pièce', 'Fournisseur', 'Compte', 'Libellé', 'Montant'], m.lines.map(l => `<tr><td>${fmtDate(l.date)}</td><td>${esc(l.move)}</td><td class="prod">${esc(l.partner)}</td><td>${esc(l.code)} <small class="na">${esc(l.name)}</small></td><td class="prod">${esc(l.label)}</td><td>${exEur2(l.amount)}</td></tr>`)
       .concat([`<tr class="tot"><td colspan="5">Total du mois (${num(m.count)} écritures, dont les ${num(m.lines.length)} plus grosses ci-dessus)</td><td>${exEur2(m.total)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune écriture ce mois-ci.</p>';
   return `<h4 class="sub">Détail d’un mois ${sel}</h4>${body}`;
@@ -85,12 +105,12 @@ function exMonthBlock(g) {
 function exDrawGeneral() {
   const el = document.getElementById('exp-general'); if (!el) return;
   if (ex.genErr) { el.innerHTML = `<p class="neg">${esc(ex.genErr)}</p>`; return; }
-  const g = ex.gen; if (!g) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
-  if (g.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme frais généraux : choisissez-les dans « Données source ».</p>'; return; }
+  const kind = el.dataset.kind || 'general', name = EX_NAMES[kind], g = ex.genK[kind]; if (!g) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (g.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme ' + name.toLowerCase() + ' : choisissez-les dans « Données source ».</p>'; return; }
   const pts = g.series.map(p => ({label: exMonth(p.month), avg: p.amount, orders: 0, month: p.month}));
-  el.innerHTML = `<div class="kpis">${kpi('Frais généraux depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `sur ${num(g.months)} mois`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
-    + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, 'Frais généraux par mois (€)', v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
-    + exMonthBlock(g)
+  el.innerHTML = `<div class="kpis">${kpi(name + ' depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `sur ${num(g.months)} mois`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
+    + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, name + ' par mois (€)', v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
+    + exMonthBlock(g, kind)
     + '<h4 class="sub">Par compte</h4>' + table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Part'], g.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.total)}</td><td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, a.share) * 100)}%"></span><span>${pct(a.share)}</span></td></tr>`)
         .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(g.total)}</td><td>100,0 %</td></tr>`]), 'prodtable')
     + '<h4 class="sub">Principaux fournisseurs</h4>' + (g.suppliers.length ? table(['Fournisseur', 'Depuis le 1er janvier', 'Part'], g.suppliers.map(s => `<tr><td class="prod">${esc(s.name)}</td><td>${eur(s.amount)}</td><td>${pct(s.share)}</td></tr>`), 'prodtable') : '<p class="na">Aucun fournisseur identifié sur ces écritures.</p>')
@@ -121,7 +141,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const el = e.target;
-  if (el.dataset && el.dataset.exMonth !== undefined) { await exLoadMonth(el.value); exDrawGeneral(); return; }
+  if (el.dataset && el.dataset.exMonth !== undefined) { await exLoadMonth(el.value, el.dataset.kind || 'general'); exDrawGeneral(); return; }
   if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
     const code = el.dataset.exPart, m = ex.part[code] || (ex.part[code] = {});
     if (el.value) m[el.dataset.pid] = el.value; else delete m[el.dataset.pid];
@@ -150,7 +170,7 @@ document.addEventListener('click', async e => {
       const r = await fetch('/api/expenses/config', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({data: {selected: ex.sel, partners: Object.fromEntries(Object.entries(ex.part).filter(([c]) => ex.sel[c] === 'partners'))}, base: ex.src.updated_at})});
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
-      ex.dirty = false; await exLoadSource(); ex.msg = 'Enregistré.'; ex.gen = null;
+      ex.dirty = false; await exLoadSource(); ex.msg = 'Enregistré.'; ex.genK = {}; ex.monthK = {}; ex.monthSelK = {};
     } catch (err) { ex.msg = 'Échec de l’enregistrement : ' + err.message; }
     exDrawSource();
   }

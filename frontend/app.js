@@ -14,11 +14,11 @@ const MENU = [
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
-  ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
+  ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Taux d’utilisation']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -36,9 +36,8 @@ const PLAN = {
   'expenses/general': ['Frais généraux (loyer, IT, assurances, divers, véhicules) : total et évolution.',
     'Liste des comptes à inclure et à exclure (honoraires, personnel, véhicules de service).'],
   'expenses/rules': ['Tableau des clés de répartition des frais généraux.', 'Où stocker ces clés et qui peut les modifier.'],
-  'vehicles/general': ['Coûts des véhicules de service (comptes 615xxx) : carburant, entretien, taxes, assurance, péages.',
-    'Confirmer le périmètre des véhicules et le regroupement des comptes 615.'],
-  'vehicles/byvehicle': ['Coût complet par véhicule (BMW X5, Citan, Sprinter, camions…).', 'Les comptes 615 sont déjà classés par véhicule : prêt à brancher.'],
+  'vehicles/fuel': ['Carburant : données encodées dans Odoo croisées avec les factures DKV et l’utilisation des véhicules dans l’agenda Google.',
+    'Une facture DKV type (avec le détail par carte), l’accès en lecture aux agendas des véhicules et leur convention de nommage.'],
   'vehicles/usage': ['Taux d’utilisation de chaque véhicule d’après les agendas Google des ressources.',
     'Un accès en lecture aux agendas Google des véhicules et leur convention de nommage.'],
 };
@@ -418,6 +417,9 @@ const PAGES = {
   'expenses/source': () => expensesSourceBlocks(),
   'expenses/general': () => expensesGeneralBlocks(),
   'expenses/rules': () => expensesRulesBlocks(),
+  'vehicles/source': () => expensesSourceBlocks('vehicle'),
+  'vehicles/general': () => expensesGeneralBlocks('vehicle'),
+  'vehicles/byvehicle': () => vehiclesByBlocks(),
   'staff/source': () => staffSourceBlocks(),
   'staff/people': () => staffPeopleBlocks(),
   'staff/general': () => staffViewBlocks('general'),
@@ -541,6 +543,9 @@ function render(force) {
   if (/^staff\/(source|people|general|xc|cars|shared)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'expenses/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
+  if (key === 'vehicles/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
+  if (key === 'vehicles/general') { exDrawGeneral(); exLoadGeneral('vehicle').then(exDrawGeneral); }
+  if (key === 'vehicles/byvehicle') { exDrawVehicles(); exLoadVehicles().then(exDrawVehicles); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');

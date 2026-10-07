@@ -393,12 +393,12 @@ function exDrawSplit() {
   const rowsAll = v.vehicles.map(x => { const ind = exIndicative(x, cal), ret = exRetained(x, ind); const sv = (ex.split || v.split || {})[x.vehicle] || {};
     const sum = EX_SPLIT.reduce((t, [k]) => t + (sv[k] || 0), 0); return {x, ind, ret, sv, sum}; });
   const id = rowsAll.filter(r => r.x.identified !== false), other = rowsAll.filter(r => r.x.identified === false);
-  const cell = r => EX_SPLIT.map(([k]) => `<td class="${r.ret.src === 'indicatif' ? 'na' : ''}">${r.ind[k] ? pct(r.ind[k]) : '–'}</td><td><input class="sdin sdpct" type="number" min="0" max="100" step="1" data-ex-split="${esc(r.x.vehicle)}" data-k="${k}" value="${r.sv[k] != null ? r.sv[k] : ''}" placeholder="${Math.round(r.ind[k] * 100)}"${canEdit ? '' : ' disabled'}></td>`).join('');
-  const row = r => `<tr><td class="prod">${esc(r.x.vehicle)}${r.x.merged && r.x.merged.length ? ` <small class="na">+ ${esc(r.x.merged.join(', '))}</small>` : ''}</td><td>${eur(r.x.total)}</td>${cell(r)}<td class="${r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5 ? 'neg' : ''}">${r.ret.src === 'saisi' ? num(Math.round(r.sum * 10) / 10) + ' %' : '<small class="na">indicatif</small>'}</td></tr>`;
-  const head = ['Véhicule', 'Coût'].map(h => `<th rowspan="2">${h}</th>`).join('') + EX_SPLIT.map(([, l]) => `<th colspan="2" class="grp">${l}</th>`).join('') + '<th rowspan="2">Total saisi</th>';
-  const sub = EX_SPLIT.map(() => '<th>Indicatif</th><th>Retenu %</th>').join('');
-  const sect = t => `<tr class="grp"><td colspan="${EX_SPLIT.length * 2 + 3}"><strong>${t}</strong></td></tr>`;
-  const tbl = `<div class="table-wrap"><table class="prodtable sdtable"><thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
+  const cell = r => EX_SPLIT.map(([k]) => `<td class="sdind${r.ret.src === 'indicatif' ? ' on' : ''}">${r.ind[k] ? pct(r.ind[k]).replace(',0 %', ' %') : '–'}</td><td class="sdinp"><input class="sdin sdpct" type="text" inputmode="decimal" autocomplete="off" data-ex-split="${esc(r.x.vehicle)}" data-k="${k}" value="${r.sv[k] != null ? r.sv[k] : ''}"${canEdit ? '' : ' disabled'}></td>`).join('');
+  const row = r => `<tr><td class="prod sdname">${esc(r.x.vehicle)}${r.x.merged && r.x.merged.length ? ` <small class="na">+ ${esc(r.x.merged.join(', '))}</small>` : ''}</td><td class="sdcost">${eur(r.x.total)}</td>${cell(r)}<td class="sdtot ${r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5 ? 'neg' : ''}">${r.ret.src === 'saisi' ? num(Math.round(r.sum * 10) / 10) + ' %' : '<small class="na">indicatif</small>'}</td><td>${canEdit ? `<button type="button" class="sdfill" data-ex-split-fill="${esc(r.x.vehicle)}" title="Recopier la proposition indicative dans les cases">↤</button>` : ''}</td></tr>`;
+  const head = ['Véhicule', 'Coût'].map(h => `<th rowspan="2">${h}</th>`).join('') + EX_SPLIT.map(([, l]) => `<th colspan="2" class="grp">${l}</th>`).join('') + '<th rowspan="2">Total saisi</th><th rowspan="2"></th>';
+  const sub = EX_SPLIT.map(() => '<th class="sdsub">Indic.</th><th class="sdsub">Retenu</th>').join('');
+  const sect = t => `<tr class="grp"><td colspan="${EX_SPLIT.length * 2 + 4}"><strong>${t}</strong></td></tr>`;
+  const tbl = `<div class="table-wrap"><table class="prodtable sdtable sdsplit"><thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
   // Résultat en € avec les % retenus (saisis, sinon indicatifs)
   const amt = r => Object.fromEntries(EX_SPLIT.map(([k]) => [k, r.x.total * r.ret.p[k]])), tot = Object.fromEntries(EX_SPLIT.map(([k]) => [k, rowsAll.reduce((t, r) => t + amt(r)[k], 0)])), grand = rowsAll.reduce((t, r) => t + r.x.total, 0);
   const res = table(['Véhicule', 'Coût'].concat(EX_SPLIT.map(b => b[1]), ['Source']),
@@ -417,16 +417,28 @@ function exDrawSplit() {
   el.innerHTML = `<div class="kpis">${kpi('Frais véhicules depuis le 1er janvier', eur(grand), '', 'tous les comptes de la classe 615')}${kpi('Imputé aux BU', eur(grand - tot.GENERAL), '', 'avec les % retenus')}${kpi('Frais généraux', eur(tot.GENERAL))}</div>`
     + (cal ? '' : `<p class="na">Agenda indisponible : les propositions indicatives placent tout en frais généraux.</p>`)
     + control + tbl
-    + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
+    + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><button type="button" data-ex-split-fillall title="Recopier la proposition indicative dans toutes les lignes sans saisie">Reprendre l’indicatif partout</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
     + '<h4 class="sub">Résultat avec les pourcentages retenus</h4>' + res
     + `<small class="na">« Indicatif » : jours de déplacement du véhicule dans l’agenda de chaque BU (réservation ± ${cal ? cal.buffer_days : 3} jours). Les jours Logistics (transports, enlèvements), les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple le carburant des véhicules loués) sont proposés en frais généraux. Dans une ligne que vous renseignez, une case vide compte pour 0 % et le total doit faire 100 %. Les montants couvrent tous les comptes de la classe 615, y compris ceux que vous auriez laissés de côté dans « Données source ».</small>`;
 }
-document.addEventListener('change', e => {
+const exSplitFocus = () => { const a = document.activeElement, st = a && a.dataset && a.dataset.exSplit !== undefined ? {veh: a.dataset.exSplit, k: a.dataset.k, pos: a.selectionStart} : null;
+  exDrawSplit(); if (!st) return; const n = [...document.querySelectorAll('[data-ex-split]')].find(i => i.dataset.exSplit === st.veh && i.dataset.k === st.k); if (n) { n.focus(); try { n.setSelectionRange(st.pos, st.pos); } catch {} } };
+document.addEventListener('input', e => {
   const el = e.target; if (!el.dataset || el.dataset.exSplit === undefined || !ex.vsplit) return;
   ex.split = ex.split || JSON.parse(JSON.stringify(ex.vsplit.split || {})); const veh = el.dataset.exSplit, k = el.dataset.k, d = ex.split[veh] || (ex.split[veh] = {});
-  const n = parseFloat(el.value); if (el.value === '' || isNaN(n)) delete d[k]; else d[k] = Math.min(100, Math.max(0, n));
+  const n = parseFloat(String(el.value).replace(',', '.')); if (el.value.trim() === '' || isNaN(n)) delete d[k]; else d[k] = Math.min(100, Math.max(0, n));
   if (!Object.keys(d).length) delete ex.split[veh];
-  ex.splitDirty = true; ex.splitMsg = ''; exDrawSplit();
+  ex.splitDirty = true; ex.splitMsg = ''; exSplitFocus();
+});
+// Recopie la proposition indicative (arrondie à l'entier, total forcé à 100) dans une ligne.
+function exFillSplit(veh) {
+  const v = ex.vsplit, x = v.vehicles.find(y => y.vehicle === veh); if (!x) return; const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null, ind = exIndicative(x, cal);
+  const r = Object.fromEntries(EX_SPLIT.map(([k]) => [k, Math.round(ind[k] * 100)])), diff = 100 - Object.values(r).reduce((a, b) => a + b, 0), big = EX_SPLIT.map(([k]) => k).sort((a, b) => ind[b] - ind[a])[0];
+  r[big] += diff; ex.split = ex.split || JSON.parse(JSON.stringify(v.split || {})); ex.split[veh] = Object.fromEntries(Object.entries(r).filter(([, n]) => n > 0)); ex.splitDirty = true; ex.splitMsg = '';
+}
+document.addEventListener('click', async e => {
+  const f = e.target.closest('button'); if (f && ex.vsplit && f.dataset.exSplitFill !== undefined) { exFillSplit(f.dataset.exSplitFill); exDrawSplit(); return; }
+  if (f && ex.vsplit && f.dataset.exSplitFillall !== undefined) { const cur = ex.split || ex.vsplit.split || {}; ex.vsplit.vehicles.forEach(x => { if (!cur[x.vehicle] || !Object.keys(cur[x.vehicle]).length) exFillSplit(x.vehicle); }); exDrawSplit(); return; }
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t || t.dataset.exSplitSave === undefined || !ex.vsplit) return;

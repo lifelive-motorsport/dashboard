@@ -234,6 +234,16 @@ const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTOR
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
 
 // ---- Pages = listes de blocs --------------------------------------------------------------------
+// Encours d'un périmètre (XC, CARS) : reste dû TTC des factures de la période non soldées, clients et fournisseurs (mêmes chiffres que les colonnes « Solde ouvert » / « Reste à payer »).
+function encoursCards(d, scope) {
+  const ok = t => t && !t.unavailable && t._meta && t._meta.open, c = d.top_clients, f = d.top_suppliers;
+  const rec = ok(c) ? (c._open_totals || {})[scope] || 0 : null, pay = ok(f) ? (f._open_totals || {})[scope] || 0 : null;
+  if (rec == null && pay == null) return '';
+  return `<div class="kpis">${rec == null ? '' : kpi('Encours clients', eur(rec), '', 'à encaisser (TTC)')}${pay == null ? '' : kpi('Encours fournisseurs', eur(pay), '', 'à payer (TTC)')}`
+    + `${rec != null && pay != null ? kpi('Encours net', eur(rec - pay), cls(rec - pay), 'clients − fournisseurs') : ''}</div>`
+    + '<small class="na">Encours = reste dû TTC des factures de la période non encore soldées (avoirs déduits), réparti entre BU au prorata des lignes de facture.</small>';
+}
+
 // Décomposition d'un périmètre : CA d'un côté ; de l'autre achats de marchandises (604), sous-traitance (603) et frais (602) ; une colonne par entité.
 function decompTable(d, cols) {
   cols = cols.filter(c => c.o && (c.o.ca || c.o.direct_costs || Object.values(c.o.costs || {}).some(Boolean)));
@@ -427,7 +437,7 @@ const PAGES = {
     B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
   ],
   'xc/general': () => [
-    B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>`; }),
+    B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>` + encoursCards(d, 'XC'); }),
     B('decomp', 'XC — CA et coûts directs en détail', d => decompTable(d, [{label: 'XC', o: grp(d, 'XC')}])),
     NOTE('Les lignes XC (Manufacturer, Race team, Goldspeed…) ne sont pas des activités indépendantes : les comparer entre elles peut être trompeur. Voir « Par ligne d’activité ».'),
     B('suppliers', 'Hit-parade fournisseurs XC', d => suppliers(d, ['XC'])),
@@ -454,7 +464,7 @@ const PAGES = {
     NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − coûts directs − autres charges (hors dotations aux amortissements) − investissements (dépenses immobilisées sur les comptes INVEST, amorties ensuite) ; survolez le ⓘ à côté du résultat pour le montant investi, la durée d’amortissement et le résultat comptable. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
   ],
   'cars/general': () => [
-    B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Coûts directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>`; }),
+    B('kpi', 'CARS — synthèse', d => { const c = grp(d,'CARS'); return `<div class="kpis">${kpi('CA CARS', eur(c.ca)) + kpi('Coûts directs', eur(c.direct_costs)) + kpi('Marge brute', eur(c.margin), cls(c.margin)) + kpi('Marge brute / CA', margin(c), cls(c.margin))}</div>` + encoursCards(d, 'CARS'); }),
     B('decomp', 'CARS et ses BU — CA et coûts directs en détail', d => decompTable(d, [{label: 'CARS', o: grp(d, 'CARS')}].concat(d.pnl.bus.filter(b => b.group === 'CARS').map(b => ({label: b.label, o: b}))))),
     B('bu', 'Par BU', d => table(HEAD, d.pnl.bus.filter(b => b.group === 'CARS' && (b.ca || b.direct_costs)).map(b => lineRow(b.label, b)))),
     B('suppliers', 'Hit-parade fournisseurs CARS', d => suppliers(d, ['CARS'])),

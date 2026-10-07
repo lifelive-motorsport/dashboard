@@ -163,3 +163,4 @@ table.prodtable.decomp th:nth-child(2),table.prodtable.decomp td:nth-child(2){te
 .mixbar i.m604,.sw.m604{background:var(--red)}.mixbar i.m603,.sw.m603{background:var(--blu)}.mixbar i.m602,.sw.m602{background:var(--grn)}.mixbar i.mautres,.sw.mautres{background:var(--mut)}
 .mixbar i+i{border-left:1px solid var(--card)}.mixcell{min-width:120px}
 .mixlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:6px 0}.mixlegend .sw{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;border:0}
+.kpis+.kpis{margin-top:12px}

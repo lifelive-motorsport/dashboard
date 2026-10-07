@@ -149,7 +149,7 @@ function exDkvSections(f, usage) {
   const sec6 = '<h4 class="sub">6. Kilométrage relevé à la pompe et coût au km (carburant)</h4>' + (rows6.length ? table(['Plaque', 'Relevés crédibles', 'Premier relevé', 'Dernier relevé', 'Km parcourus', 'Carburant HT', 'Litres', 'L / 100 km', 'Carburant par km'],
       rows6.map(r => `<tr><td>${esc(r.d.plate)} <small class="na">${esc(lab(r.d.plate))}</small></td><td>${num(r.n)}</td><td>${num(r.from.km)} km<br><small class="na">${fmtDate(r.from.date)}</small></td><td>${num(r.to.km)} km<br><small class="na">${fmtDate(r.to.date)}</small></td><td>${r.ok ? num(r.span) + ' km' : '–'}</td><td>${exEur2(r.d.fuel)}</td><td>${num(Math.round(r.litres))}</td><td>${r.ok ? num(Math.round(r.litres / r.span * 1000) / 10) : '–'}</td><td>${r.ok ? exEur2(r.d.fuel / r.span) : '–'}</td></tr>`), 'prodtable')
     + '<small class="na">Le kilométrage est saisi par le chauffeur au moment du plein : il est souvent vide ou faux (« 1 »). Seuls les relevés supérieurs à 100 km sont gardés. Les kilomètres parcourus = dernier relevé − premier relevé ; la consommation et le coût au km sont calculés sur la totalité des litres et du montant de la période, donc approximatifs. Une source fiable (Odoo Fleet, relevé mensuel) donnerait un vrai coût au km.</small>' : '<p class="na">Aucune plaque n’a au moins deux relevés de kilométrage crédibles.</p>');
-  return sec4 + sec5 + sec6;
+  return sec4 + sec5;      // le kilométrage et le coût au km (sec6) sont mis de côté pour l'instant
 }
 // Identité d'un véhicule pour comparer deux libellés (nom Odoo ou nom d'agenda) : la ressource de l'agenda à laquelle il correspond, sinon son nom normalisé.
 const exResKey = (usage, name) => { const u = exMatchUsage(usage, name); return u ? 'r:' + u.vehicle : 'n:' + exNorm(name); };
@@ -374,12 +374,16 @@ async function exLoadSplit() {
   try { ex.vsplit = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`); ex.splitErr = null; } catch (e) { ex.splitErr = e.message; }
   try { ex.vusage = await exGet(`/api/vehicles/usage?year=${EX_YEAR}`); } catch (e) { ex.vusage = null; }
 }
-// Proposition indicative : jours de déplacement de l'agenda par BU ; Logistics, jours sans réservation et frais non liés à un véhicule précis vont aux frais généraux.
+// Proposition indicative : jours de déplacement de l'agenda par BU ; Logistics réparti au prorata ; sans réservation et frais non liés à un véhicule précis : frais généraux.
 function exIndicative(x, cal) {
-  const out = Object.fromEntries(EX_SPLIT.map(([k]) => [k, 0]));
+  const out = Object.fromEntries(EX_SPLIT.map(([k]) => [k, 0])), bus = EX_SPLIT.map(([k]) => k).filter(k => k !== 'GENERAL');
   const u = x.identified === false ? null : exMatchUsage((cal || {}).usage, x.vehicle), sh = exBuShares(u);
   if (!Object.keys(sh).length) { out.GENERAL = 1; return out; }
-  EX_SPLIT.forEach(([k]) => { if (k !== 'GENERAL') out[k] = sh[k] || 0; }); out.GENERAL = sh.LOGISTICS || 0;
+  // Logistics (transports, enlèvements) : réparti entre les 4 BU au prorata de leurs jours de déplacement sur ce véhicule, à défaut sur l'ensemble des véhicules.
+  const own = bus.reduce((t, k) => t + (sh[k] || 0), 0), glob = Object.fromEntries(bus.map(k => [k, ((cal || {}).usage || []).reduce((t, y) => t + ((y.away_by_bu || {})[k] || 0), 0)])), gt = Object.values(glob).reduce((a, b) => a + b, 0);
+  const lg = sh.LOGISTICS || 0;
+  bus.forEach(k => { out[k] = (sh[k] || 0) + (own > 0 ? lg * (sh[k] || 0) / own : gt > 0 ? lg * glob[k] / gt : 0); });
+  out.GENERAL = own > 0 || gt > 0 ? 0 : lg;
   const t = Object.values(out).reduce((a, b) => a + b, 0) || 1; Object.keys(out).forEach(k => out[k] /= t); return out;
 }
 // % retenu d'une ligne : ceux que vous avez saisis (case vide = 0) ; si rien n'est saisi, la proposition indicative.
@@ -420,7 +424,7 @@ function exDrawSplit() {
     + control + tbl
     + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><button type="button" data-ex-split-fillall title="Recopier la proposition indicative dans toutes les lignes sans saisie">Reprendre l’indicatif partout</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
     + '<h4 class="sub">Résultat avec les pourcentages retenus</h4>' + res
-    + `<small class="na">« Indicatif » : jours de déplacement du véhicule dans l’agenda de chaque BU (réservation ± ${cal ? cal.buffer_days : 3} jours). Les jours Logistics (transports, enlèvements), les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple le carburant des véhicules loués) sont proposés en frais généraux. Dans une ligne que vous renseignez, une case vide compte pour 0 % et le total doit faire 100 %. Les montants couvrent tous les comptes de la classe 615, y compris ceux que vous auriez laissés de côté dans « Données source ».</small>`;
+    + `<small class="na">« Indicatif » : jours de déplacement du véhicule dans l’agenda de chaque BU (réservation ± ${cal ? cal.buffer_days : 3} jours). Les jours Logistics (transports, enlèvements) sont répartis entre les 4 BU au prorata de leurs jours de déplacement sur le véhicule (à défaut, sur l’ensemble des véhicules). Les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple le carburant des véhicules loués) sont proposés en frais généraux. Dans une ligne que vous renseignez, une case vide compte pour 0 % et le total doit faire 100 %. Les montants couvrent tous les comptes de la classe 615, y compris ceux que vous auriez laissés de côté dans « Données source ».</small>`;
 }
 const exSplitFocus = () => { const a = document.activeElement, st = a && a.dataset && a.dataset.exSplit !== undefined ? {veh: a.dataset.exSplit, k: a.dataset.k, pos: a.selectionStart} : null;
   exDrawSplit(); if (!st) return; const n = [...document.querySelectorAll('[data-ex-split]')].find(i => i.dataset.exSplit === st.veh && i.dataset.k === st.k); if (n) { n.focus(); try { n.setSelectionRange(st.pos, st.pos); } catch {} } };

@@ -149,8 +149,14 @@ class DemoProvider:
                  "attachments": [{"id": 900 + m, "name": f"DKV_{year}_{m:02d}.pdf", "mimetype": "application/pdf", "size": 52000}],
                  "lines": [{"code": "615021", "name": "Carburant Util. CITAN", "amount": 300.0 + 10 * m}, {"code": "615031", "name": "Carburant Util. SPRINTER", "amount": 900.0 + 30 * m}], "other": []} for m in range(1, 10)]
 
-    def fuel_attachment(self, att_id: int, year: int):
-        return b"DKV Euro Service\nRechnung 2026\n12.05.2026 1-ABC-123 Diesel 45,20 L 82,35 EUR\n13.05.2026 1-ABC-123 Diesel 60,00 L 109,20 EUR\n", "text/plain", "demo.txt"
+    def fuel_attachment(self, att_id: int, year: int, allowed=None):
+        m = att_id - 900
+        txt = (f"DKV Euro Service\nMonnaie: EUR\nVEHICLE: 2BNC759 CARD NO.: 704310.0113082777\n"
+               f"01.{m:02d}.{year}   SHELL   ST. VITH   1098661   6521520062 09:33   78000 GAZOLE   0009 LTR   63,260   1,9280   1,5934   100,80   -1,27   1,21   100,74   0,00   100,74\n"
+               f"08.{m:02d}.{year}   SHELL   ST. VITH   1098661   6526520130 13:17   80000 GAZOLE   0009 LTR   39,000   1,9280   1,5934   62,15   -0,70   0,70   62,15   0,00   62,15\n"
+               f"VEHICLE: 2CEP774 CARD NO.: 704310.0113082999\n"
+               f"03.{m:02d}.{year}   SHELL   ST. VITH   1098661   6526520999 08:00   120000 GAZOLE   0009 LTR   70,000   1,9280   1,5934   111,54   -1,00   1,00   111,54   0,00   111,54\n")
+        return txt.encode(), "text/plain", "demo.txt"
 
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]

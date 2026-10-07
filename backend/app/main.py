@@ -192,16 +192,67 @@ def vehicles_usage(year: int = Query(..., ge=2000, le=2100), _user: str = Depend
     return _calendar(date(year, 1, 1), today if year == today.year else date(year, 12, 31))
 
 
+_fuel_inv_cache: dict[int, tuple[float, list]] = {}
+_dkv_cache: dict[int, dict] = {}
+
+
+def _fuel_invoices(year: int) -> list[dict]:
+    hit = _fuel_inv_cache.get(year)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1]
+    inv = provider().fuel_invoices(year)
+    _fuel_inv_cache[year] = (time.time(), inv)
+    return inv
+
+
+@app.get("/api/fuel/parse")
+def fuel_parse(att: int, year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
+    """Analyse d'une facture de la carte carburant : transactions par plaque (litres, montant HT, kilométrage), péages et frais ; résultat mis en cache."""
+    if att in _dkv_cache:
+        return _dkv_cache[att]
+    try:
+        allowed = {a["id"] for i in _fuel_invoices(year) for a in i["attachments"]}
+        got = provider().fuel_attachment(att, year, allowed)
+    except Exception:
+        log.exception("Pièce jointe indisponible")
+        raise HTTPException(503, "Pièce jointe indisponible pour le moment")
+    if got is None:
+        raise HTTPException(404, "Pièce jointe introuvable")
+    content, mime, name = got
+    parsed = dkv.parse_transactions(dkv.extract_text(content, mime, name))
+    out = {"att": att, "name": name, "summary": dkv.summarize(parsed),
+           "transactions": [{k: t[k] for k in ("date", "vehicle", "quantity", "total_ht", "km", "category", "currency")} for t in parsed["transactions"] if t["currency"] == "EUR"]}
+    if len(_dkv_cache) > 400:
+        _dkv_cache.clear()
+    _dkv_cache[att] = out
+    return out
+
+
+@app.put("/api/expenses/plates")
+def put_plates(body: expenses.PlatesBody, user: str = Depends(admin)):
+    """Correspondance plaque de la carte carburant -> véhicule de service (sans toucher au reste de la configuration)."""
+    cur = expenses.store().get()
+    try:
+        data = expenses.Config.model_validate({**expenses.Config.model_validate(cur["data"]).model_dump(), "plates": body.plates}).model_dump()
+    except ValueError as e:
+        raise HTTPException(422, f"Plaque ou véhicule invalide : {str(e)[:200]}")
+    doc = expenses.store().put(data, user, body.base if body.base is not None else cur["updated_at"])
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {**doc, "can_edit": True, "plates": data["plates"]}
+
+
 @app.get("/api/fuel")
 def fuel(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
     """Carburant : imputation encodée dans Odoo, factures de la carte carburant et réservations de véhicules dans l'agenda."""
     try:
-        invoices = provider().fuel_invoices(year)
+        invoices = _fuel_invoices(year)
     except Exception:
         log.exception("Factures de la carte carburant indisponibles")
         raise HTTPException(503, "Factures de la carte carburant indisponibles pour le moment")
     today = date.today()
-    return {"year": year, "supplier": settings.FUEL_SUPPLIER_NAME, "invoices": invoices,
+    cfg = expenses.store().get()
+    return {"year": year, "supplier": settings.FUEL_SUPPLIER_NAME, "invoices": invoices, "plates": cfg["data"].get("plates") or {}, "plates_base": cfg["updated_at"], "can_edit": adjustments.can_edit(_user),
             "calendar": _calendar(date(year, 1, 1), today if year == today.year else date(year, 12, 31))}
 
 

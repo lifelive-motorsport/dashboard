@@ -553,7 +553,7 @@ function render(force) {
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
   if (key === 'vehicles/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'vehicles/general') { exDrawGeneral(); exLoadGeneral('vehicle').then(exDrawGeneral); }
-  if (key === 'vehicles/fuel') { exDrawFuel(); exLoadFuel().then(exDrawFuel); }
+  if (key === 'vehicles/fuel') { exDrawFuel(); exLoadFuel().then(() => { exDrawFuel(); exParseDkv(exDrawFuel); }); }
   if (key === 'vehicles/byvehicle') { exDrawVehicles(); exLoadVehicles().then(exDrawVehicles); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }

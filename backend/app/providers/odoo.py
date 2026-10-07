@@ -634,10 +634,10 @@ class OdooProvider:
                         "other": [{**v, "amount": round(v["amount"], 2)} for v in ls.values() if not v["code"].startswith("615")]})
         return out
 
-    def fuel_attachment(self, att_id: int, year: int) -> tuple[bytes, str, str] | None:
+    def fuel_attachment(self, att_id: int, year: int, allowed: set[int] | None = None) -> tuple[bytes, str, str] | None:
         """Contenu d'une pièce jointe d'une facture de la carte carburant (et d'aucune autre : le numéro est vérifié). Retourne (octets, type, nom)."""
         import base64
-        ok = {a["id"] for inv in self.fuel_invoices(year) for a in inv["attachments"]}
+        ok = allowed if allowed is not None else {a["id"] for inv in self.fuel_invoices(year) for a in inv["attachments"]}
         if att_id not in ok:
             return None
         rows = self._call("ir.attachment", "read", ids=[att_id], fields=["name", "mimetype", "datas"])

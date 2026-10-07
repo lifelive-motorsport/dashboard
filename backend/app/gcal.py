@@ -146,7 +146,15 @@ def usage(evs: list[dict], buffer_days: int) -> list[dict]:
             for b in bus:
                 out[b] = out.get(b, 0.0) + 1.0 / len(bus)
         return {k: round(v, 2) for k, v in out.items()}
-    return [{"vehicle": v["vehicle"], "events": len(v["events"]), "booked_days": len(v["booked"]), "away_days": len(v["away"]),
+    def ranges(days: dict) -> list[dict]:
+        out: list[dict] = []
+        for d in sorted(days):
+            if out and (d - date.fromisoformat(out[-1]["to"])).days <= 1:
+                out[-1]["to"] = d.isoformat()
+            else:
+                out.append({"from": d.isoformat(), "to": d.isoformat()})
+        return out
+    return [{"vehicle": v["vehicle"], "events": len(v["events"]), "booked_days": len(v["booked"]), "away_days": len(v["away"]), "away_ranges": ranges(v["away"]),
              "booked_by_bu": split(v["booked"]), "away_by_bu": split(v["away"]), "list": v["events"][-12:]}
             for v in sorted(by.values(), key=lambda x: -len(x["booked"]))]
 

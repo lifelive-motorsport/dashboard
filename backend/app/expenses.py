@@ -24,6 +24,7 @@ class Config(BaseModel):
     selected: dict[str, Literal["general", "vehicle", "partners"]] = Field(default_factory=dict)   # compte -> rubrique ; « partners » : selon le fournisseur ; absent = laissé de côté
     partners: dict[str, dict[str, Literal["general", "vehicle"]]] = Field(default_factory=dict)    # compte « partners » -> {id fournisseur -> rubrique} ; les autres fournisseurs sont laissés de côté
     saved: bool = False
+    plates: dict[str, str] = Field(default_factory=dict)                                           # plaque (sans tiret, majuscules) -> libellé du véhicule de service (carte carburant)
     key_mode: Literal["revenue", "pct"] = "revenue"                                                # clé d'imputation XC / CARS : prorata du CA, ou % encodé
     xc_pct: float = Field(default=50.0, ge=0, le=100)                                              # part XC en % pour la clé « pct » (CARS = le reste)
 
@@ -35,6 +36,18 @@ class Config(BaseModel):
                 raise ValueError(f"code de compte invalide : {k}")
         return v
 
+    @field_validator("plates")
+    @classmethod
+    def _plates(cls, v):
+        out = {}
+        for k, name in v.items():
+            k2 = re.sub(r"[\s-]+", "", k).upper()
+            if not re.fullmatch(r"[A-Z0-9]{2,14}", k2) or len(name) > 80:
+                raise ValueError(f"plaque invalide : {k}")
+            if name.strip():
+                out[k2] = name.strip()
+        return out
+
     @field_validator("partners")
     @classmethod
     def _partners(cls, v):
@@ -42,6 +55,11 @@ class Config(BaseModel):
             if not CODE.match(k) or any(not re.match(r"^\d{1,12}$", pid) for pid in d):
                 raise ValueError("fournisseur ou compte invalide")
         return v
+
+
+class PlatesBody(BaseModel):
+    plates: dict[str, str]
+    base: str | None = None
 
 
 class KeyBody(BaseModel):
@@ -271,7 +289,10 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
     types: dict[str, float] = {}
     for a in mine:
         v, t = split_vehicle_account(a["name"])
-        d = veh.setdefault(v, {"vehicle": v, "total": 0.0, "types": {}, "accounts": []})
+        d = veh.setdefault(v, {"vehicle": v, "total": 0.0, "types": {}, "accounts": [], "by_month": {}})
+        for m, amt in a["by_month"].items():
+            bm = d["by_month"].setdefault(t, {})
+            bm[m] = bm.get(m, 0.0) + amt
         d["total"] += a["total"]
         d["types"][t] = d["types"].get(t, 0.0) + a["total"]
         d["accounts"].append(a["code"])
@@ -280,7 +301,8 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
     order = [t for t, _ in sorted(types.items(), key=lambda kv: -kv[1])]
     return {"year": year, "total": round(total, 2), "types": order, "type_totals": {t: round(types[t], 2) for t in order},
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
-                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"]} for d in sorted(veh.values(), key=lambda d: -d["total"])],
+                          "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"],
+                          "by_month": {t: {m: round(x, 2) for m, x in bm.items()} for t, bm in d["by_month"].items()}} for d in sorted(veh.values(), key=lambda d: -d["total"])],
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
 
 

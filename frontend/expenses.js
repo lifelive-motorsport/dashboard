@@ -57,6 +57,18 @@ function exDrawVehicles() {
     + '<small class="na">Chaque compte de la classe 615 est un véhicule et une nature de dépense (libellé « Nature Util. Véhicule », par exemple « Carburant Util. CITAN »). Le carburant est à contrôler : voir la rubrique Carburant.</small>';
 }
 
+// Analyse des factures DKV : une requête par facture (mise en cache côté serveur), affichage progressif.
+async function exParseDkv(redraw) {
+  const f = ex.fuel; if (!f) return;
+  const atts = f.invoices.map(i => (i.attachments.find(a => /pdf/i.test(a.mimetype + a.name)) || i.attachments[0])).filter(Boolean);
+  ex.dkv = ex.dkv || {}; ex.dkvTodo = atts.length;
+  for (const a of atts) {
+    if (ex.dkv[a.id]) continue;
+    try { ex.dkv[a.id] = await exGet(`/api/fuel/parse?att=${a.id}&year=${EX_YEAR}`); } catch (e) { ex.dkv[a.id] = {error: e.message, summary: {vehicles: []}, transactions: []}; }
+    redraw();
+  }
+  ex.dkvTodo = 0; redraw();
+}
 async function exLoadFuel() {
   try { ex.fuel = await exGet(`/api/fuel?year=${EX_YEAR}`); ex.fuelErr = null; } catch (e) { ex.fuelErr = e.message; }
   try { ex.vfuel = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`); } catch (e) { ex.vfuel = null; }
@@ -69,6 +81,46 @@ const exMatchUsage = (usage, veh) => (usage || []).find(u => { const a = exNorm(
 // Part de chaque BU dans les jours de déplacement d'un véhicule (agenda) : {BU: part}, somme = 1 ; vide si le véhicule n'a aucune réservation.
 const exBuShares = u => { if (!u || !u.away_days) return {}; const t = Object.values(u.away_by_bu || {}).reduce((a, b) => a + b, 0) || 1; return Object.fromEntries(Object.entries(u.away_by_bu).map(([k, v]) => [k, v / t])); };
 const exNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const exPlate = p => String(p || '').replace(/[\s-]+/g, '').toUpperCase();
+function exDkvSections(f, usage) {
+  const parsed = Object.values(ex.dkv || {}).filter(x => !x.error);
+  const done = parsed.length, total = f.invoices.filter(i => i.attachments.length).length;
+  if (!total) return '';
+  const head = `<h4 class="sub">4. Analyse des factures ${esc(f.supplier)} par plaque</h4>` + (done < total ? `<p class="na">Lecture des factures : ${done} sur ${total}…</p>` : '');
+  const plates = {};
+  parsed.forEach(x => (x.summary.vehicles || []).forEach(v => { const k = exPlate(v.vehicle), d = plates[k] || (plates[k] = {plate: k, litres: 0, fuel: 0, adblue: 0, toll: 0, other: 0, n: 0, km: []});
+    d.litres += v.fuel_litres; d.fuel += v.fuel_ht; d.adblue += v.adblue_ht; d.toll += v.toll_ht; d.other += v.other_ht; d.n += v.n; d.km = d.km.concat(v.km || []); }));
+  const list = Object.values(plates).sort((a, b) => b.fuel - a.fuel);
+  if (!list.length) return head + '<p class="na">Aucune transaction lue dans les pièces jointes.</p>';
+  const names = [...new Set([...(ex.vfuel ? ex.vfuel.vehicles.map(v => v.vehicle) : []), ...usage.map(u => u.vehicle), ...Object.values(f.plates || {})])].filter(x => x && x !== '(non classé)');
+  const canEdit = !!f.can_edit, lab = p => (ex.plates || f.plates || {})[p] || '';
+  const tot = k => list.reduce((t, d) => t + d[k], 0);
+  const sec4 = head + `<datalist id="exp-veh-names">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>` + table(['Plaque (ou carte)', 'Véhicule de service', 'Litres', 'Carburant HT', 'AdBlue HT', 'Péages HT', 'Frais HT', 'Transactions'],
+      list.map(d => `<tr><td>${esc(d.plate)}</td><td><input class="sdin" list="exp-veh-names" data-ex-plate="${esc(d.plate)}" value="${esc(lab(d.plate))}" placeholder="à associer"${canEdit ? '' : ' disabled'}></td><td>${num(Math.round(d.litres))}</td><td>${exEur2(d.fuel)}</td><td>${exEur2(d.adblue)}</td><td>${exEur2(d.toll)}</td><td>${exEur2(d.other)}</td><td>${num(d.n)}</td></tr>`)
+        .concat([`<tr class="tot"><td colspan="2">Total</td><td>${num(Math.round(tot('litres')))}</td><td>${exEur2(tot('fuel'))}</td><td>${exEur2(tot('adblue'))}</td><td>${exEur2(tot('toll'))}</td><td>${exEur2(tot('other'))}</td><td>${num(tot('n'))}</td></tr>`]), 'prodtable sdtable')
+    + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-plates-save${ex.platesDirty ? '' : ' disabled'}>Enregistrer les associations</button><span class="na">${esc(ex.platesMsg || 'Associez chaque plaque (ou carte) au véhicule de service correspondant : la liste propose les véhicules des comptes 615 et des agendas.')}</span></div>` : '')
+    + '<small class="na">Lecture directe des PDF des factures (les montants en monnaie étrangère, les péages en détail et les lignes sans plaque sont écartés ou comptés à part). Chaque total de véhicule a été vérifié contre les totaux imprimés sur les factures.</small>';
+  // 5. Contrôle croisé : DKV ↔ Odoo ↔ agenda, par véhicule associé
+  const by = {};
+  list.forEach(d => { const v = lab(d.plate); if (!v) return; (by[v] || (by[v] = {vehicle: v, fuel: 0, litres: 0, plates: []})); by[v].fuel += d.fuel; by[v].litres += d.litres; by[v].plates.push(d.plate); });
+  const txAll = parsed.flatMap(x => x.transactions || []).filter(t => t.category === 'carburant');
+  const rows5 = Object.values(by).sort((a, b) => b.fuel - a.fuel).map(v => {
+    const odoo = (ex.vfuel ? ex.vfuel.vehicles : []).filter(o => o.types.Carburant && exMatchName(o.vehicle, v.vehicle)).reduce((t, o) => t + o.types.Carburant, 0);
+    const u = exMatchUsage(usage, v.vehicle), mine = txAll.filter(t => v.plates.includes(exPlate(t.vehicle)));
+    const out = u ? mine.filter(t => !(u.away_ranges || []).some(r => t.date >= r.from && t.date <= r.to)) : [];
+    return `<tr><td class="prod">${esc(v.vehicle)}<br><small class="na">${esc(v.plates.join(', '))}</small></td><td>${exEur2(v.fuel)}</td><td>${exEur2(odoo)}</td><td class="${Math.abs(v.fuel - odoo) > 50 ? 'neg' : ''}">${exEur2(v.fuel - odoo)}</td>
+      <td>${u ? num(u.away_days) + ' j' : '<small class="na">pas dans l’agenda</small>'}</td><td>${u ? `${num(out.length)} / ${num(mine.length)}` : '–'}</td><td class="${out.length ? 'neg' : ''}">${u ? exEur2(out.reduce((t, x) => t + x.total_ht, 0)) : '–'}</td></tr>`; });
+  const sec5 = '<h4 class="sub">5. Contrôle croisé : DKV, Odoo et agenda</h4>' + (rows5.length ? table(['Véhicule', 'Carburant DKV (HT)', 'Carburant Odoo (615)', 'Écart', 'Jours de déplacement (agenda)', 'Pleins hors déplacement', 'Montant hors déplacement'], rows5, 'prodtable')
+    + '<small class="na">DKV : ce que les factures détaillent par plaque. Odoo : ce qui est imputé aux comptes « Carburant … » du véhicule. Écart en rouge au-delà de 50 €. « Pleins hors déplacement » : transactions un jour où le véhicule n’est réservé dans aucun agenda (ni la marge avant / après) : à vérifier (usage privé, véhicule non réservé, mauvaise imputation).</small>' : '<p class="na">Associez d’abord les plaques aux véhicules ci-dessus.</p>');
+  // 6. Kilométrage saisi à la pompe et coût au km
+  const rows6 = list.filter(d => d.km.length >= 2).map(d => { const k = d.km.slice().sort((a, b) => a.date < b.date ? -1 : 1), span = k[k.length - 1].km - k[0].km, days = k[k.length - 1].date;
+    const ok = span > 0, litres = d.litres; return {d, span, n: k.length, from: k[0], to: k[k.length - 1], ok, litres}; });
+  const sec6 = '<h4 class="sub">6. Kilométrage relevé à la pompe et coût au km (carburant)</h4>' + (rows6.length ? table(['Plaque', 'Relevés crédibles', 'Premier relevé', 'Dernier relevé', 'Km parcourus', 'Carburant HT', 'Litres', 'L / 100 km', 'Carburant par km'],
+      rows6.map(r => `<tr><td>${esc(r.d.plate)} <small class="na">${esc(lab(r.d.plate))}</small></td><td>${num(r.n)}</td><td>${num(r.from.km)} km<br><small class="na">${fmtDate(r.from.date)}</small></td><td>${num(r.to.km)} km<br><small class="na">${fmtDate(r.to.date)}</small></td><td>${r.ok ? num(r.span) + ' km' : '–'}</td><td>${exEur2(r.d.fuel)}</td><td>${num(Math.round(r.litres))}</td><td>${r.ok ? num(Math.round(r.litres / r.span * 1000) / 10) : '–'}</td><td>${r.ok ? exEur2(r.d.fuel / r.span) : '–'}</td></tr>`), 'prodtable')
+    + '<small class="na">Le kilométrage est saisi par le chauffeur au moment du plein : il est souvent vide ou faux (« 1 »). Seuls les relevés supérieurs à 100 km sont gardés. Les kilomètres parcourus = dernier relevé − premier relevé ; la consommation et le coût au km sont calculés sur la totalité des litres et du montant de la période, donc approximatifs. Une source fiable (Odoo Fleet, relevé mensuel) donnerait un vrai coût au km.</small>' : '<p class="na">Aucune plaque n’a au moins deux relevés de kilométrage crédibles.</p>');
+  return sec4 + sec5 + sec6;
+}
+const exMatchName = (a, b) => { const x = exNorm(a), y = exNorm(b); return !!x && !!y && x !== '(non classe)' && (x.includes(y) || y.includes(x)); };
 function exDrawFuel() {
   const el = document.getElementById('exp-fuel'); if (!el) return;
   if (ex.fuelErr) { el.innerHTML = `<p class="neg">${esc(ex.fuelErr)}</p>`; return; }
@@ -98,7 +150,7 @@ function exDrawFuel() {
   else sec3 += (cal.calendars && cal.calendars.length ? `<small class="na">Agendas lus : ${cal.calendars.map(c => esc(c.label)).join(', ')}.</small>` : '') + (usage.length ? table(['Ressource (véhicule)', 'Réservations', 'Jours réservés', `Jours de déplacement (± ${cal.buffer_days} j)`].concat(EX_BUS.map(b => b[1]), ['Derniers événements']),
       usage.map(u => `<tr><td class="prod">${esc(u.vehicle)}</td><td>${num(u.events)}</td><td>${num(u.booked_days)}</td><td>${num(u.away_days)}</td>${EX_BUS.map(([k]) => `<td>${(u.away_by_bu || {})[k] ? num(u.away_by_bu[k]) : '–'}</td>`).join('')}<td class="prod"><small class="na">${u.list.slice(-3).map(e => esc(e.title) + ' (' + fmtDate(e.start) + (e.end !== e.start ? ' → ' + fmtDate(e.end) : '') + ')').join('<br>')}</small></td></tr>`), 'prodtable')
       + `<small class="na">Un véhicule est « en déplacement » de ${cal.buffer_days} jours avant à ${cal.buffer_days} jours après sa réservation : le carburant de ces jours se rattache à l’événement. </small>` : '<p class="na">Aucun événement avec une ressource véhicule trouvé sur la période.</p>');
-  el.innerHTML = sec1 + sec2 + sec3
+  el.innerHTML = sec1 + sec2 + sec3 + exDkvSections(f, usage)
     + '<small class="na">Le contrôle croisé (carburant DKV par carte ou plaque, véhicule réservé à la date) se branche une fois l’analyse des lignes de transaction calibrée sur une facture réelle : utilisez « Texte extrait » pour vérifier ce que l’application lit dans la pièce jointe.</small>';
 }
 
@@ -207,6 +259,11 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const el = e.target;
+  if (el.dataset && el.dataset.exPlate !== undefined && ex.fuel) {
+    ex.plates = ex.plates || {...(ex.fuel.plates || {})}; const k = el.dataset.exPlate;
+    if (el.value.trim()) ex.plates[k] = el.value.trim(); else delete ex.plates[k];
+    ex.platesDirty = true; ex.platesMsg = ''; exDrawFuel(); return;
+  }
   if (el.dataset && el.dataset.exMonth !== undefined) { await exLoadMonth(el.value, el.dataset.kind || 'general'); exDrawGeneral(); return; }
   if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
     const code = el.dataset.exPart, m = ex.part[code] || (ex.part[code] = {});
@@ -219,6 +276,16 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.exPlatesSave !== undefined && ex.fuel) {
+    ex.platesMsg = 'Enregistrement…'; exDrawFuel();
+    try {
+      const r = await fetch('/api/expenses/plates', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({plates: ex.plates || ex.fuel.plates || {}, base: ex.fuel.plates_base})});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+      ex.fuel.plates = j.plates; ex.fuel.plates_base = j.updated_at; ex.plates = {...j.plates}; ex.platesDirty = false; ex.platesMsg = 'Enregistré.';
+    } catch (err) { ex.platesMsg = 'Échec de l’enregistrement : ' + err.message; }
+    exDrawFuel(); return;
+  }
   if (t.dataset.exAtt !== undefined) {
     const box = document.getElementById('exp-att'); if (!box) return; box.innerHTML = '<p class="na">Lecture de la pièce jointe…</p>';
     try { const j = await exGet(`/api/fuel/attachment?att=${t.dataset.exAtt}&year=${EX_YEAR}`);
@@ -249,4 +316,4 @@ document.addEventListener('click', async e => {
   }
   if (t.dataset.exReload !== undefined) { ex.dirty = false; ex.msg = ''; await exLoadSource(); exDrawSource(); }
 });
-window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty || ex.platesDirty) { e.preventDefault(); e.returnValue = ''; } });

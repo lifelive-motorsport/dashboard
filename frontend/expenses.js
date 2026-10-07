@@ -77,7 +77,15 @@ function fuelBlocks() {
   return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na">Chargement…</p></div></section>'}];
 }
 const EX_BUS = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['LOGISTICS', 'Logistics']];
-const exMatchUsage = (usage, veh) => (usage || []).find(u => { const a = exNorm(u.vehicle), b = exNorm(veh); return b !== '(non classe)' && (a.includes(b) || b.includes(a)); });
+const EX_VSTOP = new Set(['sv', 'tr', 'llm', 'pkg', 'rent', 'to', 'hire', 'non', 'classe']);
+const exVTok = n => exNorm(n).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(t => t && !EX_VSTOP.has(t));
+// Deux libellés désignent le même véhicule si tous les mots du plus court sont (début de) mots du plus long : « SPRINTER 1 » ≈ « (SV)-LLM-PKG-Van (Sprinter) #1 (1) ».
+const exSameVeh = (a, b) => { let x = exVTok(a), y = exVTok(b); if (!x.length || !y.length) return false; if (x.length > y.length) [x, y] = [y, x];
+  return x.every(t => y.some(w => w === t || (t.length >= 3 && w.startsWith(t)))); };
+const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') return undefined; const all = usage || [], eq = all.filter(u => exNorm(u.vehicle) === exNorm(veh)); if (eq.length) return eq[0];
+  const c = all.filter(u => exSameVeh(u.vehicle, veh)); return c.length === 1 ? c[0] : undefined; };
+// Liste dédoublonnée : les noms des agendas font foi ; un nom Odoo n'est ajouté que s'il ne correspond à aucun.
+const exVehChoices = (odoo, cal) => { const out = [...new Set(cal)]; (odoo || []).forEach(n => { if (!out.some(c => exNorm(c) === exNorm(n) || exSameVeh(c, n) && cal.filter(k => exSameVeh(k, n)).length === 1)) out.push(n); }); return out; };
 // Part de chaque BU dans les jours de déplacement d'un véhicule (agenda) : {BU: part}, somme = 1 ; vide si le véhicule n'a aucune réservation.
 const exBuShares = u => { if (!u || !u.away_days) return {}; const t = Object.values(u.away_by_bu || {}).reduce((a, b) => a + b, 0) || 1; return Object.fromEntries(Object.entries(u.away_by_bu).map(([k, v]) => [k, v / t])); };
 const exNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -92,7 +100,7 @@ function exDkvSections(f, usage) {
     d.litres += v.fuel_litres; d.fuel += v.fuel_ht; d.adblue += v.adblue_ht; d.toll += v.toll_ht; d.other += v.other_ht; d.n += v.n; d.km = d.km.concat(v.km || []); }));
   const list = Object.values(plates).sort((a, b) => b.fuel - a.fuel);
   if (!list.length) return head + '<p class="na">Aucune transaction lue dans les pièces jointes.</p>';
-  const names = [...new Set([...(ex.vfuel ? ex.vfuel.vehicles.map(v => v.vehicle) : []), ...usage.map(u => u.vehicle), ...Object.values(f.plates || {})])].filter(x => x && x !== '(non classé)');
+  const names = exVehChoices([...(ex.vfuel ? ex.vfuel.vehicles.map(v => v.vehicle) : [])].filter(x => x && x !== '(non classé)'), [...new Set([...usage.map(u => u.vehicle), ...Object.values(f.plates || {})])].filter(Boolean));
   const canEdit = !!f.can_edit, lab = p => (ex.plates || f.plates || {})[p] || '';
   const tot = k => list.reduce((t, d) => t + d[k], 0);
   const sec4 = head + `<datalist id="exp-veh-names">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>` + table(['Plaque (ou carte)', 'Véhicule de service', 'Litres', 'Carburant HT', 'AdBlue HT', 'Péages HT', 'Frais HT', 'Transactions'],

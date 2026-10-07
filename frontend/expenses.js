@@ -132,7 +132,7 @@ function exDkvSections(f, usage) {
   list.forEach(d => { const v = lab(d.plate); if (!v) return; (by[v] || (by[v] = {vehicle: v, fuel: 0, litres: 0, plates: []})); by[v].fuel += d.fuel; by[v].litres += d.litres; by[v].plates.push(d.plate); });
   const txAll = parsed.flatMap(x => x.transactions || []).filter(t => t.category === 'carburant');
   const rows5 = Object.values(by).sort((a, b) => b.fuel - a.fuel).map(v => {
-    const odoo = (ex.vfuel ? ex.vfuel.vehicles : []).filter(o => o.types.Carburant && exMatchName(o.vehicle, v.vehicle)).reduce((t, o) => t + o.types.Carburant, 0);
+    const odoo = (ex.vfuel ? ex.vfuel.vehicles : []).filter(o => o.types.Carburant && exResKey(usage, o.vehicle) === exResKey(usage, v.vehicle)).reduce((t, o) => t + o.types.Carburant, 0);
     const u = exMatchUsage(usage, v.vehicle), mine = txAll.filter(t => v.plates.includes(exPlate(t.vehicle)));
     const out = u ? mine.filter(t => !(u.away_ranges || []).some(r => t.date >= r.from && t.date <= r.to)) : [];
     return `<tr><td class="prod">${esc(v.vehicle)}<br><small class="na">${esc(v.plates.join(', '))}</small></td><td>${exEur2(v.fuel)}</td><td>${exEur2(odoo)}</td><td class="${Math.abs(v.fuel - odoo) > 50 ? 'neg' : ''}">${exEur2(v.fuel - odoo)}</td>
@@ -147,7 +147,8 @@ function exDkvSections(f, usage) {
     + '<small class="na">Le kilométrage est saisi par le chauffeur au moment du plein : il est souvent vide ou faux (« 1 »). Seuls les relevés supérieurs à 100 km sont gardés. Les kilomètres parcourus = dernier relevé − premier relevé ; la consommation et le coût au km sont calculés sur la totalité des litres et du montant de la période, donc approximatifs. Une source fiable (Odoo Fleet, relevé mensuel) donnerait un vrai coût au km.</small>' : '<p class="na">Aucune plaque n’a au moins deux relevés de kilométrage crédibles.</p>');
   return sec4 + sec5 + sec6;
 }
-const exMatchName = (a, b) => { const x = exNorm(a), y = exNorm(b); return !!x && !!y && x !== '(non classe)' && (x.includes(y) || y.includes(x)); };
+// Identité d'un véhicule pour comparer deux libellés (nom Odoo ou nom d'agenda) : la ressource de l'agenda à laquelle il correspond, sinon son nom normalisé.
+const exResKey = (usage, name) => { const u = exMatchUsage(usage, name); return u ? 'r:' + u.vehicle : 'n:' + exNorm(name); };
 function exDrawFuel() {
   const el = document.getElementById('exp-fuel'); if (!el) return;
   if (ex.fuelErr) { el.innerHTML = `<p class="neg">${esc(ex.fuelErr)}</p>`; return; }

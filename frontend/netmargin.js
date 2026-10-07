@@ -57,7 +57,7 @@ const NM_ROWS = [['Chiffre d’affaires', o => o.ca, 'plain'], ['− Coûts dire
   ['− Quote-part frais généraux', o => o.general, 'plain'], ['− Quote-part véhicules non liés à une BU', o => o.vehgen, 'plain'], ['− Quote-part marketing commun', o => o.mkt, 'plain'], ['= Marge nette', nmNet, 'tot']];
 // spec = [{label, keys}] ; `pctCa` ajoute la ligne « Marge nette / CA ».
 function nmTable(res, spec) {
-  const vals = spec.map(s => nmSum(res.cols, s.keys)), cell = (v, kind) => `<td class="${kind === 'tot' || kind === 'sub' ? cls(v) : ''}">${v ? eur(v) : '–'}</td>`;
+  const vals = spec.map(s => nmSum(res.cols, s.keys)), cell = (v0, kind) => { const v = Math.abs(v0) < 0.5 ? 0 : v0; return `<td class="${kind === 'tot' || kind === 'sub' ? cls(v) : ''}">${v ? eur(v) : '–'}</td>`; };
   return table([''].concat(spec.map(s => s.label)), NM_ROWS.map(([lab, f, kind]) => `<tr class="${kind === 'tot' ? 'tot' : kind === 'sub' ? 'subtot' : ''}"><td>${lab}</td>${vals.map(o => cell(f(o), kind)).join('')}</tr>`)
     .concat([`<tr><td>Marge nette / CA</td>${vals.map(o => `<td class="${cls(nmNet(o))}">${o.ca ? pct(nmNet(o) / o.ca) : '–'}</td>`).join('')}</tr>`]), 'prodtable nmtable');
 }

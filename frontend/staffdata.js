@@ -67,11 +67,11 @@ function sdCalcCards(p) {
   const params = sd.doc.params;
   if (p.kind === 'salarie') {
     const c = SC.employeeCosts(p, params, sdSocial(p));
-    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}${kpi('Coût société horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`
+    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}${kpi('Coût société journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût société horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
   const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, c = SC.independentCosts(p, params, tot, sdMonthsElapsed());
-  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
+  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
 }
 
 function sdExtras(p) {
@@ -195,11 +195,12 @@ async function sdLoadAcc() {
   return sd.accLoading;
 }
 
-function sdPersonAnnual(p) {
-  if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p)).annual;
+function sdPersonCosts(p) {
+  if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p));
   const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0;
-  return SC.independentCosts(p, sd.doc.params, tot, sdMonthsElapsed()).annual;
+  return SC.independentCosts(p, sd.doc.params, tot, sdMonthsElapsed());
 }
+const sdPersonAnnual = p => sdPersonCosts(p).annual;
 
 function sdDrawPeople() {
   const el = document.getElementById('staff-people'); if (!el) return;
@@ -323,7 +324,7 @@ function staffViewBlocks(view) {
 }
 const sdLabel = k => (SD_SHARES.find(x => x[0] === k) || [k, k])[1];
 function sdViewRows() {
-  return sd.doc.people.filter(p => p.active).map(p => { const annual = sdPersonAnnual(p), a = SC.allocate(annual, p.alloc); return {p, annual, a}; });
+  return sd.doc.people.filter(p => p.active).map(p => { const c = sdPersonCosts(p), annual = c.annual, a = SC.allocate(annual, p.alloc); return {p, c, annual, a}; });
 }
 function sdDrawView() {
   const el = document.getElementById('staff-view'); if (!el) return;
@@ -342,8 +343,8 @@ function sdDrawView() {
     const un = rows.reduce((t, r) => t + r.a.UNALLOCATED, 0);
     el.innerHTML = `<div class="kpis">${kpi('Coût annualisé du personnel', eur(total), '', people(rows))}${gt.filter(([l, x]) => l !== 'Non imputé' || x > 1).map(([l, x]) => kpi(l, eur(x), l === 'Non imputé' ? 'neg' : '', total ? pct(x / total) : '')).join('')}${acc != null ? kpi('Réalisé en comptabilité ' + SD_YEAR, eur(acc), '', 'comptes 620/621 + 618000/618001, depuis le 1er janvier') : ''}</div>`
       + '<h4 class="sub">Répartition par BU</h4>' + table(['Entité', 'Coût annualisé imputé', 'Part', 'Personnes concernées'], bu.concat(un > 1 ? [`<tr><td>Non imputé</td><td class="neg">${eur(un)}</td><td>${pct(un / total)}</td><td><small class="na">à répartir dans « Imputation du personnel »</small></td></tr>`] : []), 'prodtable')
-      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', 'Coût annualisé', 'XC', 'CARS', 'Shared Services', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
-          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
+      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', 'Coût annualisé', 'Coût horaire', 'Coût horaire ajusté', 'XC', 'CARS', 'Shared Services', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
+          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${sdEur2(r.c.hourly)}</td><td title="facturable ${num(r.p.billable_pct ?? 100)} % · temps presté ${num(r.p.hours_pct ?? 100)} %">${sdEur2(r.c.hourlyAdj)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td></td><td></td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
     return;
   }
   const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sum(y, v.scope) - sum(x, v.scope)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);

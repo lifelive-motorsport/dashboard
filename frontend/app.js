@@ -554,7 +554,7 @@ function render(force) {
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
   if (key === 'xc/inventory') loadStock(!!force).then(drawStock);
-  if (/^staff\/(source|people|general|xc|cars|shared)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
+  if (/^staff\/(source|people|general|xc|cars|shared|management)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'expenses/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
   if (key === 'vehicles/source') { exDrawSource(); exLoadSource().then(exDrawSource); }

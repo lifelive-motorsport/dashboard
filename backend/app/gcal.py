@@ -89,6 +89,7 @@ def _day(v: dict | None, end: bool) -> date | None:
 def normalize(items: list[dict], calendar_id: str = "", bu: str = "OTHER", label: str = "") -> list[dict]:
     """Événements (hors annulés) avec leurs ressources invitées : [{id, title, start, end, calendar, resources}]."""
     pat = re.compile(settings.CALENDAR_VEHICLE_REGEX, re.I) if settings.CALENDAR_VEHICLE_REGEX else None
+    excl = re.compile(settings.CALENDAR_EXCLUDE_REGEX, re.I) if settings.CALENDAR_EXCLUDE_REGEX else None
     out = []
     for e in items:
         if e.get("status") == "cancelled":
@@ -96,6 +97,8 @@ def normalize(items: list[dict], calendar_id: str = "", bu: str = "OTHER", label
         res = [a.get("displayName") or a.get("email", "") for a in e.get("attendees", []) if a.get("resource") and a.get("responseStatus") != "declined"]
         if pat:
             res = [r for r in res if pat.search(r)]
+        if excl:
+            res = [r for r in res if not excl.search(r)]
         s, en = _day(e.get("start"), False), _day(e.get("end"), True)
         if not res or not s:
             continue

@@ -77,3 +77,12 @@ def test_calendars_label_gives_the_bu_and_usage_splits_days_per_bu(monkeypatch):
     u = gcal.usage(evs, 0)[0]
     assert u["booked_days"] == 2 and u["booked_by_bu"] == {"HISTORIC_RACING": 1.5, "LOGISTICS": 0.5}          # le 11 juin est partagé à parts égales
     assert round(sum(u["away_by_bu"].values()), 2) == u["away_days"]
+
+
+def test_race_car_resources_are_excluded_but_service_vehicles_stay():
+    items = [{"id": "1", "summary": "Spa Six Hours", "start": {"date": "2026-09-24"}, "end": {"date": "2026-09-28"},
+              "attendees": [{"displayName": "(Circuit)-LLM-CA-STG-Jaguar E-Type (TdL) (1)", "resource": True}, {"displayName": "(Rally)-LLM-CA-STG-Toyota Starlet blue (YN22) (1)", "resource": True},
+                            {"displayName": "(SV)-LLM-PKG-Small Van (Citan) (1)", "resource": True}]},
+             {"id": "2", "summary": "Test", "start": {"date": "2026-09-10"}, "end": {"date": "2026-09-11"}, "attendees": [{"displayName": "(Circuit)-LLM-CA-STG-Chevrolet Monza (GDM) (1)", "resource": True}]}]
+    evs = gcal.normalize(items, "c", "HISTORIC_RACING", "Historic Racing")
+    assert [(e["title"], e["resources"]) for e in evs] == [("Spa Six Hours", ["(SV)-LLM-PKG-Small Van (Citan) (1)"])]          # l'événement sans véhicule de service disparaît

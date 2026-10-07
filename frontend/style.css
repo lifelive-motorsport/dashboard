@@ -183,3 +183,13 @@ pre.exatt{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:12px;bac
 .sdsplit td.sdinp{padding-left:2px;width:52px}.sdsplit input.sdpct{width:48px;min-width:0;padding:4px 5px;text-align:right;border-radius:6px}.sdsplit td.sdname{white-space:nowrap;position:sticky;left:0;background:var(--bg);z-index:1;max-width:190px;overflow:hidden;text-overflow:ellipsis}
 .sdsplit td.sdcost,.sdsplit td.sdtot{white-space:nowrap;text-align:right}.sdfill{background:none;border:1px solid var(--line);color:var(--mut);border-radius:6px;cursor:pointer;padding:2px 6px}.sdfill:hover{color:var(--fg)}
 .nmtable td,.nmtable th{white-space:nowrap}.nmtable td:not(:first-child){text-align:right}.nmtable tr.subtot td{font-weight:600;border-top:1px solid var(--line)}
+
+/* Imputation des frais véhicules : lignes compactes sur une seule ligne, sans retour à la ligne */
+.sdsplit td,.sdsplit th{white-space:nowrap;vertical-align:middle;font-variant-numeric:tabular-nums}.sdsplit td{padding:3px 4px;height:34px}.sdsplit tbody tr:nth-child(even) td{background:rgba(128,128,128,.06)}
+.sdsplit td.sdname{max-width:170px;overflow:hidden;text-overflow:ellipsis}.sdsplit td.sdind{width:34px;font-size:11px}
+.sdsplit input.sdpct{width:42px;padding:3px 4px;font-size:13px}.sdsplit input.sdpct.set{font-weight:700;border-color:var(--fg)}
+.sdsplit td.sdtot{min-width:92px}.sdsplit .chip{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--line);color:var(--mut)}.sdsplit .chip.ok{color:var(--grn);border-color:var(--grn)}.sdsplit .chip.bad{color:var(--neg);border-color:var(--neg)}
+.sdmini{display:flex;height:5px;width:92px;border-radius:3px;overflow:hidden;margin-top:3px;background:rgba(128,128,128,.2)}.sdmini i{display:block;height:100%}
+.sdsplit td.sdact{width:1%}.sdsplit button.sdfill{padding:2px 6px;font-size:12px;line-height:1.2;margin-left:3px;white-space:nowrap}
+.sdsplit tr.grp td{height:30px;background:transparent!important;padding-top:10px}
+#exp-split .sdbar{position:sticky;bottom:0;background:var(--bg);padding:10px 0;margin:0;z-index:5;border-top:1px solid var(--line)}

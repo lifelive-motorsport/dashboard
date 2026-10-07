@@ -232,11 +232,15 @@ def split_vehicle_account(name: str) -> tuple[str, str]:
     return m["veh"].strip(), m["type"].strip().capitalize()
 
 
-def vehicles_view(lines: list[dict], config: dict, year: int) -> dict:
-    """Coût par véhicule et par nature (carburant, entretien, assurance…) d'après les comptes rangés en « véhicules de service »."""
+def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "config") -> dict:
+    """Coût par véhicule et par nature (carburant, entretien, assurance…) d'après les comptes rangés en « véhicules de service ».
+    scope = « all615 » : tous les comptes de la classe 615 (EXPENSES_VEHICLE_PREFIXES), quelle que soit leur rubrique (contrôle du carburant)."""
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
-    sel = effective(config, [a["code"] for a in cand])
-    mine = [x for a in cand if (x := _for_kind(a, sel, config, "vehicle"))]
+    if scope == "all615":
+        mine = [a for a in cand if any(a["code"].startswith(p) for p in settings.EXPENSES_VEHICLE_PREFIXES)]
+    else:
+        sel = effective(config, [a["code"] for a in cand])
+        mine = [x for a in cand if (x := _for_kind(a, sel, config, "vehicle"))]
     veh: dict[str, dict] = {}
     types: dict[str, float] = {}
     for a in mine:

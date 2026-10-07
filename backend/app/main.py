@@ -214,8 +214,8 @@ def fuel_attachment(att: int, year: int = Query(..., ge=2000, le=2100), text: bo
 
 
 @app.get("/api/expenses/vehicles")
-def expenses_vehicles(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
-    return expenses.vehicles_view(_expense_lines(year), expenses.store().get()["data"], year)
+def expenses_vehicles(year: int = Query(..., ge=2000, le=2100), scope: str = Query("config", pattern="^(config|all615)$"), _user: str = Depends(require_user)):
+    return expenses.vehicles_view(_expense_lines(year), expenses.store().get()["data"], year, scope)
 
 
 @app.get("/api/expenses/month")

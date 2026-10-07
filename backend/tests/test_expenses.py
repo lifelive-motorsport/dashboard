@@ -124,3 +124,12 @@ def test_vehicle_accounts_are_proposed_and_split_by_vehicle_and_nature():
     citan = next(x for x in v["vehicles"] if x["vehicle"] == "CITAN")
     assert citan["types"] == {"Carburant": 3000.0, "Assurance": 800.0}
     assert expenses.kind_view(lines, {"saved": False, "selected": {}}, 2026, "general")["empty"]            # les 615 ne tombent pas dans les frais généraux
+
+
+def test_fuel_scope_uses_all_615_accounts_even_when_classed_as_general_expenses():
+    lines = [{"code": "615021", "name": "Carburant Util. CITAN", "total": 3000.0, "by_month": {"2026-01": 3000.0}, "partners": {}},
+             {"code": "612000", "name": "Électricité", "total": 600.0, "by_month": {"2026-01": 600.0}, "partners": {}}]
+    cfg = {"saved": True, "selected": {"615021": "general"}}
+    assert expenses.vehicles_view(lines, cfg, 2026)["empty"]
+    v = expenses.vehicles_view(lines, cfg, 2026, "all615")
+    assert v["total"] == 3000 and v["vehicles"][0]["types"] == {"Carburant": 3000.0}

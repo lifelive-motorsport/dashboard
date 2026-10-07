@@ -588,7 +588,7 @@ class OdooProvider:
 
     def fuel_invoices(self, year: int) -> list[dict]:
         """Factures et avoirs du fournisseur de la carte carburant (FUEL_SUPPLIER_NAME) de l'année, avec leurs pièces jointes et leurs lignes sur les
-        comptes 615 (imputation encodée dans Odoo, par compte = véhicule et nature). Lecture seule."""
+        comptes 615 (imputation encodée dans Odoo, par compte = véhicule et nature) et leurs lignes sur les autres comptes de charges (« other »). Lecture seule."""
         partners = self._call("res.partner", "search_read", domain=[("name", "ilike", settings.FUEL_SUPPLIER_NAME)], fields=["id"], limit=50)
         if not partners:
             return []
@@ -600,7 +600,7 @@ class OdooProvider:
             return []
         ids = [m["id"] for m in moves]
         atts = self._call("ir.attachment", "search_read", domain=[("res_model", "=", "account.move"), ("res_id", "in", ids)], fields=["name", "mimetype", "file_size", "res_id"], limit=1000)
-        lines = self._call("account.move.line", "search_read", domain=[("move_id", "in", ids), ("parent_state", "=", "posted"), ("account_id.code", "=like", "615%")],
+        lines = self._call("account.move.line", "search_read", domain=[("move_id", "in", ids), ("parent_state", "=", "posted"), ("account_id.code", "=like", "6%")],
                            fields=["move_id", "balance", "account_id"], limit=5000)
         out = []
         for m in moves:
@@ -615,7 +615,8 @@ class OdooProvider:
             out.append({"id": m["id"], "number": m["name"], "ref": m.get("ref") or "", "date": str(m.get("invoice_date") or m["date"]), "untaxed": round(sign * float(m["amount_untaxed"] or 0), 2),
                         "total": round(sign * float(m["amount_total"] or 0), 2), "paid": m.get("payment_state") in ("paid", "in_payment"), "refund": sign < 0,
                         "attachments": [{"id": a["id"], "name": a["name"], "mimetype": a.get("mimetype") or "", "size": a.get("file_size") or 0} for a in atts if a["res_id"] == m["id"]],
-                        "lines": [{**v, "amount": round(v["amount"], 2)} for v in ls.values()]})
+                        "lines": [{**v, "amount": round(v["amount"], 2)} for v in ls.values() if v["code"].startswith("615")],
+                        "other": [{**v, "amount": round(v["amount"], 2)} for v in ls.values() if not v["code"].startswith("615")]})
         return out
 
     def fuel_attachment(self, att_id: int, year: int) -> tuple[bytes, str, str] | None:

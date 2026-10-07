@@ -59,7 +59,7 @@ function exDrawVehicles() {
 
 async function exLoadFuel() {
   try { ex.fuel = await exGet(`/api/fuel?year=${EX_YEAR}`); ex.fuelErr = null; } catch (e) { ex.fuelErr = e.message; }
-  try { if (!ex.veh) ex.veh = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}`); } catch (e) { /* le reste de la page fonctionne sans */ }
+  try { ex.vfuel = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`); } catch (e) { ex.vfuel = null; }
 }
 function fuelBlocks() {
   return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na">Chargement…</p></div></section>'}];
@@ -76,21 +76,21 @@ function exDrawFuel() {
   const cal = f.calendar || {}, usage = cal.usage || [];
   const match = veh => exMatchUsage(usage, veh);
   // 1. Carburant encodé dans Odoo, par véhicule, rapproché des jours de réservation de l'agenda
-  const fuelBy = ex.veh ? ex.veh.vehicles.filter(v => v.types.Carburant).map(v => ({vehicle: v.vehicle, fuel: v.types.Carburant, u: match(v.vehicle)})) : [];
+  const fuelBy = ex.vfuel ? ex.vfuel.vehicles.filter(v => v.types.Carburant).map(v => ({vehicle: v.vehicle, fuel: v.types.Carburant, u: match(v.vehicle)})) : [];
   const tfuel = fuelBy.reduce((t, x) => t + x.fuel, 0);
-  const sec1 = '<h4 class="sub">1. Carburant tel qu’encodé dans Odoo (comptes 615, nature « Carburant »)</h4>' + (fuelBy.length ? table(['Véhicule', 'Carburant depuis le 1er janvier', 'Part', 'Jours de déplacement (agenda)', 'Carburant par jour de déplacement'].concat(EX_BUS.map(b => b[1])),
+  const sec1 = '<h4 class="sub">1. Carburant tel qu’encodé dans Odoo (tous les comptes 615 « Carburant … », quelle que soit leur rubrique)</h4>' + (fuelBy.length ? table(['Véhicule', 'Carburant depuis le 1er janvier', 'Part', 'Jours de déplacement (agenda)', 'Carburant par jour de déplacement'].concat(EX_BUS.map(b => b[1])),
       fuelBy.sort((a, b) => b.fuel - a.fuel).map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.u ? ` <small class="na">≈ ${esc(x.u.vehicle)}</small>` : ''}</td><td>${eur(x.fuel)}</td><td>${tfuel ? pct(x.fuel / tfuel) : '–'}</td><td>${x.u ? num(x.u.away_days) : '–'}</td><td>${x.u && x.u.away_days ? eur(x.fuel / x.u.away_days) : '–'}</td>${EX_BUS.map(([k]) => `<td>${exBuShares(x.u)[k] ? eur(x.fuel * exBuShares(x.u)[k]) : '–'}</td>`).join('')}</tr>`)
         .concat([`<tr class="tot"><td>Total</td><td>${eur(tfuel)}</td><td>100,0 %</td><td></td><td></td>${EX_BUS.map(([k]) => `<td>${eur(fuelBy.reduce((t, x) => t + x.fuel * (exBuShares(x.u)[k] || 0), 0))}</td>`).join('')}</tr>`]), 'prodtable')
-      + '<small class="na">Rapprochement indicatif par ressemblance de nom entre le véhicule du compte et la ressource de l’agenda.</small>' : '<p class="na">Aucun compte de nature « Carburant » parmi les véhicules de service (voir « Par véhicule »).</p>');
+      + '<small class="na">Rapprochement indicatif par ressemblance de nom entre le véhicule du compte et la ressource de l’agenda.</small>' : '<p class="na">Aucun compte 615 dont le libellé commence par « Carburant » n’a été trouvé (comptes du type « Carburant Util. CITAN »).</p>');
   // 2. Factures de la carte carburant
-  const sumHt = f.invoices.reduce((t, i) => t + i.untaxed, 0), sum615 = f.invoices.reduce((t, i) => t + i.lines.reduce((u, l) => u + l.amount, 0), 0);
-  const sec2 = `<h4 class="sub">2. Factures ${esc(f.supplier)} ${EX_YEAR}</h4>` + (f.invoices.length ? table(['Date', 'Facture', 'HT', 'Imputé en 615', 'Imputation par véhicule', 'Pièce jointe', ''],
-      f.invoices.map(i => { const im = i.lines.reduce((t, l) => t + l.amount, 0), gap = Math.abs(i.untaxed - im) > 1;
-        return `<tr><td>${fmtDate(i.date)}</td><td>${esc(i.number)}${i.refund ? ' <small class="na">(avoir)</small>' : ''}<br><small class="na">${esc(i.ref)}</small></td><td>${exEur2(i.untaxed)}</td><td class="${gap ? 'neg' : ''}">${exEur2(im)}</td>
+  const sumHt = f.invoices.reduce((t, i) => t + i.untaxed, 0), sum615 = f.invoices.reduce((t, i) => t + i.lines.reduce((u, l) => u + l.amount, 0), 0), sumOt = f.invoices.reduce((t, i) => t + (i.other || []).reduce((u, l) => u + l.amount, 0), 0);
+  const sec2 = `<h4 class="sub">2. Factures ${esc(f.supplier)} ${EX_YEAR}</h4>` + (f.invoices.length ? table(['Date', 'Facture', 'HT', 'Imputé en 615', 'Imputé ailleurs', 'Écart', 'Imputation en 615 par véhicule', 'Pièce jointe', ''],
+      f.invoices.map(i => { const im = i.lines.reduce((t, l) => t + l.amount, 0), ot = (i.other || []).reduce((t, l) => t + l.amount, 0), gap = Math.abs(i.untaxed - im - ot) > 1;
+        return `<tr><td>${fmtDate(i.date)}</td><td>${esc(i.number)}${i.refund ? ' <small class="na">(avoir)</small>' : ''}<br><small class="na">${esc(i.ref)}</small></td><td>${exEur2(i.untaxed)}</td><td>${exEur2(im)}</td><td class="prod">${(i.other || []).map(l => `${esc(l.name)} : ${exEur2(l.amount)}`).join('<br>') || '–'}</td><td class="${gap ? 'neg' : ''}">${exEur2(i.untaxed - im - ot)}</td>
           <td class="prod">${i.lines.map(l => `${esc(l.name)} : ${exEur2(l.amount)}`).join('<br>') || '–'}</td><td>${i.attachments.length ? i.attachments.map(a => esc(a.name)).join('<br>') : '<small class="na">aucune</small>'}</td>
           <td>${i.attachments.length ? `<button type="button" data-ex-att="${i.attachments[0].id}">Texte extrait</button>` : ''}</td></tr>`; })
-        .concat([`<tr class="tot"><td colspan="2">Total</td><td>${exEur2(sumHt)}</td><td>${exEur2(sum615)}</td><td colspan="3"></td></tr>`]), 'prodtable sdtable') + '<div id="exp-att"></div>'
-      + '<small class="na">« Imputé en 615 » = lignes de la facture sur les comptes 615 : en rouge, un écart avec le HT de la facture (partie imputée ailleurs, ou carburant non ventilé).</small>' : '<p class="na">Aucune facture trouvée pour ce fournisseur (recherche par nom : variable FUEL_SUPPLIER_NAME).</p>');
+        .concat([`<tr class="tot"><td colspan="2">Total</td><td>${exEur2(sumHt)}</td><td>${exEur2(sum615)}</td><td>${exEur2(sumOt)}</td><td>${exEur2(sumHt - sum615 - sumOt)}</td><td colspan="3"></td></tr>`]), 'prodtable sdtable') + '<div id="exp-att"></div>'
+      + '<small class="na">« Imputé en 615 » : lignes de la facture sur les comptes 615 (véhicule et nature). « Imputé ailleurs » : lignes sur les autres comptes de charges (par exemple frais des BU 602xxx). « Écart » : HT de la facture moins ces deux montants (TVA non déductible, lignes sur des comptes hors classe 6…).</small>' : '<p class="na">Aucune facture trouvée pour ce fournisseur (recherche par nom : variable FUEL_SUPPLIER_NAME).</p>');
   // 3. Agenda
   let sec3 = '<h4 class="sub">3. Réservations des véhicules dans l’agenda Google</h4>';
   if (!cal.configured) sec3 += `<p class="na">${esc(cal.note || 'Agenda non configuré.')}</p>`;

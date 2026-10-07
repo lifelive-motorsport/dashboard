@@ -144,7 +144,7 @@ class DemoProvider:
     def fuel_invoices(self, year: int) -> list[dict]:
         return [{"id": 100 + m, "number": f"DKV/{year}/{m:02d}", "ref": f"DKV-{m:02d}", "date": f"{year}-{m:02d}-28", "untaxed": 1200.0 + 40 * m, "total": 1452.0 + 48 * m, "paid": m < 9, "refund": False,
                  "attachments": [{"id": 900 + m, "name": f"DKV_{year}_{m:02d}.pdf", "mimetype": "application/pdf", "size": 52000}],
-                 "lines": [{"code": "615021", "name": "Carburant Util. CITAN", "amount": 300.0 + 10 * m}, {"code": "615031", "name": "Carburant Util. SPRINTER", "amount": 900.0 + 30 * m}]} for m in range(1, 10)]
+                 "lines": [{"code": "615021", "name": "Carburant Util. CITAN", "amount": 300.0 + 10 * m}, {"code": "615031", "name": "Carburant Util. SPRINTER", "amount": 900.0 + 30 * m}], "other": []} for m in range(1, 10)]
 
     def fuel_attachment(self, att_id: int, year: int):
         return b"DKV Euro Service\nRechnung 2026\n12.05.2026 1-ABC-123 Diesel 45,20 L 82,35 EUR\n13.05.2026 1-ABC-123 Diesel 60,00 L 109,20 EUR\n", "text/plain", "demo.txt"

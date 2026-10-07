@@ -44,10 +44,11 @@ def test_odoo_fuel_invoices_with_attachments_and_615_lines_and_attachment_guard(
         if model == "ir.attachment":
             import base64
             return [{"name": "dkv.pdf", "mimetype": "application/pdf", "datas": base64.b64encode(b"%PDF-x").decode()}]
-        return [{"move_id": [1, "F1"], "balance": 600.0, "account_id": [3, "615021 Carburant Util. CITAN"]}, {"move_id": [1, "F1"], "balance": 400.0, "account_id": [4, "615031 Carburant Util. SPRINTER"]}]
+        return [{"move_id": [1, "F1"], "balance": 600.0, "account_id": [3, "615021 Carburant Util. CITAN"]}, {"move_id": [1, "F1"], "balance": 400.0, "account_id": [4, "615031 Carburant Util. SPRINTER"]},
+                {"move_id": [1, "F1"], "balance": 250.0, "account_id": [5, "602040 FRAIS Historic Racing"]}]
     p._call = call
     inv = p.fuel_invoices(2026)
-    assert inv[0]["attachments"][0]["id"] == 77 and [(l["code"], l["amount"]) for l in inv[0]["lines"]] == [("615021", 600.0), ("615031", 400.0)]
+    assert inv[0]["attachments"][0]["id"] == 77 and [(l["code"], l["amount"]) for l in inv[0]["lines"]] == [("615021", 600.0), ("615031", 400.0)] and [(l["code"], l["amount"]) for l in inv[0]["other"]] == [("602040", 250.0)]
     assert p.fuel_attachment(77, 2026)[0] == b"%PDF-x" and p.fuel_attachment(78, 2026) is None             # une pièce jointe étrangère aux factures carburant est refusée
 
 

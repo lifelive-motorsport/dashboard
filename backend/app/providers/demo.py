@@ -135,6 +135,9 @@ class DemoProvider:
                                      2: {"name": "ADC St-Vith (comptable)" if code == "613000" else "Fournisseur B", "amount": sum(by.values()) * 0.4, "by_month": {m: v * 0.4 for m, v in by.items()}}}})
         return out
 
+    def expenses_od(self, year: int) -> list[dict]:
+        return [{"code": "611010", "name": "Loyer Batiment", "date": f"{year}-07-31", "amount": 21000.0, "move": f"DIV/{year}/07/0001", "label": "Loyer 01-07/26"}]
+
     def expenses_month(self, month: str) -> list[dict]:
         rnd = random.Random(int(month[5:7]))
         return [{"code": c, "name": n, "date": f"{month}-{rnd.randint(1, 28):02d}", "amount": round(rnd.random() * (30000 if c == "611010" and month.endswith("07") else 1500), 2), "partner_id": 1 + i % 2,

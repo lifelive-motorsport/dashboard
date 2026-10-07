@@ -152,6 +152,12 @@ function exDrawSource() {
     + '<small class="na">Choisissez, pour chaque compte de charges, s’il compte dans les frais généraux, dans les véhicules de service (menu Service Vehicles) ou s’il est laissé de côté. Les comptes « old » sont ignorés. Un compte qui mélange des natures différentes (par exemple un compte 640 qui contient aussi des taxes de véhicules) se range en entier dans une seule rubrique ; dites-le-moi si un compte doit être scindé.</small>';
 }
 
+// Remarque sous le graphique : écritures d'opérations diverses (OD) exclues des chiffres (ex. loyer comptabilisé par OD alors que le bâtiment est mis à disposition).
+function exOdNote(g) {
+  const od = g.od; if (!od || od.error || !od.moves.length) return '';
+  return `<div class="note"><b>Opérations diverses (OD) exclues de ces chiffres : ${exEur2(od.total)}</b><ul>${od.moves.map(o => `<li>${fmtDate(o.date)} · ${esc(o.move)} · ${esc(o.code)} ${esc(o.name)} · ${esc(o.label)} : <b>${exEur2(o.amount)}</b></li>`).join('')}</ul>
+    <small class="na">Ces écritures (journaux d’opérations diverses) ne sont pas de vraies dépenses de la période : elles sont retirées de la courbe, des totaux et de la projection.</small></div>`;
+}
 // Détail d'un mois : mois choisi (par défaut le plus élevé) et ses plus grosses écritures, pour expliquer un pic.
 function exMonthBlock(g, kind) {
   const sel = `<select class="sdin" data-ex-month data-kind="${kind}">${g.series.map(p => `<option value="${p.month}"${p.month === ex.monthSelK[kind] ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
@@ -168,6 +174,7 @@ function exDrawGeneral() {
   const pts = g.series.map(p => ({label: exMonth(p.month), avg: p.amount, orders: 0, month: p.month}));
   el.innerHTML = `<div class="kpis">${kpi(name + ' depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `sur ${num(g.months)} mois`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
     + '<h4 class="sub">Évolution mensuelle</h4>' + lineChart(pts, g.monthly_avg, name + ' par mois (€)', v => eur(Math.round(v)), p => `${p.month} : ${eur(p.avg)}`)
+    + exOdNote(g)
     + exMonthBlock(g, kind)
     + '<h4 class="sub">Par compte</h4>' + table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Part'], g.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${eur(a.total)}</td><td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, a.share) * 100)}%"></span><span>${pct(a.share)}</span></td></tr>`)
         .concat([`<tr class="tot"><td></td><td>Total</td><td>${eur(g.total)}</td><td>100,0 %</td></tr>`]), 'prodtable')

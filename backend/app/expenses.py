@@ -256,3 +256,13 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
                           "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"]} for d in sorted(veh.values(), key=lambda d: -d["total"])],
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
+
+
+def od_view(od: list[dict], config: dict, kind: str) -> dict:
+    """Écritures d'OD exclues, sur les comptes retenus pour la rubrique `kind` (une OD sur un compte laissé de côté ne concerne pas cette vue)."""
+    codes = sorted({o["code"] for o in od})
+    sel = effective(config, codes)
+    mine = [o for o in od if sel.get(o["code"]) in (kind, "partners") and family(o["code"], o["name"]) == "candidate"
+            and (sel.get(o["code"]) == kind or ((config.get("partners") or {}).get(o["code"], {}).get("0") == kind))]
+    mine.sort(key=lambda o: (o["date"], o["move"]))
+    return {"total": round(sum(o["amount"] for o in mine), 2), "moves": [{**o, "amount": round(o["amount"], 2)} for o in mine]}

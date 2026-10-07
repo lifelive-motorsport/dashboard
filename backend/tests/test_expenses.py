@@ -133,3 +133,12 @@ def test_fuel_scope_uses_all_615_accounts_even_when_classed_as_general_expenses(
     assert expenses.vehicles_view(lines, cfg, 2026)["empty"]
     v = expenses.vehicles_view(lines, cfg, 2026, "all615")
     assert v["total"] == 3000 and v["vehicles"][0]["types"] == {"Carburant": 3000.0}
+
+
+def test_od_view_lists_only_od_on_retained_accounts():
+    od = [{"code": "611010", "name": "Loyer Batiment", "date": "2026-07-31", "amount": 21000.0, "move": "DIV/2026/07/0001", "label": "Loyer 01-07/26"},
+          {"code": "613000", "name": "Honoraires", "date": "2026-07-31", "amount": 500.0, "move": "DIV/2026/07/0002", "label": "x"},
+          {"code": "604010", "name": "Achats XC", "date": "2026-07-31", "amount": 900.0, "move": "DIV/2026/07/0003", "label": "hors périmètre"}]
+    v = expenses.od_view(od, {"saved": False, "selected": {}}, "general")
+    assert v["total"] == 21000 and [m["move"] for m in v["moves"]] == ["DIV/2026/07/0001"]                  # 613 non retenu, 604 traité ailleurs
+    assert expenses.od_view(od, {"saved": True, "selected": {"611010": "vehicle"}}, "general")["moves"] == []

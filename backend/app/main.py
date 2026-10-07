@@ -161,7 +161,14 @@ def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
 
 @app.get("/api/expenses/general")
 def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query("general", pattern="^(general|vehicle)$"), _user: str = Depends(require_user)):
-    return expenses.kind_view(_expense_lines(year), expenses.store().get()["data"], year, kind)
+    cfg = expenses.store().get()["data"]
+    out = expenses.kind_view(_expense_lines(year), cfg, year, kind)
+    try:
+        out["od"] = expenses.od_view(provider().expenses_od(year), cfg, kind)
+    except Exception:
+        log.exception("OD indisponibles")
+        out["od"] = {"total": 0.0, "moves": [], "error": True}
+    return out
 
 
 def _calendar(d_from: date, d_to: date) -> dict:

@@ -159,3 +159,12 @@ def test_months_elapsed_include_the_fraction_of_the_current_month_and_smooth_lum
     k = expenses.kind_view(partial, {"saved": True, "selected": {"612000": "general"}}, 2026, "general", today=date(2026, 10, 7))
     assert [x["month"] for x in k["series"]] == ["2026-08", "2026-09"] and k["last_closed"] == "2026-09" and [x["month"] for x in k["all_months"]] == ["2026-08", "2026-09", "2026-10"]             # octobre (incomplet) n'est pas tracé
     assert k["total"] == 1300 and round(k["monthly_avg"], 2) == round(1200 / 9, 2) and round(k["projected"], 2) == 1600     # moyenne sur les 9 mois clos
+
+
+def test_split_vehicle_account_sans_util():
+    from app.expenses import split_vehicle_account as f
+    assert f("Carburant Util. CITAN") == ("CITAN", "Carburant")
+    assert f("Assurance Brian James, Respo & Saris") == ("Brian James, Respo & Saris", "Assurance")
+    assert f("Entr. et repar. Semi PAC") == ("Semi PAC", "Entr. et repar.")
+    assert f("Assurance Quad Kodiak") == ("Quad Kodiak", "Assurance")
+    assert f("Autres frais Semi A6J") == ("Semi A6J", "Autres frais")

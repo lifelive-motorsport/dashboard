@@ -268,11 +268,16 @@ def month_lines(raw: list[dict], config: dict, kind: str, month: str, limit: int
 _VEHICLE_NAME = re.compile(r"^(?P<type>.+?)\s+(?:util\.?|utilitaire|véhicule|veh\.?)\s+(?P<veh>.+)$", re.I)
 
 
+# Natures connues, pour les comptes sans « Util. » : « Assurance Quad Kodiak », « Entr. et repar. Semi PAC »…
+_NATURE_FIRST = re.compile(r"^(?P<type>carburants?|entr\.?\s+et\s+r[ée]p\w*\.?|entretiens?(?:\s+et\s+r[ée]parations?)?|r[ée]parations?|assurances?|taxes?|autres\s+frais|frais\s+divers|leasing|location|amortissements?|p[ée]ages?)\s+(?P<veh>.+)$", re.I)
+
+
 def split_vehicle_account(name: str) -> tuple[str, str]:
-    """Libellé de compte 615 « Carburant Util. CITAN » -> (véhicule « CITAN », nature « Carburant »). Sans motif reconnu : véhicule « (non classé) »."""
-    m = _VEHICLE_NAME.match((name or "").strip())
+    """Libellé de compte 615 « Carburant Util. CITAN » ou « Assurance Quad Kodiak » -> (véhicule, nature). Sans motif reconnu : véhicule « (non classé) »."""
+    n = (name or "").strip()
+    m = _VEHICLE_NAME.match(n) or _NATURE_FIRST.match(n)
     if not m:
-        return "(non classé)", (name or "").strip()
+        return "(non classé)", n
     return m["veh"].strip(), m["type"].strip().capitalize()
 
 
@@ -289,7 +294,7 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
     types: dict[str, float] = {}
     for a in mine:
         v, t = split_vehicle_account(a["name"])
-        d = veh.setdefault(v, {"vehicle": v, "total": 0.0, "types": {}, "accounts": [], "by_month": {}})
+        d = veh.setdefault(v.casefold(), {"vehicle": v, "total": 0.0, "types": {}, "accounts": [], "by_month": {}})
         for m, amt in a["by_month"].items():
             bm = d["by_month"].setdefault(t, {})
             bm[m] = bm.get(m, 0.0) + amt

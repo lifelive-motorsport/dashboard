@@ -816,11 +816,13 @@ def test_staff_invoices_report_fees_on_613_accounts_only():
     def call(model, method, **kw):
         if model == "account.move":
             return [{"id": 1, "name": "F1", "ref": "r1", "invoice_date": "2026-01-31", "date": "2026-01-31", "amount_untaxed": 1000.0, "amount_total": 1210.0, "payment_state": "paid", "move_type": "in_invoice", "commercial_partner_id": [9, "ILP"]},
+                    {"id": 3, "name": "F3", "ref": "", "invoice_date": "2025-12-31", "date": "2026-01-02", "amount_untaxed": 5150.0, "amount_total": 5150.0, "payment_state": "paid", "move_type": "in_invoice", "commercial_partner_id": [9, "ILP"]},
                     {"id": 2, "name": "A1", "ref": "", "invoice_date": "2026-02-10", "date": "2026-02-10", "amount_untaxed": 100.0, "amount_total": 121.0, "payment_state": "not_paid", "move_type": "in_refund", "commercial_partner_id": [9, "ILP"]}]
         seen["domain"] = kw["domain"]
         return [{"move_id": [1, "F1"], "balance": 700.0, "account_id": [5, "613000 Honoraires"]}, {"move_id": [2, "A1"], "balance": -100.0, "account_id": [5, "613000 Honoraires"]},
-                {"move_id": [1, "F1"], "balance": 50.0, "account_id": [6, "61300000 old - Honoraires"]}]      # F1 : 300 € de frais avancés exclus ; ligne « old » ignorée
+                {"move_id": [1, "F1"], "balance": 50.0, "account_id": [6, "61300000 old - Honoraires"]},       # F1 : 300 € de frais avancés exclus ; ligne « old » ignorée
+                {"move_id": [3, "F3"], "balance": 5150.0, "account_id": [6, "61300000 old - Honoraires"]}]      # F3 : uniquement « old » : facture écartée
     p._call = call
     r = p.staff_invoices([9], 2026)
     assert [(x["number"], x["untaxed"], x["fees"]) for x in r] == [("F1", 1000.0, 700.0), ("A1", -100.0, -100.0)]
-    assert ("account_id.code", "=like", "613%") in seen["domain"] and ("move_id", "in", [1, 2]) in seen["domain"]
+    assert ("account_id.code", "=like", "613%") in seen["domain"] and ("move_id", "in", [1, 3, 2]) in seen["domain"]

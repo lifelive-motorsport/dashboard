@@ -566,15 +566,19 @@ class OdooProvider:
                           order="date desc", limit=500)
         from ..bu import is_old
         fees: dict[int, float] = {}
+        old_moves: set[int] = set()
         if rows and settings.STAFF_FEE_PREFIXES:                # honoraires = lignes sur les comptes 613 ; le reste (frais avancés, refacturés) est exclu
             dom = ["|"] * (len(settings.STAFF_FEE_PREFIXES) - 1) + [("account_id.code", "=like", f"{x}%") for x in settings.STAFF_FEE_PREFIXES]
             for ln in self._call("account.move.line", "search_read", domain=[("move_id", "in", [r["id"] for r in rows]), ("parent_state", "=", "posted")] + dom,
                                  fields=["move_id", "balance", "account_id"]):
                 if is_old(self._code_name(ln["account_id"][1])[1]):          # compte « old - … » (ancien plan) : ignoré, comme partout ailleurs
+                    old_moves.add(ln["move_id"][0])
                     continue
                 fees[ln["move_id"][0]] = fees.get(ln["move_id"][0], 0.0) + float(ln["balance"] or 0.0)
         out = []
         for r in rows:
+            if not fees.get(r["id"]) and r["id"] in old_moves:       # facture (ou avoir / extourne) entièrement sur des comptes « old » : écartée de la liste et des totaux
+                continue
             sign = -1 if r["move_type"] == "in_refund" else 1
             out.append({"fees": round(fees.get(r["id"], 0.0), 2), "number": r["name"], "ref": r.get("ref") or "", "date": str(r.get("invoice_date") or r["date"]),
                         "untaxed": round(sign * float(r["amount_untaxed"] or 0), 2), "total": round(sign * float(r["amount_total"] or 0), 2),

@@ -168,3 +168,8 @@ def test_split_vehicle_account_sans_util():
     assert f("Entr. et repar. Semi PAC") == ("Semi PAC", "Entr. et repar.")
     assert f("Assurance Quad Kodiak") == ("Quad Kodiak", "Assurance")
     assert f("Autres frais Semi A6J") == ("Semi A6J", "Autres frais")
+
+
+def test_links_config_roundtrip_and_preserved():
+    c = expenses.Config.model_validate({"links": {" SEMI PAC ": " (TR)-LLM-PKG-Pacton Trailer #1 (1) ", "X": ""}})
+    assert c.links == {"SEMI PAC": "(TR)-LLM-PKG-Pacton Trailer #1 (1)"}

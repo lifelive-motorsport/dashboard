@@ -25,6 +25,7 @@ class Config(BaseModel):
     partners: dict[str, dict[str, Literal["general", "vehicle"]]] = Field(default_factory=dict)    # compte « partners » -> {id fournisseur -> rubrique} ; les autres fournisseurs sont laissés de côté
     saved: bool = False
     plates: dict[str, str] = Field(default_factory=dict)                                           # plaque (sans tiret, majuscules) -> libellé du véhicule de service (carte carburant)
+    links: dict[str, str] = Field(default_factory=dict)                                            # véhicule tel que nommé dans Odoo (compte 615) -> ressource de l'agenda Google
     key_mode: Literal["revenue", "pct"] = "revenue"                                                # clé d'imputation XC / CARS : prorata du CA, ou % encodé
     xc_pct: float = Field(default=50.0, ge=0, le=100)                                              # part XC en % pour la clé « pct » (CARS = le reste)
 
@@ -55,6 +56,23 @@ class Config(BaseModel):
             if not CODE.match(k) or any(not re.match(r"^\d{1,12}$", pid) for pid in d):
                 raise ValueError("fournisseur ou compte invalide")
         return v
+
+
+    @field_validator("links")
+    @classmethod
+    def _links(cls, v):
+        out = {}
+        for k, name in v.items():
+            if not k.strip() or len(k) > 120 or len(name) > 160:
+                raise ValueError("véhicule invalide")
+            if name.strip():
+                out[k.strip()] = name.strip()
+        return out
+
+
+class LinksBody(BaseModel):
+    links: dict[str, str]
+    base: str | None = None
 
 
 class PlatesBody(BaseModel):

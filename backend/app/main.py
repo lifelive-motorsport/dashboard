@@ -152,7 +152,7 @@ def expenses_accounts(year: int = Query(..., ge=2000, le=2100), user: str = Depe
 @app.put("/api/expenses/config")
 def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
     cur = expenses.Config.model_validate(expenses.store().get()["data"])
-    data = body.data.model_copy(update={"saved": True, "key_mode": cur.key_mode, "xc_pct": cur.xc_pct}).model_dump()      # la clé d'imputation a son propre enregistrement
+    data = body.data.model_copy(update={"saved": True, "key_mode": cur.key_mode, "xc_pct": cur.xc_pct, "plates": cur.plates, "links": cur.links}).model_dump()      # la clé d'imputation a son propre enregistrement
     doc = expenses.store().put(data, user, body.base)
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
@@ -273,7 +273,22 @@ def fuel_attachment(att: int, year: int = Query(..., ge=2000, le=2100), text: bo
 
 @app.get("/api/expenses/vehicles")
 def expenses_vehicles(year: int = Query(..., ge=2000, le=2100), scope: str = Query("config", pattern="^(config|all615)$"), _user: str = Depends(require_user)):
-    return expenses.vehicles_view(_expense_lines(year), expenses.store().get()["data"], year, scope)
+    cfg = expenses.store().get()
+    return {**expenses.vehicles_view(_expense_lines(year), cfg["data"], year, scope), "links": cfg["data"].get("links") or {}, "links_base": cfg["updated_at"], "can_edit": adjustments.can_edit(_user)}
+
+
+@app.put("/api/expenses/links")
+def put_links(body: expenses.LinksBody, user: str = Depends(admin)):
+    """Correspondance véhicule Odoo (compte 615) -> ressource de l'agenda Google (sans toucher au reste de la configuration)."""
+    cur = expenses.store().get()
+    try:
+        data = expenses.Config.model_validate({**expenses.Config.model_validate(cur["data"]).model_dump(), "links": body.links}).model_dump()
+    except ValueError as e:
+        raise HTTPException(422, f"Véhicule ou ressource invalide : {str(e)[:200]}")
+    doc = expenses.store().put(data, user, body.base if body.base is not None else cur["updated_at"])
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {**doc, "can_edit": True, "links": data["links"]}
 
 
 @app.get("/api/expenses/month")

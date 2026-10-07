@@ -42,7 +42,18 @@ function exVehicleByBu(v) {
   return '<h4 class="sub">Imputation par BU (jours de déplacement de l’agenda)</h4>' + table(['Véhicule', 'Total'].concat(EX_BUS.map(b => b[1]), ['Sans réservation']),
     rows.map(r => `<tr><td class="prod">${esc(r.x.vehicle)}</td><td>${eur(r.x.total)}</td>${EX_BUS.map(([k]) => `<td>${r.sh[k] ? eur(r.x.total * r.sh[k]) : '–'}</td>`).join('')}<td>${r.has ? '–' : eur(r.x.total)}</td></tr>`)
       .concat([`<tr class="tot"><td>Total</td><td>${eur(v.total)}</td>${EX_BUS.map(([k]) => `<td>${eur(tot(k))}</td>`).join('')}<td>${eur(nr)}</td></tr>`]), 'prodtable')
+    + exLinksEditor(v, cal)
     + `<small class="na">Le coût de chaque véhicule est réparti selon ses jours de déplacement (réservation ± ${cal.buffer_days} jours) dans l’agenda de chaque BU. « Sans réservation » : véhicule absent de l’agenda sur la période, ou dont le nom ne ressemble à aucune ressource. Logistics (transports, enlèvements) reste à répartir entre les BU.</small>`;
+}
+// Correspondance manuelle véhicule Odoo -> ressource de l'agenda, pour les noms que le rapprochement automatique ne reconnaît pas.
+function exLinksEditor(v, cal) {
+  const links = ex.links || v.links || {}, res = [...new Set((cal.usage || []).map(u => u.vehicle))].sort(), canEdit = !!v.can_edit;
+  const todo = v.vehicles.filter(x => x.vehicle !== '(non classé)');
+  const rows = todo.map(x => { const auto = !links[x.vehicle] && exMatchUsage(cal.usage, x.vehicle);
+    return `<tr><td class="prod">${esc(x.vehicle)}</td><td>${canEdit ? `<input type="text" list="exp-res-names" data-ex-link="${esc(x.vehicle)}" value="${esc(links[x.vehicle] || '')}" placeholder="${esc(auto ? 'auto : ' + auto.vehicle : 'à associer')}">` : esc(links[x.vehicle] || (auto ? 'auto : ' + auto.vehicle : '–'))}</td></tr>`; });
+  return '<h4 class="sub">Correspondance véhicule Odoo ↔ ressource de l’agenda</h4>' + `<datalist id="exp-res-names">${res.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`
+    + table(['Véhicule (compte 615)', 'Ressource de l’agenda'], rows, 'prodtable')
+    + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-links-save${ex.linksDirty ? '' : ' disabled'}>Enregistrer les correspondances</button><span class="na">${esc(ex.linksMsg || 'Laissez vide pour le rapprochement automatique par le nom ; choisissez une ressource quand il ne trouve pas.')}</span></div>` : '');
 }
 function exDrawVehicles() {
   const el = document.getElementById('exp-vehicles'); if (!el) return;
@@ -82,7 +93,8 @@ const exVTok = n => exNorm(n).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(t =>
 // Deux libellés désignent le même véhicule si tous les mots du plus court sont (début de) mots du plus long : « SPRINTER 1 » ≈ « (SV)-LLM-PKG-Van (Sprinter) #1 (1) ».
 const exSameVeh = (a, b) => { let x = exVTok(a), y = exVTok(b); if (!x.length || !y.length) return false; if (x.length > y.length) [x, y] = [y, x];
   return x.every(t => y.some(w => w === t || (t.length >= 3 && w.startsWith(t)))); };
-const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') return undefined; const all = usage || [], eq = all.filter(u => exNorm(u.vehicle) === exNorm(veh)); if (eq.length) return eq[0];
+const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') return undefined; const all = usage || [], lk = ((ex.veh || ex.vfuel || {}).links || {})[veh]; if (lk) { const f = all.find(u => u.vehicle === lk); if (f) return f; }
+  const eq = all.filter(u => exNorm(u.vehicle) === exNorm(veh)); if (eq.length) return eq[0];
   const c = all.filter(u => exSameVeh(u.vehicle, veh)); if (c.length <= 1) return c[0];
   // Plusieurs ressources possibles (« TRUCK » : 3 camions) : on écarte celles que les autres véhicules Odoo identifient sans ambiguïté (« GOLD TRU. », « RALLY TRU. »).
   const peers = [...new Set([...((ex.veh || {}).vehicles || []), ...((ex.vfuel || {}).vehicles || [])].map(v => v.vehicle))].filter(n => n && exNorm(n) !== exNorm(veh));
@@ -92,7 +104,7 @@ const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') retur
   if (left.length > 1) { const own = left.filter(u => !/\(to hire\)|to rent/i.test(u.vehicle)); if (own.length) left = own; }
   return left.length === 1 ? left[0] : undefined; };
 // Liste dédoublonnée : les noms des agendas font foi ; un nom Odoo n'est ajouté que s'il ne correspond à aucun.
-const exVehChoices = (odoo, cal) => { const out = [...new Set(cal)]; (odoo || []).forEach(n => { if (!out.some(c => exNorm(c) === exNorm(n) || exSameVeh(c, n) && cal.filter(k => exSameVeh(k, n)).length === 1)) out.push(n); }); return out; };
+const exVehChoices = (odoo, cal) => { const out = [...new Set(cal)]; (odoo || []).forEach(n => { if (((ex.veh || ex.vfuel || {}).links || {})[n]) return; if (!out.some(c => exNorm(c) === exNorm(n) || exSameVeh(c, n) && cal.filter(k => exSameVeh(k, n)).length === 1)) out.push(n); }); return out; };
 // Part de chaque BU dans les jours de déplacement d'un véhicule (agenda) : {BU: part}, somme = 1 ; vide si le véhicule n'a aucune réservation.
 const exBuShares = u => { if (!u || !u.away_days) return {}; const t = Object.values(u.away_by_bu || {}).reduce((a, b) => a + b, 0) || 1; return Object.fromEntries(Object.entries(u.away_by_bu).map(([k, v]) => [k, v / t])); };
 const exNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -279,6 +291,11 @@ document.addEventListener('change', async e => {
     if (el.value.trim()) ex.plates[k] = el.value.trim(); else delete ex.plates[k];
     ex.platesDirty = true; ex.platesMsg = ''; exDrawFuel(); return;
   }
+  if (el.dataset && el.dataset.exLink !== undefined && ex.veh) {
+    ex.links = ex.links || {...(ex.veh.links || {})}; const k = el.dataset.exLink;
+    if (el.value.trim()) ex.links[k] = el.value.trim(); else delete ex.links[k];
+    ex.linksDirty = true; ex.linksMsg = ''; exDrawVehicles(); return;
+  }
   if (el.dataset && el.dataset.exMonth !== undefined) { await exLoadMonth(el.value, el.dataset.kind || 'general'); exDrawGeneral(); return; }
   if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
     const code = el.dataset.exPart, m = ex.part[code] || (ex.part[code] = {});
@@ -300,6 +317,16 @@ document.addEventListener('click', async e => {
       ex.fuel.plates = j.plates; ex.fuel.plates_base = j.updated_at; ex.plates = {...j.plates}; ex.platesDirty = false; ex.platesMsg = 'Enregistré.';
     } catch (err) { ex.platesMsg = 'Échec de l’enregistrement : ' + err.message; }
     exDrawFuel(); return;
+  }
+  if (t.dataset.exLinksSave !== undefined && ex.veh) {
+    ex.linksMsg = 'Enregistrement…'; exDrawVehicles();
+    try {
+      const r = await fetch('/api/expenses/links', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({links: ex.links || ex.veh.links || {}, base: ex.veh.links_base})});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+      ex.veh.links = j.links; ex.veh.links_base = j.updated_at; ex.links = {...j.links}; ex.linksDirty = false; ex.linksMsg = 'Enregistré.';
+    } catch (err) { ex.linksMsg = 'Échec de l’enregistrement : ' + err.message; }
+    exDrawVehicles(); return;
   }
   if (t.dataset.exAtt !== undefined) {
     const box = document.getElementById('exp-att'); if (!box) return; box.innerHTML = '<p class="na">Lecture de la pièce jointe…</p>';
@@ -331,4 +358,4 @@ document.addEventListener('click', async e => {
   }
   if (t.dataset.exReload !== undefined) { ex.dirty = false; ex.msg = ''; await exLoadSource(); exDrawSource(); }
 });
-window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty || ex.platesDirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (ex.dirty || ex.keyDirty || ex.platesDirty || ex.linksDirty) { e.preventDefault(); e.returnValue = ''; } });

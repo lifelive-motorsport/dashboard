@@ -7,7 +7,11 @@ const SD_KINDS = {vehicule: 'Véhicule', carte_essence: 'Carte essence', telepho
 const SD_SHARES = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['SHARED', 'Shared Services'], ['MANAGEMENT', 'Management']];
 const sdAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const sdId = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-const sdPeople = k => (sd.doc ? sd.doc.people.filter(p => p.kind === k) : []);
+// Tri alphabétique sur le NOM de famille (dernier mot du nom, particules « de », « van »… comprises), puis le prénom.
+const SD_PARTICLES = new Set(['de', 'du', 'des', 'van', 'von', 'der', 'den', 'le', 'la', 'di', 'da', 'del', 'ten', 'ter', 'el']);
+function sdSurname(name) { const t = String(name || '').trim().split(/\s+/).filter(Boolean); if (!t.length) return ['', '']; let i = t.length - 1; while (i > 1 && SD_PARTICLES.has(t[i - 1].toLowerCase())) i--; if (i === 0) return [t[0], '']; return [t.slice(i).join(' '), t.slice(0, i).join(' ')]; }
+const sdByName = (x, y) => { const a = sdSurname(x.name), b = sdSurname(y.name); return a[0].localeCompare(b[0], 'fr', {sensitivity: 'base'}) || a[1].localeCompare(b[1], 'fr', {sensitivity: 'base'}); };
+const sdPeople = k => (sd.doc ? sd.doc.people.filter(p => p.kind === k).sort(sdByName) : []);
 const sdPerson = id => sd.doc && sd.doc.people.find(p => p.id === id);
 const sdNum = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
 const sdEur2 = n => new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
@@ -233,7 +237,7 @@ function sdDrawPeople() {
   const el = document.getElementById('staff-people'); if (!el) return;
   const gate = sdGate(); if (gate) { el.innerHTML = gate; return; }
   if (!sd.acc) sdLoadAcc();
-  const people = sd.doc.people.slice().sort((x, y) => (y.active - x.active));      // actifs d'abord ; les personnes sorties ou ponctuelles restent imputables (coût réel)
+  const people = sd.doc.people.slice().sort((x, y) => (y.active - x.active) || sdByName(x, y));      // actifs d'abord, puis ordre alphabétique du nom ; les personnes sorties ou ponctuelles restent imputables (coût réel)
   people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).forEach(p => sdLoadInvoices(p).then(() => { const t = document.getElementById('sd-alloc-tot'); if (t) t.innerHTML = sdAllocTotals(); }));
   const rows = people.map(p => { const a = p.alloc || {}, used = SD_SHARES.reduce((t, [k]) => t + (+a[k] || 0), 0);
     return `<tr data-row="${p.id}"><td class="prod">${esc(p.name)}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}${p.function ? ' · ' + esc(p.function) : ''}${p.active ? '' : ' · <b>inactif</b>'}</small><br><small class="na">${esc(sdOccupation(p))}</small></td><td data-annual="${p.id}">${p.active ? eur(sdPersonAnnual(p)) : eur(sdPersonReal(p)) + '<br><small class="na">réel à ce jour</small>'}</td>`

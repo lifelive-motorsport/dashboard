@@ -791,3 +791,19 @@ def test_suppliers_carry_the_split_between_purchases_subcontracting_expenses_and
     assert r["total"][0]["mix"] == {"604": 600, "603": 300, "602": 100, "autres": 50}
     assert r["XC"][0]["mix"] == {"604": 600, "603": 300, "602": 100}                               # le carburant est « hors BU »
     assert r["_mix"]["total"] == {"604": 600, "603": 300, "602": 100, "autres": 50} and r["_mix"]["HORS_BU"] == {"autres": 50}
+
+
+def test_staff_accounting_reads_director_accounts_separately():
+    p = OdooProvider.__new__(OdooProvider)
+
+    def call(model, method, **kw):
+        codes = [c for t, op, c in kw["domain"] if t == "account_id.code" and op == "in"]
+        if codes:                                    # comptes administrateur : 618000 rémunération, 618001 cotisations
+            return [{"date": "2026-01-31", "balance": 3130.0, "account_id": [1, "618000 Rémunération administrateurs"]},
+                    {"date": "2026-01-31", "balance": 900.4, "account_id": [2, "618001 Cotisations sociales administrateurs"]},
+                    {"date": "2026-02-28", "balance": 3130.0, "account_id": [1, "618000 Rémunération administrateurs"]}]
+        return [{"date": "2026-01-31", "balance": 1000.0, "account_id": [3, "620000 Rémunérations"]}]
+    p._call = call
+    r = p.staff_accounting(2026)
+    assert r["pay_by_month"] == {"2026-01": 1000}
+    assert r["director"]["pay_by_month"] == {"2026-01": 3130, "2026-02": 3130} and r["director"]["social_by_month"] == {"2026-01": 900}

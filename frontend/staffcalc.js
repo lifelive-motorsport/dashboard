@@ -1,6 +1,6 @@
 // Calculs des coûts du personnel (fonctions pures, testées avec node). Montants en euros.
 // Coût société annualisé d'un salarié = (brut mensuel + cotisations patronales) × facteur d'annualisation (13,92 : 12 mois + 13e mois + double pécule)
-//   + autres coûts société récurrents × 12 + coûts « hors salaire » (véhicule, carte essence, téléphone…) × 12.
+//   + autres coûts société récurrents × 12 (+ cotisations sociales d'un gérant payées via la comptabilité, `socialMonthly`) + coûts « hors salaire » (véhicule, carte essence, téléphone…) × 12.
 const SC = (() => {
   const sortedSlips = p => (p.payslips || []).slice().sort((a, b) => (a.month < b.month ? -1 : 1));
   const lastSlip = p => { const s = sortedSlips(p); return s.length ? s[s.length - 1] : null; };
@@ -12,11 +12,11 @@ const SC = (() => {
     return {annual, monthly: annual / 12, daily: days ? annual / days : 0, hourly: days && hoursDay ? annual / days / hoursDay : 0};
   }
 
-  function employeeCosts(p, params) {
+  function employeeCosts(p, params, socialMonthly = 0) {
     const last = lastSlip(p), brut = p.brut_override != null ? +p.brut_override : (last ? +last.brut || 0 : 0);
     const patronal = (last && p.brut_override == null && last.patronal != null) ? +last.patronal : brut * (+p.patronal_pct || 0) / 100;
     const remunMonthly = brut + patronal, factor = (p.factor != null ? +p.factor : +params.annual_factor) || 13.92, remunAnnual = remunMonthly * factor;
-    const recurringAnnual = (+p.monthly_other || 0) * 12, extrasAnnual = extrasMonthly(p) * 12;
+    const recurringAnnual = ((+p.monthly_other || 0) + (+socialMonthly || 0)) * 12, extrasAnnual = extrasMonthly(p) * 12;
     return {brut, patronal, factor, remunMonthly, remunAnnual, recurringAnnual, extrasAnnual, ...finish(remunAnnual + recurringAnnual + extrasAnnual, p, params)};
   }
 
@@ -36,9 +36,9 @@ const SC = (() => {
   }
 
   // Contrôle comptable : par mois, coût « rémunération » des fiches de paie (brut + patronal) face aux comptes 620/621 ; seuls les salariés comptent, hors ceux dont la rémunération n'est pas en 620/621 (gérant).
-  function payrollByMonth(people) {
+  function payrollByMonth(people, outside = false) {
     const m = {};
-    people.filter(p => p.kind === 'salarie' && p.in_payroll !== false).forEach(p => (p.payslips || []).forEach(s => { m[s.month] = (m[s.month] || 0) + (+s.brut || 0) + slipPatronal(p, s); }));
+    people.filter(p => p.kind === 'salarie' && (p.in_payroll === false) === !!outside).forEach(p => (p.payslips || []).forEach(s => { m[s.month] = (m[s.month] || 0) + (+s.brut || 0) + slipPatronal(p, s); }));
     return m;
   }
 

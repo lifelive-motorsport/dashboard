@@ -72,4 +72,6 @@ MARKETING_INVEST_TAG = os.getenv("MARKETING_INVEST_TAG", "invest marketing")   #
 
 # Personnel : bucket Cloud Storage PRIVÉ des fiches de paie (PDF). Sans lui, le dépôt de fichiers est désactivé (les chiffres se saisissent à la main).
 STAFF_BUCKET = os.getenv("STAFF_BUCKET", "")
+STAFF_DIRECTOR_PAY = [x.strip() for x in os.getenv("STAFF_DIRECTOR_PAY", "618000").split(",") if x.strip()]         # rémunération des administrateurs / gérants (hors 620/621)
+STAFF_DIRECTOR_SOCIAL = [x.strip() for x in os.getenv("STAFF_DIRECTOR_SOCIAL", "618001").split(",") if x.strip()]   # cotisations sociales des administrateurs payées par la société
 STAFF_PAY_PREFIXES = [x.strip() for x in os.getenv("STAFF_PAY_PREFIXES", "620,621").split(",") if x.strip()]   # comptes comparés aux fiches de paie : rémunérations et cotisations patronales

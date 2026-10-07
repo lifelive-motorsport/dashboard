@@ -103,4 +103,4 @@ Les rémunérations sont des données sensibles : tout le personnel (salariés, 
 
 (`setup_gcp.sh` le fait déjà pour une première installation.) Le script crée le bucket `lifelive-dashboard-app-payslips`, donne l'accès au seul compte de service et active `STAFF_BUCKET` sur Cloud Run, sans redéploiement du code. Ensuite, tous les dépôts mensuels se font dans l'app.
 
-Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste fonctionne (les chiffres se saisissent à la main). `STAFF_PAY_PREFIXES` (par défaut `620,621`) désigne les comptes comparés aux fiches de paie.
+Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste fonctionne (les chiffres se saisissent à la main). `STAFF_PAY_PREFIXES` (par défaut `620,621`) désigne les comptes comparés aux fiches de paie. `STAFF_DIRECTOR_PAY` (`618000`) et `STAFF_DIRECTOR_SOCIAL` (`618001`) désignent la rémunération et les cotisations sociales du gérant / administrateur, comparées à part ; les cotisations sont ajoutées à son coût annualisé.

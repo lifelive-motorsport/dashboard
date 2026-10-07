@@ -58,10 +58,15 @@ const sdBar = () => `<div class="sdbar"><button type="button" class="primary" da
 const sdIn = (field, val, o = {}) => `<input class="sdin" ${o.type === 'text' ? 'type="text"' : 'type="number" step="' + (o.step || '0.01') + '"'} data-f="${field}"${o.pid ? ` data-pid="${o.pid}"` : ''}${o.i != null ? ` data-i="${o.i}"` : ''}${o.sub ? ` data-sub="${o.sub}"` : ''} value="${esc(val ?? '')}"${sd.canEdit ? '' : ' disabled'}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>`;
 const sdField = (label, html, hint = '') => `<label class="sdfield"><span>${esc(label)}</span>${html}${hint ? `<small class="na">${esc(hint)}</small>` : ''}</label>`;
 
+// Cotisations sociales d'un gérant (hors 620/621) : moyenne mensuelle comptabilisée en 618001 depuis le début de l'année.
+function sdSocial(p) {
+  const d = sd.acc && sd.acc.director; if (!d || p.in_payroll !== false) return 0;
+  return Object.values(d.social_by_month || {}).reduce((t, v) => t + v, 0) / Math.max(1, sdMonthsElapsed());
+}
 function sdCalcCards(p) {
   const params = sd.doc.params;
   if (p.kind === 'salarie') {
-    const c = SC.employeeCosts(p, params);
+    const c = SC.employeeCosts(p, params, sdSocial(p));
     return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
@@ -132,14 +137,11 @@ async function sdLoadInvoices(p) {
   } catch (e) { sd.inv[p.id] = {list: [], error: 'Factures indisponibles.'}; }
 }
 
-function sdControl() {
-  const a = sd.acc;
-  if (!a) return '<p class="na">Chargement des données comptables…</p>';
-  if (a.unavailable) return `<p class="na">${esc(a.unavailable)}</p>`;
-  const pay = SC.payrollByMonth(sd.doc.people), accM = a.pay_by_month || {}, cur = new Date().toISOString().slice(0, 7);
-  const all = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`), next = m => all[all.indexOf(m) + 1];
+// Rapprochement mois par mois fiches de paie / comptabilité. Les écritures de paie sont parfois passées le mois suivant : pour chaque mois on retient,
+// parmi le mois et le suivant (non encore utilisé), l'écriture la plus proche de la fiche. Le mois en cours n'est pas comparé.
+function sdMatchRows(pay, accM) {
+  const cur = new Date().toISOString().slice(0, 7), all = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`), next = m => all[all.indexOf(m) + 1];
   const used = new Set(); let tp = 0, ta = 0;
-  // Les écritures de paie sont parfois passées le mois suivant : pour chaque mois on retient, parmi le mois et le suivant (non encore utilisé), l'écriture la plus proche de la fiche.
   const rows = all.filter(m => m < cur).map(m => {
     const mine = pay[m] || 0; let am = m;
     if (mine) { const n = next(m), dn = n && !used.has(n) && accM[n] ? Math.abs(mine - accM[n]) : Infinity, d0 = used.has(m) ? Infinity : Math.abs(mine - (accM[m] || 0));
@@ -148,8 +150,22 @@ function sdControl() {
     const acc = used.has(am) ? 0 : (accM[am] || 0); if (!mine && !acc) return ''; used.add(am); tp += mine; ta += acc;
     const diff = mine - acc;
     return `<tr><td>${m}${am !== m ? ` <small class="na">(écritures de ${am})</small>` : ''}</td><td>${sdEur2(mine)}</td><td>${sdEur2(acc)}</td><td class="${Math.abs(diff) < 1 ? '' : 'neg'}">${sdEur2(diff)}</td></tr>`; }).filter(Boolean);
-  return (rows.length ? table(['Mois', 'Fiches de paie (brut + patronal)', `Comptabilité (comptes ${esc((a.pay_prefixes || []).join(', '))})`, 'Écart'], rows.concat([`<tr class="tot"><td>Total</td><td>${sdEur2(tp)}</td><td>${sdEur2(ta)}</td><td>${sdEur2(tp - ta)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune donnée à comparer pour ' + SD_YEAR + '.</p>')
-    + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Le mois en cours n'est pas comparé ; une paie dont les écritures sont datées du mois suivant est rapprochée de celles-ci (mention « écritures de … »). Les personnes dont la rémunération n'est pas en 620/621 (case décochée dans leur fiche, ex. le gérant) sont exclues. Un écart peut venir d'une écriture passée avec un mois de décalage, d'un pécule ou d'une prime comptabilisés autrement, ou d'une fiche manquante. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
+  return {rows, tp, ta};
+}
+function sdControl() {
+  const a = sd.acc;
+  if (!a) return '<p class="na">Chargement des données comptables…</p>';
+  if (a.unavailable) return `<p class="na">${esc(a.unavailable)}</p>`;
+  const m = sdMatchRows(SC.payrollByMonth(sd.doc.people), a.pay_by_month || {});
+  const tbl = (r, label) => r.rows.length ? table(['Mois', 'Fiches de paie (brut + patronal)', label, 'Écart'], r.rows.concat([`<tr class="tot"><td>Total</td><td>${sdEur2(r.tp)}</td><td>${sdEur2(r.ta)}</td><td>${sdEur2(r.tp - r.ta)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune donnée à comparer pour ' + SD_YEAR + '.</p>';
+  let out = tbl(m, `Comptabilité (comptes ${esc((a.pay_prefixes || []).join(', '))})`);
+  const d = a.director, outside = SC.payrollByMonth(sd.doc.people, true);
+  if (d && Object.keys(outside).length) {
+    const g = sdMatchRows(outside, d.pay_by_month || {}), soc = Object.values(d.social_by_month || {}).reduce((t, v) => t + v, 0);
+    out += `<h4 class="sub">Gérant / administrateur</h4>` + tbl(g, `Comptabilité (comptes ${esc((d.pay_accounts || []).join(', '))})`)
+      + `<small class="na">Cotisations sociales de l’administrateur payées par la société (comptes ${esc((d.social_accounts || []).join(', '))}) : ${sdEur2(soc)} depuis le 1er janvier, ajoutées à son coût annualisé (moyenne mensuelle × 12).</small>`;
+  }
+  return out + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Le mois en cours n'est pas comparé ; une paie dont les écritures sont datées du mois suivant est rapprochée de celles-ci (mention « écritures de … »). Les personnes dont la rémunération n'est pas en 620/621 (case décochée dans leur fiche, ex. le gérant) sont comparées à part. Un écart peut venir d'un pécule ou d'une prime comptabilisés autrement, ou d'une fiche manquante. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
 }
 
 function sdDrawSource() {
@@ -170,12 +186,16 @@ function sdDrawSource() {
 }
 
 async function sdLoadAcc() {
-  try { sd.acc = await (await fetch(`/api/staff/accounting?year=${SD_YEAR}`, {headers: sdAuth()})).json(); } catch { sd.acc = {unavailable: 'Données comptables indisponibles.'}; }
-  const c = document.getElementById('sd-control'); if (c) c.innerHTML = sdControl();
+  if (sd.accLoading) return sd.accLoading;
+  sd.accLoading = (async () => {
+    try { sd.acc = await (await fetch(`/api/staff/accounting?year=${SD_YEAR}`, {headers: sdAuth()})).json(); } catch { sd.acc = {unavailable: 'Données comptables indisponibles.'}; }
+    sd.accLoading = null; sdDraw();                       // coûts du gérant (cotisations en 618001) et tableau de contrôle
+  })();
+  return sd.accLoading;
 }
 
 function sdPersonAnnual(p) {
-  if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params).annual;
+  if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p)).annual;
   const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0;
   return SC.independentCosts(p, sd.doc.params, tot, sdMonthsElapsed()).annual;
 }
@@ -183,6 +203,7 @@ function sdPersonAnnual(p) {
 function sdDrawPeople() {
   const el = document.getElementById('staff-people'); if (!el) return;
   const gate = sdGate(); if (gate) { el.innerHTML = gate; return; }
+  if (!sd.acc) sdLoadAcc();
   const people = sd.doc.people.filter(p => p.active);
   people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).forEach(p => sdLoadInvoices(p).then(() => { const t = document.getElementById('sd-alloc-tot'); if (t) t.innerHTML = sdAllocTotals(); }));
   const rows = people.map(p => { const a = p.alloc || {}, used = SD_SHARES.reduce((t, [k]) => t + (+a[k] || 0), 0);

@@ -532,7 +532,20 @@ class OdooProvider:
             a["total"] += amt
             tgt = pay if a["pay"] else other
             tgt[m] = tgt.get(m, 0.0) + amt
-        return {"year": year, "pay_prefixes": settings.STAFF_PAY_PREFIXES,
+        director = {"pay_accounts": settings.STAFF_DIRECTOR_PAY, "social_accounts": settings.STAFF_DIRECTOR_SOCIAL, "pay_by_month": {}, "social_by_month": {}}
+        codes = settings.STAFF_DIRECTOR_PAY + settings.STAFF_DIRECTOR_SOCIAL
+        if codes:
+            dl = self._call("account.move.line", "search_read",
+                            domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), ("account_id.code", "in", codes)],
+                            fields=["date", "balance", "account_id"])
+            for ln in dl:
+                code, _ = self._code_name(ln["account_id"][1])
+                tgt = director["pay_by_month"] if code in settings.STAFF_DIRECTOR_PAY else director["social_by_month"]
+                m = str(ln["date"])[:7]
+                tgt[m] = tgt.get(m, 0.0) + float(ln["balance"] or 0.0)
+            director["pay_by_month"] = {m: round(v) for m, v in sorted(director["pay_by_month"].items())}
+            director["social_by_month"] = {m: round(v) for m, v in sorted(director["social_by_month"].items())}
+        return {"year": year, "pay_prefixes": settings.STAFF_PAY_PREFIXES, "director": director,
                 "accounts": [{**a, "total": round(a["total"]), "by_month": {m: round(v) for m, v in a["by_month"].items()}} for a in sorted(accounts.values(), key=lambda a: a["code"])],
                 "pay_by_month": {m: round(v) for m, v in sorted(pay.items())}, "other_by_month": {m: round(v) for m, v in sorted(other.items())}}
 

@@ -120,7 +120,8 @@ class DemoProvider:
         acc = [{"code": "620000", "name": "Rémunérations", "pay": True, "by_month": {m: round(v * .75) for m, v in pay.items()}, "total": round(sum(pay.values()) * .75)},
                {"code": "621000", "name": "Cotisations patronales", "pay": True, "by_month": {m: round(v * .25) for m, v in pay.items()}, "total": round(sum(pay.values()) * .25)},
                {"code": "623000", "name": "Autres frais de personnel", "pay": False, "by_month": other, "total": sum(other.values())}]
-        return {"year": year, "pay_prefixes": ["620", "621"], "accounts": acc, "pay_by_month": pay, "other_by_month": other}
+        return {"year": year, "pay_prefixes": ["620", "621"], "accounts": acc, "pay_by_month": pay, "other_by_month": other,
+                "director": {"pay_accounts": ["618000"], "social_accounts": ["618001"], "pay_by_month": {m: 3130 for m in months}, "social_by_month": {m: 900 for m in months}}}
 
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]

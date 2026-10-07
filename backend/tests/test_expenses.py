@@ -4,10 +4,11 @@ from app import expenses
 from app.main import app
 
 LINES = [
-    {"code": "611000", "name": "Entretien", "total": 900.0, "by_month": {"2026-01": 400.0, "2026-02": 500.0}, "partners": {1: {"name": "A", "amount": 900.0}}},
-    {"code": "612000", "name": "Électricité", "total": 600.0, "by_month": {"2026-01": 300.0, "2026-02": 300.0}, "partners": {2: {"name": "B", "amount": 600.0}}},
+    {"code": "611000", "name": "Entretien", "total": 900.0, "by_month": {"2026-01": 400.0, "2026-02": 500.0}, "partners": {1: {"name": "A", "amount": 900.0, "by_month": {"2026-01": 400.0, "2026-02": 500.0}}}},
+    {"code": "612000", "name": "Électricité", "total": 600.0, "by_month": {"2026-01": 300.0, "2026-02": 300.0}, "partners": {2: {"name": "B", "amount": 600.0, "by_month": {"2026-01": 300.0, "2026-02": 300.0}}}},
     {"code": "612050", "name": "Marketing", "total": 800.0, "by_month": {"2026-01": 800.0}, "partners": {}},             # compte marketing : traité ailleurs
-    {"code": "613000", "name": "Honoraires", "total": 5000.0, "by_month": {"2026-01": 5000.0}, "partners": {}},          # pas dans la proposition de départ
+    {"code": "613000", "name": "Honoraires", "total": 5000.0, "by_month": {"2026-01": 4000.0, "2026-02": 1000.0},          # pas dans la proposition de départ
+     "partners": {7: {"name": "ADC St-Vith", "amount": 800.0, "by_month": {"2026-01": 400.0, "2026-02": 400.0}}, 8: {"name": "Indépendant X", "amount": 4200.0, "by_month": {"2026-01": 3600.0, "2026-02": 600.0}}}},
     {"code": "61300000", "name": "old - Honoraires", "total": 100.0, "by_month": {"2026-01": 100.0}, "partners": {}},
     {"code": "604010", "name": "Achats XC", "total": 9000.0, "by_month": {"2026-01": 9000.0}, "partners": {}},
     {"code": "620000", "name": "Rémunérations", "total": 7000.0, "by_month": {"2026-01": 7000.0}, "partners": {}},
@@ -52,3 +53,14 @@ def test_expenses_api_in_demo_and_admin_only_saving(monkeypatch):
         assert g["configured"] and [a["code"] for a in g["accounts"]] == ["611000"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_account_by_supplier_keeps_only_chosen_suppliers():
+    cfg = {"saved": True, "selected": {"613000": "partners", "612000": "general"}, "partners": {"613000": {"7": "general"}}}
+    v = expenses.accounts_view(LINES, cfg, 2026)
+    acc = next(a for a in v["accounts"] if a["code"] == "613000")
+    assert acc["kind"] == "partners" and [(p["id"], p["kind"]) for p in acc["partners"]] == [("8", None), ("7", "general")]       # triés par montant ; l'indépendant reste de côté
+    g = expenses.kind_view(LINES, cfg, 2026, "general")
+    assert g["total"] == 1400 and [a["code"] for a in g["accounts"]] == ["613000", "612000"]                                   # 600 + 800 (ADC seulement)
+    assert g["series"] == [{"month": "2026-01", "amount": 700.0}, {"month": "2026-02", "amount": 700.0}]
+    assert expenses.kind_view(LINES, cfg, 2026, "vehicle")["empty"]

@@ -564,10 +564,10 @@ class OdooProvider:
             a["total"] += amt
             m = str(ln["date"])[:7]
             a["by_month"][m] = a["by_month"].get(m, 0.0) + amt
-            if ln.get("partner_id"):
-                pid, pname = ln["partner_id"]
-                p = a["partners"].setdefault(pid, {"name": pname, "amount": 0.0})
-                p["amount"] += amt
+            pid, pname = (ln["partner_id"] if ln.get("partner_id") else (0, "(sans fournisseur)"))
+            p = a["partners"].setdefault(pid, {"name": pname, "amount": 0.0, "by_month": {}})
+            p["amount"] += amt
+            p["by_month"][m] = p["by_month"].get(m, 0.0) + amt
         return list(accs.values())
 
     def staff_partners(self, q: str) -> list[dict]:

@@ -20,7 +20,8 @@ CODE = re.compile(r"^\d{3,10}$")
 
 
 class Config(BaseModel):
-    selected: dict[str, Literal["general", "vehicle"]] = Field(default_factory=dict)       # code de compte -> rubrique ; absent = laissé de côté
+    selected: dict[str, Literal["general", "vehicle", "partners"]] = Field(default_factory=dict)   # compte -> rubrique ; « partners » : selon le fournisseur ; absent = laissé de côté
+    partners: dict[str, dict[str, Literal["general", "vehicle"]]] = Field(default_factory=dict)    # compte « partners » -> {id fournisseur -> rubrique} ; les autres fournisseurs sont laissés de côté
     saved: bool = False
 
     @field_validator("selected")
@@ -29,6 +30,14 @@ class Config(BaseModel):
         for k in v:
             if not CODE.match(k):
                 raise ValueError(f"code de compte invalide : {k}")
+        return v
+
+    @field_validator("partners")
+    @classmethod
+    def _partners(cls, v):
+        for k, d in v.items():
+            if not CODE.match(k) or any(not re.match(r"^\d{1,12}$", pid) for pid in d):
+                raise ValueError("fournisseur ou compte invalide")
         return v
 
 
@@ -96,7 +105,7 @@ def suggestion(code: str) -> str | None:
     return "general" if any(code.startswith(p) for p in settings.EXPENSES_DEFAULT_PREFIXES) else None
 
 
-def effective(config: dict, codes) -> dict[str, str]:
+def effective(config: dict, codes) -> dict[str, str]:  # noqa: D401
     """Rubrique retenue par compte : la configuration enregistrée, ou, tant que rien n'est enregistré, la proposition de départ."""
     if config.get("saved"):
         return dict(config.get("selected") or {})
@@ -111,8 +120,26 @@ def _month_series(accounts: list[dict]) -> list[dict]:
     return [{"month": k, "amount": round(v, 2)} for k, v in sorted(m.items())]
 
 
+def _for_kind(a: dict, sel: dict, config: dict, kind: str) -> dict | None:
+    """Part d'un compte qui revient à la rubrique `kind` : le compte entier, ou seulement les fournisseurs choisis pour ce compte."""
+    mode = sel.get(a["code"])
+    if mode == kind:
+        return a
+    if mode != "partners":
+        return None
+    rules = (config.get("partners") or {}).get(a["code"], {})
+    ps = {pid: p for pid, p in a["partners"].items() if rules.get(str(pid)) == kind}
+    if not ps:
+        return None
+    by_month: dict[str, float] = {}
+    for p in ps.values():
+        for m, v in p.get("by_month", {}).items():
+            by_month[m] = by_month.get(m, 0.0) + v
+    return {"code": a["code"], "name": a["name"], "total": sum(p["amount"] for p in ps.values()), "by_month": by_month, "partners": ps}
+
+
 def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
-    """Page « Données source » : comptes candidats avec leur rubrique, et totaux des familles traitées ailleurs."""
+    """Page « Données source » : comptes candidats avec leur rubrique, fournisseurs des comptes « selon le fournisseur » et totaux des familles traitées ailleurs."""
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
     sel = effective(config, [a["code"] for a in cand])
     elsewhere: dict[str, float] = {}
@@ -120,17 +147,23 @@ def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
         f = family(a["code"], a["name"])
         if f in ("bu", "staff", "marketing"):
             elsewhere[f] = elsewhere.get(f, 0.0) + a["total"]
-    return {"year": year, "saved": bool(config.get("saved")),
-            "accounts": [{"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "months": len(a["by_month"]),
-                          "kind": sel.get(a["code"]), "suggested": suggestion(a["code"])} for a in sorted(cand, key=lambda a: a["code"])],
-            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS}
+    accounts = []
+    for a in sorted(cand, key=lambda a: a["code"]):
+        row = {"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "months": len(a["by_month"]), "kind": sel.get(a["code"]), "suggested": suggestion(a["code"])}
+        rules = (config.get("partners") or {}).get(a["code"], {})                                  # fournisseurs toujours fournis : on peut passer un compte en « selon le fournisseur » avant d'enregistrer
+        row["partners"] = [{"id": str(pid), "name": p["name"], "total": round(p["amount"], 2), "kind": rules.get(str(pid))}
+                           for pid, p in sorted(a["partners"].items(), key=lambda kv: -abs(kv[1]["amount"]))[:80]]
+        accounts.append(row)
+    return {"year": year, "saved": bool(config.get("saved")), "accounts": accounts,
+            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS,
+            "partner_rules": config.get("partners") or {}}
 
 
 def kind_view(lines: list[dict], config: dict, year: int, kind: str) -> dict:
     """Résultat pour une rubrique (« general » ou « vehicle ») : total, évolution mensuelle, comptes, principaux fournisseurs."""
     cand = [a for a in lines if family(a["code"], a["name"]) == "candidate"]
     sel = effective(config, [a["code"] for a in cand])
-    mine = [a for a in cand if sel.get(a["code"]) == kind]
+    mine = [x for a in cand if (x := _for_kind(a, sel, config, kind))]
     series = _month_series(mine)
     total = sum(a["total"] for a in mine)
     months = max(1, len([s for s in series if abs(s["amount"]) > 0.5])) if series else 1
@@ -142,7 +175,7 @@ def kind_view(lines: list[dict], config: dict, year: int, kind: str) -> dict:
     sup = sorted(partners.values(), key=lambda x: -x["amount"])[:15]
     return {"year": year, "kind": kind, "total": round(total, 2), "months": months, "monthly_avg": round(total / months, 2), "projected": round(total / months * 12, 2),
             "series": series,
-            "accounts": [{"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "share": (a["total"] / total) if total else 0.0}
+            "accounts": [{"code": a["code"], "name": a["name"] + (" (fournisseurs choisis)" if sel.get(a["code"]) == "partners" else ""), "total": round(a["total"], 2), "share": (a["total"] / total) if total else 0.0}
                          for a in sorted(mine, key=lambda a: -a["total"])],
             "suppliers": [{"name": s["name"], "amount": round(s["amount"], 2), "share": (s["amount"] / total) if total else 0.0} for s in sup],
             "configured": bool(config.get("saved")), "empty": not mine}

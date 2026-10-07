@@ -1,8 +1,9 @@
 // GENERAL EXPENSES › Données source (choix des comptes) et Général (résultat). Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, lineChart) à l'appel.
 const EX_YEAR = new Date().getFullYear();
-let ex = {src: null, gen: null, err: null, genErr: null, sel: {}, dirty: false, msg: ''};
+let ex = {src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
 const exAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
-const exKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service']];
+const exKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service'], ['partners', 'Selon le fournisseur']];
+const exPartKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service']];
 const exMonth = m => { try { return new Date(m + '-15').toLocaleDateString('fr-BE', {month: 'short'}).replace('.', ''); } catch { return m; } };
 const exEur2 = n => new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
 
@@ -13,7 +14,7 @@ async function exGet(url) {
 }
 async function exLoadSource() {
   try { const j = await exGet(`/api/expenses/accounts?year=${EX_YEAR}`); ex.src = j; ex.err = null;
-    if (!ex.dirty) ex.sel = Object.fromEntries(j.accounts.filter(a => a.kind).map(a => [a.code, a.kind])); }
+    if (!ex.dirty) { ex.sel = Object.fromEntries(j.accounts.filter(a => a.kind).map(a => [a.code, a.kind])); ex.part = JSON.parse(JSON.stringify(j.partner_rules || {})); } }
   catch (e) { ex.err = e.message; }
 }
 async function exLoadGeneral() {
@@ -29,7 +30,10 @@ function expensesGeneralBlocks() {
 
 function exSums() {
   const s = {general: 0, vehicle: 0, aside: 0};
-  (ex.src.accounts || []).forEach(a => { const k = ex.sel[a.code]; s[k === 'general' ? 'general' : k === 'vehicle' ? 'vehicle' : 'aside'] += a.total; });
+  (ex.src.accounts || []).forEach(a => { const k = ex.sel[a.code];
+    if (k === 'partners') { (a.partners || []).forEach(p => { const pk = (ex.part[a.code] || {})[p.id]; s[pk === 'general' ? 'general' : pk === 'vehicle' ? 'vehicle' : 'aside'] += p.total; });
+      s.aside += a.total - (a.partners || []).reduce((t, p) => t + p.total, 0); }
+    else s[k === 'general' ? 'general' : k === 'vehicle' ? 'vehicle' : 'aside'] += a.total; });
   return s;
 }
 function exDrawSource() {
@@ -40,10 +44,17 @@ function exDrawSource() {
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur(a.months ? a.total / a.months : 0)}</td><td>${sel(a)}</td></tr>`);
   const bar = `<div class="sdbar">${canEdit ? `<button type="button" class="primary" data-ex-save${ex.dirty ? '' : ' disabled'}>Enregistrer</button> <button type="button" data-ex-reload>Annuler les modifications</button>` : ''}
-    <span class="na">${esc(ex.msg || (s.saved ? 'Dernier enregistrement : ' + new Date(s.updated_at).toLocaleString('fr-BE') + (s.updated_by ? ' par ' + s.updated_by : '') + '.' : 'Proposition de départ (comptes 611, 612, 614 et 640), pas encore enregistrée.'))}</span></div>`;
+    <span class="na">${esc(ex.msg || (s.saved ? 'Dernier enregistrement : ' + new Date(s.updated_at).toLocaleString('fr-BE') + (s.updated_by ? ' par ' + s.updated_by : '') + '.' : 'Proposition de départ (comptes 611, 612, 614 et 64x), pas encore enregistrée.'))}</span></div>`;
+  const psel = (code, p) => `<select class="sdin" data-ex-part="${code}" data-pid="${esc(p.id)}"${canEdit ? '' : ' disabled'}>${exPartKinds.map(([v, l]) => `<option value="${v}"${((ex.part[code] || {})[p.id] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
+  const byPartner = s.accounts.filter(a => ex.sel[a.code] === 'partners').map(a => {
+    const list = a.partners || [], hasData = list.length > 0;
+    return `<h4 class="sub">Fournisseurs du compte ${esc(a.code)} ${esc(a.name)}</h4>` + (hasData ? table(['Fournisseur', 'Depuis le 1er janvier', 'Rubrique'], list.map(p => `<tr><td class="prod">${esc(p.name)}</td><td>${eur(p.total)}</td><td>${psel(a.code, p)}</td></tr>`), 'prodtable sdtable')
+      + '<small class="na">Seuls les fournisseurs rangés en « Frais généraux » ou « Véhicules de service » sont repris ; les autres (par exemple les honoraires d’indépendants, déjà dans STAFF costs) restent de côté.</small>' : '<p class="na">Aucune écriture sur ce compte.</p>');
+  }).join('');
   el.innerHTML = bar
     + `<div class="kpis">${kpi('Frais généraux', eur(sums.general), '', 'comptes retenus, depuis le 1er janvier')}${kpi('Véhicules de service', eur(sums.vehicle), '', 'menu dédié Service Vehicles')}${kpi('Laissé de côté', eur(sums.aside), '', 'comptes non retenus')}</div>`
     + `<h4 class="sub">Comptes de charges ${EX_YEAR}</h4>` + (rows.length ? table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Mois', 'Moyenne / mois', 'Rubrique'], rows, 'prodtable sdtable') : '<p class="na">Aucun compte de charges candidat.</p>')
+    + byPartner
     + `<h4 class="sub">Traité ailleurs (non repris ici)</h4>` + table(['Famille', 'Depuis le 1er janvier', 'Où'], [
         ['Achats, sous-traitance et frais directs par BU (comptes 60x)', el2.bu, 'Overview, XC Detail et CARS Detail'],
         ['Personnel (comptes 62x, rémunération et cotisations des administrateurs 618)', el2.staff, 'STAFF costs'],
@@ -66,7 +77,13 @@ function exDrawGeneral() {
 }
 
 document.addEventListener('change', e => {
-  const el = e.target; if (!el.dataset || el.dataset.exCode === undefined || !ex.src) return;
+  const el = e.target;
+  if (el.dataset && el.dataset.exPart !== undefined && ex.src) {
+    const code = el.dataset.exPart, m = ex.part[code] || (ex.part[code] = {});
+    if (el.value) m[el.dataset.pid] = el.value; else delete m[el.dataset.pid];
+    ex.dirty = true; ex.msg = ''; exDrawSource(); return;
+  }
+  if (!el.dataset || el.dataset.exCode === undefined || !ex.src) return;
   if (el.value) ex.sel[el.dataset.exCode] = el.value; else delete ex.sel[el.dataset.exCode];
   ex.dirty = true; ex.msg = ''; exDrawSource();
 });
@@ -75,7 +92,7 @@ document.addEventListener('click', async e => {
   if (t.dataset.exSave !== undefined) {
     ex.msg = 'Enregistrement…'; exDrawSource();
     try {
-      const r = await fetch('/api/expenses/config', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({data: {selected: ex.sel}, base: ex.src.updated_at})});
+      const r = await fetch('/api/expenses/config', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({data: {selected: ex.sel, partners: Object.fromEntries(Object.entries(ex.part).filter(([c]) => ex.sel[c] === 'partners'))}, base: ex.src.updated_at})});
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
       ex.dirty = false; await exLoadSource(); ex.msg = 'Enregistré.'; ex.gen = null;

@@ -131,7 +131,8 @@ class DemoProvider:
         for code, name, base in spec:
             by = {f"{year}-{m:02d}": round(base * (0.8 + rnd.random() * 0.4), 2) for m in range(1, 10)}
             out.append({"code": code, "name": name, "total": sum(by.values()), "by_month": by,
-                        "partners": {1: {"name": "Fournisseur A", "amount": sum(by.values()) * 0.6}, 2: {"name": "Fournisseur B", "amount": sum(by.values()) * 0.4}}})
+                        "partners": {1: {"name": "Fournisseur A", "amount": sum(by.values()) * 0.6, "by_month": {m: v * 0.6 for m, v in by.items()}},
+                                     2: {"name": "ADC St-Vith (comptable)" if code == "613000" else "Fournisseur B", "amount": sum(by.values()) * 0.4, "by_month": {m: v * 0.4 for m, v in by.items()}}}})
         return out
 
     def staff_partners(self, q: str) -> list[dict]:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import logging
 import time
 from datetime import date, datetime, timezone
@@ -172,6 +173,52 @@ async def put_payslip(request: Request, person: str, month: str, _user: str = De
     except ValueError:
         raise HTTPException(422, "Personne ou mois invalide")
     return {"size": len(content), "uploaded_at": datetime.now(timezone.utc).isoformat()}
+
+
+@app.post("/api/staff/import")
+async def import_staff(request: Request, user: str = Depends(admin)):
+    """Import initial : archive ZIP contenant staff.json et payslips/{personne}/{AAAA-MM}.pdf (voir scripts d'import)."""
+    import io
+    import json as _json
+    import zipfile
+    raw = await request.body()
+    if len(raw) > 30 * 1024 * 1024:
+        raise HTTPException(413, "Archive trop volumineuse (30 Mo maximum)")
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+        infos = z.infolist()
+        if len(infos) > 800 or sum(i.file_size for i in infos) > 120 * 1024 * 1024:
+            raise HTTPException(413, "Archive trop volumineuse")
+        imported = _json.loads(z.read("staff.json"))
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(422, "Archive invalide : staff.json introuvable ou illisible")
+    pdfs = {}
+    for i in infos:
+        m = re.fullmatch(r"payslips/([A-Za-z0-9_-]{1,40})/(\d{4}-(?:0[1-9]|1[0-2]))\.pdf", i.filename)
+        if m and i.file_size <= 8 * 1024 * 1024:
+            content = z.read(i)
+            if content.startswith(b"%PDF"):
+                pdfs[(m.group(1), m.group(2))] = content
+    try:
+        cur = staff.store().get()
+        data, report = staff.merge_import(cur["data"], imported)
+    except Exception as e:
+        raise HTTPException(422, f"Import refusé : {str(e)[:300]}")
+    stored = 0
+    if staff.files().enabled:
+        for (pid, month), content in pdfs.items():
+            staff.files().put(pid, month, content)
+            stored += 1
+    else:                                                    # sans stockage de PDF, on n'annonce pas de fichier fantôme
+        for p in data["people"]:
+            for s in p["payslips"]:
+                s["file"] = None
+    doc = staff.store().put(data, user, cur["updated_at"])
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : réessayez.")
+    return {**doc, "can_edit": True, **report, "pdfs": stored}
 
 
 @app.get("/api/staff/payslip")

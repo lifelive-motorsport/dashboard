@@ -15,9 +15,9 @@ const SC = (() => {
   function employeeCosts(p, params) {
     const last = lastSlip(p), brut = p.brut_override != null ? +p.brut_override : (last ? +last.brut || 0 : 0);
     const patronal = (last && p.brut_override == null && last.patronal != null) ? +last.patronal : brut * (+p.patronal_pct || 0) / 100;
-    const remunMonthly = brut + patronal, remunAnnual = remunMonthly * (+params.annual_factor || 13.92);
+    const remunMonthly = brut + patronal, factor = (p.factor != null ? +p.factor : +params.annual_factor) || 13.92, remunAnnual = remunMonthly * factor;
     const recurringAnnual = (+p.monthly_other || 0) * 12, extrasAnnual = extrasMonthly(p) * 12;
-    return {brut, patronal, remunMonthly, remunAnnual, recurringAnnual, extrasAnnual, ...finish(remunAnnual + recurringAnnual + extrasAnnual, p, params)};
+    return {brut, patronal, factor, remunMonthly, remunAnnual, recurringAnnual, extrasAnnual, ...finish(remunAnnual + recurringAnnual + extrasAnnual, p, params)};
   }
 
   // Indépendant : facturé HT depuis le début de l'année ÷ mois écoulés = moyenne mensuelle ; annualisé × 12 ; + coûts « hors facture » × 12.

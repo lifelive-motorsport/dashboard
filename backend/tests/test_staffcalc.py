@@ -37,3 +37,11 @@ def test_independent_allocation_and_payroll_by_month():
     m = run("SC.payrollByMonth([{kind:'salarie', patronal_pct:25, payslips:[{month:'2026-01', brut:1000},{month:'2026-02', brut:1000, patronal:300}]},"
             "{kind:'independant', payslips:[{month:'2026-01', brut:5000}]}])")
     assert m == {"2026-01": 1250, "2026-02": 1300}
+
+
+def test_person_factor_overrides_global_factor():
+    p = {"brut_override": 3000, "patronal_pct": 0, "factor": 12, "monthly_other": 0, "fte": 100, "hours_week": 38, "payslips": [], "extras": []}
+    r = run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")
+    assert r["factor"] == 12 and r["remunAnnual"] == 36000
+    p["factor"] = None
+    assert run(f"SC.employeeCosts({json.dumps(p)}, {{annual_factor: 13.92, days_per_year: 220}})")["remunAnnual"] == 3000 * 13.92

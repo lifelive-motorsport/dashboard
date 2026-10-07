@@ -65,6 +65,7 @@ class Person(BaseModel):
     fte: float = Field(default=100.0, gt=0, le=100)                     # temps de travail en % (le brut des fiches en tient déjà compte)
     hours_week: float = Field(default=38.0, gt=0, le=80)
     patronal_pct: float = Field(default=25.0, ge=0, le=100)             # cotisations patronales estimées quand elles ne sont pas sur la fiche
+    factor: float | None = Field(default=None, gt=0, le=20)            # coefficient d'annualisation propre à la personne (sinon celui des paramètres) : 13,92 employé, 12 ouvrier / gérant
     brut_override: float | None = Field(default=None, ge=0, le=1e7)    # brut mensuel de référence (sinon dernière fiche)
     monthly_other: float = Field(default=0.0, ge=0, le=1e6)             # autres coûts société mensuels récurrents (chèques-repas…)
     payslips: list[Payslip] = Field(default_factory=list, max_length=240)
@@ -197,3 +198,26 @@ def files() -> Files:
     if _files is None:
         _files = Files()
     return _files
+
+
+class ImportError_(ValueError):
+    pass
+
+
+def merge_import(current: dict, imported: dict) -> tuple[dict, dict]:
+    """Fusionne un import (staff.json) dans le document courant : nouvelles personnes ajoutées ; pour une personne existante
+    (même id), seules les fiches sont fusionnées (l'import l'emporte pour un même mois), le reste n'est pas touché."""
+    doc = StaffDoc.model_validate(imported).model_dump()
+    cur = StaffDoc.model_validate(current).model_dump()
+    by_id = {p["id"]: p for p in cur["people"]}
+    added, merged = [], []
+    for p in doc["people"]:
+        if p["id"] not in by_id:
+            cur["people"].append(p)
+            added.append(p["id"])
+            continue
+        slips = {s["month"]: s for s in by_id[p["id"]]["payslips"]}
+        slips.update({s["month"]: s for s in p["payslips"]})
+        by_id[p["id"]]["payslips"] = [slips[m] for m in sorted(slips)]
+        merged.append(p["id"])
+    return StaffDoc.model_validate(cur).model_dump(), {"added": added, "merged": merged}

@@ -165,6 +165,7 @@ table.prodtable.decomp th:nth-child(2),table.prodtable.decomp td:nth-child(2){te
 .mixlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin:6px 0}.mixlegend .sw{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle;border:0}
 .kpis+.kpis{margin-top:12px}
 
+.sdbar label.btn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer}
 .sdbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px}.sdbar button,.sdadd button,.sdres button,#staff-source button.danger,.sdtable button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer}
 .sdbar button.primary{background:var(--red);border-color:var(--red);color:#fff}.sdbar button:disabled{opacity:.45;cursor:default}button.danger{color:var(--neg)!important}
 .sdgrid,.sdparams{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 14px;margin:8px 0 12px}.sdparams{max-width:560px}

@@ -191,3 +191,40 @@ def test_payslip_upload_accepts_only_small_pdfs_and_roundtrips(monkeypatch):
         assert c.get("/api/staff/invoices?ids=9001&year=2026").json()["invoices"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_staff_import_zip_adds_people_merges_slips_and_stores_pdfs(monkeypatch):
+    import io
+    import json
+    import zipfile
+    _staff_app(monkeypatch, "md@x.be")
+    try:
+        monkeypatch.setattr("app.main.settings.PROVIDER", "demo")
+        person = {"id": "dupont-jean", "name": "DUPONT Jean", "kind": "salarie", "factor": 12,
+                  "payslips": [{"month": "2026-01", "brut": 3000, "patronal": 1000}, {"month": "2026-02", "brut": 3100, "patronal": 1050}]}
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("staff.json", json.dumps({"people": [person]}))
+            z.writestr("payslips/dupont-jean/2026-01.pdf", b"%PDF-1.4 a")
+            z.writestr("payslips/dupont-jean/2026-xx.pdf", b"%PDF-1.4 ignore")
+            z.writestr("payslips/../x/2026-01.pdf", b"%PDF-1.4 ignore")
+            z.writestr("payslips/dupont-jean/2026-02.pdf", b"pas un pdf")
+        c = TestClient(app)
+        r = c.post("/api/staff/import", content=buf.getvalue())
+        assert r.status_code == 200 and r.json()["added"] == ["dupont-jean"] and r.json()["pdfs"] == 1
+        assert c.get("/api/staff/payslip?person=dupont-jean&month=2026-01").content == b"%PDF-1.4 a"
+        # deuxième import : la personne existe, ses fiches sont fusionnées, sans écraser le reste de sa fiche
+        cur = c.get("/api/staff").json()
+        edited = {**cur["data"]["people"][0], "function": "Mécanicien"}
+        assert c.put("/api/staff", json={"data": {"people": [edited]}, "base": cur["updated_at"]}).status_code == 200
+        person["payslips"].append({"month": "2026-03", "brut": 3200, "patronal": 1100})
+        buf2 = io.BytesIO()
+        with zipfile.ZipFile(buf2, "w") as z:
+            z.writestr("staff.json", json.dumps({"people": [person]}))
+        r = c.post("/api/staff/import", content=buf2.getvalue())
+        assert r.json()["merged"] == ["dupont-jean"]
+        got = c.get("/api/staff").json()["data"]["people"][0]
+        assert got["function"] == "Mécanicien" and [s["month"] for s in got["payslips"]] == ["2026-01", "2026-02", "2026-03"]
+        assert c.post("/api/staff/import", content=b"pas une archive").status_code == 422
+    finally:
+        app.dependency_overrides.clear()

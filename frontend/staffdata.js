@@ -53,7 +53,7 @@ function sdGate() {
   return '';
 }
 const sdBar = () => `<div class="sdbar"><button type="button" class="primary" data-sd-save${sd.dirty ? '' : ' disabled'}>Enregistrer</button>
-  <button type="button" data-sd-reload>Annuler les modifications</button><span class="na">${esc(sd.msg || (sd.base ? 'Dernier enregistrement : ' + new Date(sd.base).toLocaleString('fr-BE') + (sd.updatedBy ? ' par ' + sd.updatedBy : '') + '.' : 'Rien d’enregistré pour le moment.'))}</span></div>`;
+  <button type="button" data-sd-reload>Annuler les modifications</button>${sd.canEdit ? ' <label class="btn" title="Archive ZIP préparée pour le premier remplissage (staff.json + fiches PDF)">Importer (ZIP)<input type="file" accept=".zip,application/zip" data-sd-import hidden></label>' : ''}<span class="na">${esc(sd.msg || (sd.base ? 'Dernier enregistrement : ' + new Date(sd.base).toLocaleString('fr-BE') + (sd.updatedBy ? ' par ' + sd.updatedBy : '') + '.' : 'Rien d’enregistré pour le moment.'))}</span></div>`;
 
 const sdIn = (field, val, o = {}) => `<input class="sdin" ${o.type === 'text' ? 'type="text"' : 'type="number" step="' + (o.step || '0.01') + '"'} data-f="${field}"${o.pid ? ` data-pid="${o.pid}"` : ''}${o.i != null ? ` data-i="${o.i}"` : ''}${o.sub ? ` data-sub="${o.sub}"` : ''} value="${esc(val ?? '')}"${sd.canEdit ? '' : ' disabled'}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>`;
 const sdField = (label, html, hint = '') => `<label class="sdfield"><span>${esc(label)}</span>${html}${hint ? `<small class="na">${esc(hint)}</small>` : ''}</label>`;
@@ -62,7 +62,7 @@ function sdCalcCards(p) {
   const params = sd.doc.params;
   if (p.kind === 'salarie') {
     const c = SC.employeeCosts(p, params);
-    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(params.annual_factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}</div>`
+    return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
   const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, c = SC.independentCosts(p, params, tot, sdMonthsElapsed());
@@ -96,7 +96,7 @@ function sdPersonPanel(p) {
   const emp = p.kind === 'salarie';
   const base = `<div class="sdgrid">${sdField('Nom', sdIn('name', p.name, {type: 'text', pid: p.id}))}${sdField('Fonction', sdIn('function', p.function, {type: 'text', pid: p.id}))}
     ${emp ? sdField('Temps de travail (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine (temps plein)', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))
-          + sdField('Cotisations patronales estimées (%)', sdIn('patronal_pct', p.patronal_pct, {pid: p.id}), 'si absentes de la fiche') + sdField('Brut mensuel de référence (€)', sdIn('brut_override', p.brut_override, {pid: p.id, ph: 'dernière fiche'}), 'facultatif')
+          + sdField('Cotisations patronales estimées (%)', sdIn('patronal_pct', p.patronal_pct, {pid: p.id}), 'si absentes de la fiche') + sdField('Coefficient d’annualisation', sdIn('factor', p.factor, {pid: p.id, ph: num(sd.doc.params.annual_factor)}), '13,92 employé (13e mois + double pécule) · 12 ouvrier / gérant') + sdField('Brut mensuel de référence (€)', sdIn('brut_override', p.brut_override, {pid: p.id, ph: 'dernière fiche'}), 'facultatif')
           + sdField('Autres coûts société récurrents (€ / mois)', sdIn('monthly_other', p.monthly_other, {pid: p.id}), 'chèques-repas, assurance groupe…')
         : sdField('Temps (jours facturables) (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))}
     ${sdField('Actif', `<input type="checkbox" class="sdin" data-f="active" data-pid="${p.id}"${p.active ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`)}${sdField('Note', sdIn('note', p.note, {type: 'text', pid: p.id}))}</div>`;
@@ -203,6 +203,7 @@ function sdParse(el) {
 document.addEventListener('change', e => {
   const el = e.target;
   if (el.dataset && el.dataset.sdUpload !== undefined && el.files && el.files[0]) { sdUpload(el); return; }
+  if (el.dataset && el.dataset.sdImport !== undefined && el.files && el.files[0]) { sdImport(el); return; }
   if (!el.dataset || !el.dataset.f || !sd.doc || !sd.canEdit) return;
   const f = el.dataset.f, pid = el.dataset.pid, sub = el.dataset.sub, v = sdParse(el), i = el.dataset.i != null ? +el.dataset.i : null;
   if (sub === 'params') sd.doc.params[f] = v == null ? sd.doc.params[f] : v;
@@ -212,6 +213,7 @@ document.addEventListener('change', e => {
     else if (sub === 'extra') p.extras[i][f] = (f === 'monthly') ? (v || 0) : v;
     else if (sub === 'slip') p.payslips[i][f] = (f === 'brut' || f === 'other') ? (v || 0) : v;
     else if (f === 'fte' || f === 'hours_week' || f === 'patronal_pct' || f === 'monthly_other') p[f] = v == null ? 0 : v;
+    else if (f === 'factor') p.factor = v;
     else p[f] = (f === 'brut_override') ? v : v;
   }
   sdTouch();
@@ -261,4 +263,19 @@ async function sdUpload(el) {
     p.payslips.find(s => s.month === m).file = {name: f.name.slice(0, 200), size: j.size, uploaded_at: j.uploaded_at};
     sdTouch(); sdDraw();
   } catch (err) { alert('Échec du dépôt : ' + err.message); }
+}
+
+async function sdImport(el) {
+  const f = el.files[0]; el.value = '';
+  if (sd.dirty && !confirm('Des modifications non enregistrées seront perdues. Continuer ?')) return;
+  if (!confirm(`Importer « ${f.name} » ? Les nouvelles personnes sont ajoutées ; pour les personnes déjà présentes, seules les fiches sont fusionnées.`)) return;
+  sd.msg = 'Import en cours…'; sdDraw();
+  try {
+    const r = await fetch('/api/staff/import', {method: 'POST', headers: {'Content-Type': 'application/zip', ...sdAuth()}, body: f});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+    sd.dirty = false; await sdLoad(); sd.inv = {};
+    sd.msg = `Import terminé : ${sdPlural(j.added.length, 'personne')} ajoutée${j.added.length > 1 ? 's' : ''}, ${sdPlural(j.merged.length, 'personne')} fusionnée${j.merged.length > 1 ? 's' : ''}, ${sdPlural(j.pdfs, 'PDF')} déposé${j.pdfs > 1 ? 's' : ''}.`;
+  } catch (err) { sd.msg = 'Échec de l’import : ' + err.message; }
+  sdDraw();
 }

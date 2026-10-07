@@ -32,6 +32,9 @@ def test_estimated_patronal_part_time_and_override():
 def test_independent_allocation_and_payroll_by_month():
     ind = run("SC.independentCosts({extras:[{monthly:200}], fte:100, hours_week:38}, {annual_factor:13.92, days_per_year:220}, 30000, 6)")
     assert ind["invoicedMonthlyAvg"] == 5000 and ind["invoicedAnnual"] == 60000 and ind["annual"] == 62400
+    assert ind["realYtd"] == 30000 + 200 * 6                                              # réel à ce jour, sans projection
+    four = run("SC.independentCosts({extras:[], fte:100, hours_week:38}, {annual_factor:13.92, days_per_year:220}, 19553.98, 4)")
+    assert round(four["annual"], 2) == round(19553.98 / 4 * 12, 2)                        # 4 factures sur 4 mois, projetées sur 12
     a = run("SC.allocate(100000, {XC: 60, HISTORIC_RACING: 10, SHARED: 20})")
     assert a["XC"] == 60000 and a["HISTORIC_RACING"] == 10000 and a["SHARED"] == 20000 and a["UNALLOCATED"] == 10000 and a["pct"] == 90
     m = run("SC.payrollByMonth([{kind:'salarie', patronal_pct:25, payslips:[{month:'2026-01', brut:1000},{month:'2026-02', brut:1000, patronal:300}]},"

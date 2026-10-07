@@ -23,10 +23,11 @@ const SC = (() => {
     return {brut, patronal, factor, remunMonthly, remunAnnual, recurringAnnual, extrasAnnual, ...finish(remunAnnual + recurringAnnual + extrasAnnual, p, params)};
   }
 
-  // Indépendant : facturé HT depuis le début de l'année ÷ mois écoulés = moyenne mensuelle ; annualisé × 12 ; + coûts « hors facture » × 12.
-  function independentCosts(p, params, invoicedYtd, monthsElapsed) {
-    const avg = monthsElapsed > 0 ? invoicedYtd / monthsElapsed : 0, invoicedAnnual = avg * 12, extrasAnnual = extrasMonthly(p) * 12;
-    return {invoicedYtd, invoicedMonthlyAvg: avg, invoicedAnnual, extrasAnnual, ...finish(invoicedAnnual + extrasAnnual, p, params)};
+  // Indépendant : honoraires facturés depuis le début de l'année ÷ mois d'activité = moyenne mensuelle ; projeté sur 1 an × 12 ; + coûts « hors facture » × 12.
+  // « Réel » = ce qui a été réellement facturé à ce jour (+ hors facture × mois d'activité), sans projection.
+  function independentCosts(p, params, invoicedYtd, monthsActive) {
+    const avg = monthsActive > 0 ? invoicedYtd / monthsActive : 0, invoicedAnnual = avg * 12, extrasAnnual = extrasMonthly(p) * 12;
+    return {invoicedYtd, monthsActive, invoicedMonthlyAvg: avg, invoicedAnnual, extrasAnnual, realYtd: invoicedYtd + extrasMonthly(p) * (monthsActive || 0), ...finish(invoicedAnnual + extrasAnnual, p, params)};
   }
 
   // Imputation : coût annuel × % par entité ; le reste (jusqu'à 100 %) est « non imputé ».

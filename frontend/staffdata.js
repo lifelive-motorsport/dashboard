@@ -70,8 +70,8 @@ function sdCalcCards(p) {
     return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}${kpi('Coût société journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût société horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
-  const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, fees = sdFees(inv), c = SC.independentCosts(p, params, fees, sdMonthsElapsed());
-  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Honoraires ' + SD_YEAR + ' (comptes 613)', eur(fees), 'adj', inv ? (tot - fees > 0.5 ? `hors ${eur(tot - fees)} de frais avancés` : 'toute la facturation') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `honoraires : moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
+  const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, fees = sdFees(inv), c = SC.independentCosts(p, params, fees, sdActiveMonths(p, inv));
+  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Honoraires ' + SD_YEAR + ' (comptes 613)', eur(fees), 'adj', inv ? (tot - fees > 0.5 ? `hors ${eur(tot - fees)} de frais avancés` : 'toute la facturation') : 'à charger')}${kpi('Coût réel ' + SD_YEAR + ' (à ce jour)', eur(c.realYtd), '', `honoraires facturés${c.extrasAnnual ? ' + hors facture' : ''}, sans projection`)}${kpi('Coût projeté sur 1 an', eur(c.annual), '', `honoraires ${eur(fees)} ÷ ${num(c.monthsActive)} mois = ${eur(c.invoicedMonthlyAvg)} / mois × 12${c.extrasAnnual ? ' + hors facture' : ''}`)}${kpi('Coût mensuel (projeté)', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
 }
 
 function sdExtras(p) {
@@ -103,7 +103,7 @@ function sdPersonPanel(p) {
     ${emp ? sdField('Temps de travail (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine (temps plein)', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))
           + sdField('Cotisations patronales estimées (%)', sdIn('patronal_pct', p.patronal_pct, {pid: p.id}), 'si absentes de la fiche') + sdField('Coefficient d’annualisation', sdIn('factor', p.factor, {pid: p.id, ph: num(sd.doc.params.annual_factor)}), '13,92 employé (13e mois + double pécule) · 12 ouvrier / gérant') + sdField('Brut mensuel de référence (€)', sdIn('brut_override', p.brut_override, {pid: p.id, ph: 'dernière fiche'}), 'facultatif')
           + sdField('Autres coûts société récurrents (€ / mois)', sdIn('monthly_other', p.monthly_other, {pid: p.id}), 'chèques-repas, assurance groupe…')
-        : sdField('Temps (jours facturables) (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))}
+        : sdField('Mois d’activité pris en compte', sdIn('active_months', p.active_months, {pid: p.id, step: '0.5', ph: 'auto : ' + sdActiveMonths(p, sd.inv[p.id])}), 'pour la projection sur 1 an ; vide = mois ayant une facture d’honoraires') + sdField('Temps (jours facturables) (%)', sdIn('fte', p.fte, {pid: p.id, step: '1'}), '100 = temps plein') + sdField('Heures / semaine', sdIn('hours_week', p.hours_week, {pid: p.id, step: '0.5'}))}
     ${sdField('Taux facturable (%)', sdIn('billable_pct', p.billable_pct ?? 100, {pid: p.id, step: '1'}), 'part des heures facturables à des clients externes (50 = la moitié) : sert au coût ajusté')}${sdField('Temps presté / horaire de base (%)', sdIn('hours_pct', p.hours_pct ?? 100, {pid: p.id, step: '1'}), '120 = preste en moyenne 20 % de plus que l’horaire de base')}
     ${emp ? sdField('Rémunération en 620/621', `<input type="checkbox" class="sdin" data-f="in_payroll" data-pid="${p.id}"${p.in_payroll !== false ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`, 'à décocher pour le gérant (payé via un autre compte)') : ''}${sdField('Actif', `<input type="checkbox" class="sdin" data-f="active" data-pid="${p.id}"${p.active ? ' checked' : ''}${sd.canEdit ? '' : ' disabled'}>`)}${sdField('Note', sdIn('note', p.note, {type: 'text', pid: p.id}))}</div>`;
   let body = base + `<div id="sd-kpi">${sdCalcCards(p)}</div>`;
@@ -195,10 +195,12 @@ async function sdLoadAcc() {
   return sd.accLoading;
 }
 
+// Mois d'activité d'un indépendant : saisis, sinon nombre de mois ayant une facture d'honoraires (4 factures sur 4 mois distincts = 4), à défaut les mois écoulés.
+const sdActiveMonths = (p, inv) => p.active_months > 0 ? +p.active_months : (inv ? new Set(inv.list.filter(x => Math.abs(x.fees || 0) > 0.5).map(x => String(x.date).slice(0, 7))).size : 0) || sdMonthsElapsed();
 const sdFees = inv => inv ? inv.list.reduce((t, x) => t + (+x.fees || 0), 0) : 0;      // honoraires : lignes des comptes 613 (hors frais avancés)
 function sdPersonCosts(p) {
   if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p));
-  return SC.independentCosts(p, sd.doc.params, sdFees(sd.inv[p.id]), sdMonthsElapsed());
+  return SC.independentCosts(p, sd.doc.params, sdFees(sd.inv[p.id]), sdActiveMonths(p, sd.inv[p.id]));
 }
 const sdPersonAnnual = p => sdPersonCosts(p).annual;
 
@@ -245,7 +247,7 @@ document.addEventListener('change', e => {
     else if (sub === 'slip') p.payslips[i][f] = (f === 'brut' || f === 'other') ? (v || 0) : v;
     else if (f === 'fte' || f === 'hours_week' || f === 'patronal_pct' || f === 'monthly_other') p[f] = v == null ? 0 : v;
     else if (f === 'billable_pct' || f === 'hours_pct') p[f] = v > 0 ? v : 100;
-    else if (f === 'factor') p.factor = v;
+    else if (f === 'factor' || f === 'active_months') p[f] = v > 0 ? v : null;
     else p[f] = (f === 'brut_override') ? v : v;
   }
   sdTouch();

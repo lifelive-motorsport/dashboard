@@ -199,7 +199,8 @@ def kind_view(lines: list[dict], config: dict, year: int, kind: str, today: date
     sel = effective(config, [a["code"] for a in cand])
     mine = [x for a in cand if (x := _for_kind(a, sel, config, kind))]
     months, last = closed_months(year, today)
-    series = [x for x in _month_series(mine) if last is None or x["month"] <= last]                 # le mois en cours (incomplet) n'est pas tracé
+    all_months = _month_series(mine)
+    series = [x for x in all_months if last is None or x["month"] <= last]                           # le mois en cours (incomplet) n'est pas tracé
     total = sum(a["total"] for a in mine)
     closed_total = sum(x["amount"] for x in series) if last else total
     partners: dict[str, dict] = {}
@@ -209,7 +210,7 @@ def kind_view(lines: list[dict], config: dict, year: int, kind: str, today: date
             d["amount"] += p["amount"]
     sup = sorted(partners.values(), key=lambda x: -x["amount"])[:15]
     return {"year": year, "kind": kind, "total": round(total, 2), "months": round(months, 2), "last_closed": last, "monthly_avg": round(closed_total / months, 2), "projected": round(closed_total / months * 12, 2),
-            "series": series,
+            "series": series, "all_months": all_months,
             "accounts": [{"code": a["code"], "name": a["name"] + (" (fournisseurs choisis)" if sel.get(a["code"]) == "partners" else ""), "total": round(a["total"], 2), "share": (a["total"] / total) if total else 0.0}
                          for a in sorted(mine, key=lambda a: -a["total"])],
             "suppliers": [{"name": s["name"], "amount": round(s["amount"], 2), "share": (s["amount"] / total) if total else 0.0} for s in sup],

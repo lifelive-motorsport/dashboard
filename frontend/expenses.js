@@ -23,7 +23,7 @@ async function exLoadMonth(m, kind) {
 }
 async function exLoadGeneral(kind = 'general') {
   try { const g = ex.genK[kind] = await exGet(`/api/expenses/general?year=${EX_YEAR}&kind=${kind}`); ex.genErr = null;
-    if (!ex.monthSelK[kind] && g.series.length) { const top = g.series.slice().sort((x, y) => y.amount - x.amount)[0]; await exLoadMonth(top.month, kind); } } catch (e) { ex.genErr = e.message; }
+    if (!ex.monthSelK[kind] && g.all_months.length) await exLoadMonth(g.all_months[g.all_months.length - 1].month, kind); } catch (e) { ex.genErr = e.message; }
 }
 
 async function exLoadVehicles() {
@@ -159,9 +159,9 @@ function exOdNote(g) {
   return `<div class="note"><b>Loyer du bâtiment exclu de ces chiffres : ${exEur2(x.total)}</b> <small class="na">(bâtiment mis gratuitement à disposition par les actionnaires)</small><ul>${x.moves.map(o => `<li>${fmtDate(o.date)} · ${esc(o.move)} · ${esc(o.code)} ${esc(o.name)} · ${esc(o.label)} : <b>${exEur2(o.amount)}</b></li>`).join('')}</ul>
     <small class="na">Écritures comptabilisées en charge mais qui ne correspondent à aucun paiement ; elles sont retirées de la courbe, des totaux et de la projection.</small></div>`;
 }
-// Détail d'un mois : mois choisi (par défaut le plus élevé) et ses plus grosses écritures, pour expliquer un pic.
+// Détail d'un mois : mois choisi (par défaut le dernier, même en cours) et ses plus grosses écritures, pour expliquer un pic.
 function exMonthBlock(g, kind) {
-  const sel = `<select class="sdin" data-ex-month data-kind="${kind}">${g.series.map(p => `<option value="${p.month}"${p.month === ex.monthSelK[kind] ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
+  const sel = `<select class="sdin" data-ex-month data-kind="${kind}">${g.all_months.map(p => `<option value="${p.month}"${p.month === ex.monthSelK[kind] ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
   const m = ex.monthK[kind];
   const body = ex.monthErr ? `<p class="neg">${esc(ex.monthErr)}</p>` : !m ? '<p class="na">Chargement…</p>' : m.lines.length ? table(['Date', 'Pièce', 'Fournisseur', 'Compte', 'Libellé', 'Montant'], m.lines.map(l => `<tr><td>${fmtDate(l.date)}</td><td>${esc(l.move)}</td><td class="prod">${esc(l.partner)}</td><td>${esc(l.code)} <small class="na">${esc(l.name)}</small></td><td class="prod">${esc(l.label)}</td><td>${exEur2(l.amount)}</td></tr>`)
       .concat([`<tr class="tot"><td colspan="5">Total du mois (${num(m.count)} écritures, dont les ${num(m.lines.length)} plus grosses ci-dessus)</td><td>${exEur2(m.total)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune écriture ce mois-ci.</p>';

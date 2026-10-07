@@ -157,5 +157,5 @@ def test_months_elapsed_include_the_fraction_of_the_current_month_and_smooth_lum
     assert expenses.accounts_view(one_off, {}, 2026, today=date(2026, 4, 30))["months_elapsed"] == 4.0
     partial = [{"code": "612000", "name": "Électricité", "total": 1300.0, "by_month": {"2026-08": 600.0, "2026-09": 600.0, "2026-10": 100.0}, "partners": {}}]
     k = expenses.kind_view(partial, {"saved": True, "selected": {"612000": "general"}}, 2026, "general", today=date(2026, 10, 7))
-    assert [x["month"] for x in k["series"]] == ["2026-08", "2026-09"] and k["last_closed"] == "2026-09"             # octobre (incomplet) n'est pas tracé
+    assert [x["month"] for x in k["series"]] == ["2026-08", "2026-09"] and k["last_closed"] == "2026-09" and [x["month"] for x in k["all_months"]] == ["2026-08", "2026-09", "2026-10"]             # octobre (incomplet) n'est pas tracé
     assert k["total"] == 1300 and round(k["monthly_avg"], 2) == round(1200 / 9, 2) and round(k["projected"], 2) == 1600     # moyenne sur les 9 mois clos

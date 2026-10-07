@@ -549,6 +549,27 @@ class OdooProvider:
                 "accounts": [{**a, "total": round(a["total"]), "by_month": {m: round(v) for m, v in a["by_month"].items()}} for a in sorted(accounts.values(), key=lambda a: a["code"])],
                 "pay_by_month": {m: round(v) for m, v in sorted(pay.items())}, "other_by_month": {m: round(v) for m, v in sorted(other.items())}}
 
+    def expenses_lines(self, year: int) -> list[dict]:
+        """Charges de classe 6 de l'année, par compte : total, montant par mois et par fournisseur (débit net). Comptes « old » ignorés. Lecture seule."""
+        lines = self._call("account.move.line", "search_read",
+                           domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), ("account_id.code", "=like", "6%")],
+                           fields=["date", "balance", "account_id", "partner_id"])
+        accs: dict[str, dict] = {}
+        for ln in lines:
+            code, name = self._code_name(ln["account_id"][1])
+            if not code:
+                continue
+            a = accs.setdefault(code, {"code": code, "name": name, "total": 0.0, "by_month": {}, "partners": {}})
+            amt = float(ln["balance"] or 0.0)
+            a["total"] += amt
+            m = str(ln["date"])[:7]
+            a["by_month"][m] = a["by_month"].get(m, 0.0) + amt
+            if ln.get("partner_id"):
+                pid, pname = ln["partner_id"]
+                p = a["partners"].setdefault(pid, {"name": pname, "amount": 0.0})
+                p["amount"] += amt
+        return list(accs.values())
+
     def staff_partners(self, q: str) -> list[dict]:
         """Sociétés Odoo dont le nom contient `q` (pour rattacher un indépendant)."""
         rows = self._call("res.partner", "search_read", domain=[("is_company", "=", True), ("name", "ilike", q.strip())],

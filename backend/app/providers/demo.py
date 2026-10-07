@@ -123,6 +123,17 @@ class DemoProvider:
         return {"year": year, "pay_prefixes": ["620", "621"], "accounts": acc, "pay_by_month": pay, "other_by_month": other,
                 "director": {"pay_accounts": ["618000"], "social_accounts": ["618001"], "pay_by_month": {m: 3130 for m in months}, "social_by_month": {m: 900 for m in months}}}
 
+    def expenses_lines(self, year: int) -> list[dict]:
+        rnd = random.Random(11)
+        spec = [("611000", "Entretien et réparations", 900), ("611100", "Entretien véhicules", 700), ("612000", "Électricité, gaz, eau", 1500), ("612010", "Fournitures de bureau", 400),
+                ("613000", "Honoraires", 6000), ("614000", "Publicité", 300), ("640000", "Taxes diverses", 450), ("604010", "Achats XC", 30000), ("620000", "Rémunérations", 40000), ("612050", "Marketing", 800)]
+        out = []
+        for code, name, base in spec:
+            by = {f"{year}-{m:02d}": round(base * (0.8 + rnd.random() * 0.4), 2) for m in range(1, 10)}
+            out.append({"code": code, "name": name, "total": sum(by.values()), "by_month": by,
+                        "partners": {1: {"name": "Fournisseur A", "amount": sum(by.values()) * 0.6}, 2: {"name": "Fournisseur B", "amount": sum(by.values()) * 0.4}}})
+        return out
+
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]
 

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, ga, settings, staff
+from . import adjustments, expenses, ga, settings, staff
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -133,6 +133,34 @@ def admin(user: str = Depends(require_user)) -> str:
     if not adjustments.can_edit(user):
         raise HTTPException(403, "Réservé aux administrateurs du dashboard")
     return user
+
+
+def _expense_lines(year: int) -> list[dict]:
+    try:
+        return provider().expenses_lines(year)
+    except Exception:
+        log.exception("Lecture des frais généraux impossible")
+        raise HTTPException(503, "Frais généraux indisponibles pour le moment")
+
+
+@app.get("/api/expenses/accounts")
+def expenses_accounts(year: int = Query(..., ge=2000, le=2100), user: str = Depends(require_user)):
+    cfg = expenses.store().get()
+    return {**expenses.accounts_view(_expense_lines(year), cfg["data"], year), "updated_at": cfg["updated_at"], "updated_by": cfg["updated_by"], "can_edit": adjustments.can_edit(user)}
+
+
+@app.put("/api/expenses/config")
+def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
+    data = body.data.model_copy(update={"saved": True}).model_dump()
+    doc = expenses.store().put(data, user, body.base)
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {**doc, "can_edit": True}
+
+
+@app.get("/api/expenses/general")
+def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query("general", pattern="^(general|vehicle)$"), _user: str = Depends(require_user)):
+    return expenses.kind_view(_expense_lines(year), expenses.store().get()["data"], year, kind)
 
 
 @app.get("/api/staff")

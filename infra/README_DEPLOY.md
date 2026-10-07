@@ -104,3 +104,7 @@ Les rémunérations sont des données sensibles : tout le personnel (salariés, 
 (`setup_gcp.sh` le fait déjà pour une première installation.) Le script crée le bucket `lifelive-dashboard-app-payslips`, donne l'accès au seul compte de service et active `STAFF_BUCKET` sur Cloud Run, sans redéploiement du code. Ensuite, tous les dépôts mensuels se font dans l'app.
 
 Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste fonctionne (les chiffres se saisissent à la main). `STAFF_PAY_PREFIXES` (par défaut `620,621`) désigne les comptes comparés aux fiches de paie. `STAFF_FEE_PREFIXES` (`613`) désigne les comptes des honoraires des indépendants : seules les lignes de leurs factures sur ces comptes comptent dans leur coût (les frais avancés refacturés sont exclus). `STAFF_DIRECTOR_PAY` (`618000`) et `STAFF_DIRECTOR_SOCIAL` (`618001`) désignent la rémunération et les cotisations sociales du gérant / administrateur, comparées à part ; les cotisations sont ajoutées à son coût annualisé.
+
+## Frais généraux (GENERAL EXPENSES)
+
+Les comptes de charges retenus se choisissent dans l'application (GENERAL EXPENSES › Données source) ; le choix est enregistré dans Firestore (document `dashboard/expenses`) et seuls les `ADMIN_EMAILS` peuvent le modifier. Tant que rien n'est enregistré, la proposition de départ est celle de `EXPENSES_DEFAULT_PREFIXES` (par défaut `611,612,614,640`). Les achats par BU (60x), le personnel (62x, 618) et le marketing (`MARKETING_ACCOUNTS`) sont traités dans leurs propres rubriques.

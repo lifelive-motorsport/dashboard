@@ -396,6 +396,15 @@ def vehicle_reconciliation(lines: list[dict], config: dict, included_total: floa
             "also_general": [row(a) for a in both]}
 
 
+def marketing_view(lines: list[dict]) -> dict:
+    """Comptes marketing (MARKETING_ACCOUNTS) : ceux qui ont une BU dans leur numéro (602/603/604 + suffixe) sont déjà dans les coûts directs, donc dans la marge brute ;
+    les autres (ex. 612050) sont du marketing commun, à imputer dans la marge nette."""
+    from . import bu
+    rows = [a for a in lines if family(a["code"], a["name"]) == "marketing"]
+    out = [{"code": a["code"], "name": a["name"], "total": round(a["total"], 2), "in_direct_costs": bool(bu._CODE.match(a["code"]))} for a in sorted(rows, key=lambda a: a["code"])]
+    return {"accounts": out, "common": round(sum(r["total"] for r in out if not r["in_direct_costs"]), 2), "in_direct_costs": round(sum(r["total"] for r in out if r["in_direct_costs"]), 2)}
+
+
 def excluded_view(lines: list[dict]) -> dict:
     """Écritures des comptes exclus des frais généraux (le loyer) : total et liste, à mentionner sous le graphique."""
     mv = sorted(lines, key=lambda o: (o["date"], o["move"]))

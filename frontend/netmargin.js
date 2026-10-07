@@ -14,6 +14,7 @@ async function nmEnsure() {
         sd.loaded ? 0 : sdLoad(),
         exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`).then(j => { nm.gen = j; }),
         exGet(`/api/expenses/allocation?year=${EX_YEAR}`).then(j => { nm.alloc = j; }),
+        exGet(`/api/expenses/marketing?year=${EX_YEAR}`).then(j => { nm.mk = j; }),
         exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`).then(j => { ex.vsplit = j; }),
         exGet(`/api/vehicles/usage?year=${EX_YEAR}`).then(j => { ex.vusage = j; }).catch(() => { ex.vusage = null; }),
       ]);
@@ -30,7 +31,7 @@ const nmRedraw = () => document.querySelectorAll('.nm-host').forEach(h => { h.in
 
 // Calcul : une colonne par BU (+ « Non affecté » du P&L et « Non imputé »), lignes de coûts séparées pour savoir d'où vient chaque euro.
 function nmCompute(d) {
-  const z = () => ({ca: 0, dc: 0, staff: 0, veh: 0, shared: 0, general: 0, vehgen: 0}), cols = {};
+  const z = () => ({ca: 0, dc: 0, staff: 0, veh: 0, shared: 0, general: 0, vehgen: 0, mkt: 0}), cols = {};
   [...NM_BU, 'UNASSIGNED', 'UNALLOC'].forEach(k => { cols[k] = z(); });
   d.pnl.bus.forEach(b => { const c = cols[b.key] || (cols[b.key] = z()); c.ca += b.ca; c.dc += b.direct_costs; });
   // Personnel : coût réel à ce jour × % d'imputation de chaque personne ; Shared Services = frais communs ; le reste (< 100 %) = non imputé.
@@ -38,7 +39,7 @@ function nmCompute(d) {
   sdViewRows(true).forEach(r => { staffTotal += r.annual; NM_BU.forEach(k => { if (r.a[k]) cols[k].staff += r.a[k]; }); sharedStaff += r.a.SHARED || 0; cols.UNALLOC.staff += r.a.UNALLOCATED || 0; });
   // Véhicules : % retenus par véhicule ; la part « frais généraux » est commune.
   const vt = exSplitTotals(ex.vsplit); NM_BU.forEach(k => { if (vt.tot[k]) cols[k].veh += vt.tot[k]; }); cols.UNALLOC.veh += vt.unalloc;
-  const commons = {shared: sharedStaff, general: nm.gen.total || 0, vehgen: vt.tot.GENERAL || 0};
+  const commons = {shared: sharedStaff, general: nm.gen.total || 0, vehgen: vt.tot.GENERAL || 0, mkt: (nm.mk || {}).common || 0};
   const sh = (nm.alloc.shares || {})[nm.alloc.key_mode] || {}, shXC = +sh.XC || 0, shCARS = +sh.CARS || 0, shT = shXC + shCARS;
   const carsCa = NM_CARS.reduce((t, k) => t + Math.max(0, cols[k].ca), 0);
   Object.entries(commons).forEach(([row, amt]) => {
@@ -47,35 +48,36 @@ function nmCompute(d) {
     const cars = amt * shCARS / shT;
     NM_CARS.forEach(k => { cols[k][row] += carsCa > 0 ? cars * Math.max(0, cols[k].ca) / carsCa : cars / NM_CARS.length; });
   });
-  return {cols, sources: {staff: staffTotal, general: commons.general, veh: vt.grand}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode: nm.alloc.key_mode};
+  return {cols, sources: {staff: staffTotal, general: commons.general, veh: vt.grand, mkt: commons.mkt}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode: nm.alloc.key_mode};
 }
-const nmSum = (cols, keys) => keys.reduce((o, k) => { const c = cols[k] || {}; Object.keys({ca: 0, dc: 0, staff: 0, veh: 0, shared: 0, general: 0, vehgen: 0}).forEach(f => { o[f] = (o[f] || 0) + (c[f] || 0); }); return o; }, {});
-const nmNet = o => (o.ca - o.dc) - o.staff - o.veh - o.shared - o.general - o.vehgen;
+const nmSum = (cols, keys) => keys.reduce((o, k) => { const c = cols[k] || {}; ['ca', 'dc', 'staff', 'veh', 'shared', 'general', 'vehgen', 'mkt'].forEach(f => { o[f] = (o[f] || 0) + (c[f] || 0); }); return o; }, {});
+const nmNet = o => (o.ca - o.dc) - o.staff - o.veh - o.shared - o.general - o.vehgen - o.mkt;
 const NM_ROWS = [['Chiffre d’affaires', o => o.ca, 'plain'], ['− Coûts directs', o => o.dc, 'plain'], ['= Marge brute', o => o.ca - o.dc, 'sub'],
   ['− Personnel imputé', o => o.staff, 'plain'], ['− Frais véhicules imputés', o => o.veh, 'plain'], ['− Quote-part Shared Services (personnel)', o => o.shared, 'plain'],
-  ['− Quote-part frais généraux', o => o.general, 'plain'], ['− Quote-part véhicules non liés à une BU', o => o.vehgen, 'plain'], ['= Marge nette', nmNet, 'tot']];
+  ['− Quote-part frais généraux', o => o.general, 'plain'], ['− Quote-part véhicules non liés à une BU', o => o.vehgen, 'plain'], ['− Quote-part marketing commun', o => o.mkt, 'plain'], ['= Marge nette', nmNet, 'tot']];
 // spec = [{label, keys}] ; `pctCa` ajoute la ligne « Marge nette / CA ».
 function nmTable(res, spec) {
   const vals = spec.map(s => nmSum(res.cols, s.keys)), cell = (v, kind) => `<td class="${kind === 'tot' || kind === 'sub' ? cls(v) : ''}">${v ? eur(v) : '–'}</td>`;
   return table([''].concat(spec.map(s => s.label)), NM_ROWS.map(([lab, f, kind]) => `<tr class="${kind === 'tot' ? 'tot' : kind === 'sub' ? 'subtot' : ''}"><td>${lab}</td>${vals.map(o => cell(f(o), kind)).join('')}</tr>`)
     .concat([`<tr><td>Marge nette / CA</td>${vals.map(o => `<td class="${cls(nmNet(o))}">${o.ca ? pct(nmNet(o) / o.ca) : '–'}</td>`).join('')}</tr>`]), 'prodtable nmtable');
 }
-const nmKpis = (o, label) => `<div class="kpis">${kpi('Marge brute ' + label, eur(o.ca - o.dc), cls(o.ca - o.dc)) + kpi('Coûts imputés', eur(o.staff + o.veh + o.shared + o.general + o.vehgen), '', 'personnel, véhicules, frais généraux') + kpi('Marge nette ' + label, eur(nmNet(o)), cls(nmNet(o)), o.ca ? pct(nmNet(o) / o.ca) + ' du CA' : '') }</div>`;
+const nmKpis = (o, label) => `<div class="kpis">${kpi('Marge brute ' + label, eur(o.ca - o.dc), cls(o.ca - o.dc)) + kpi('Coûts imputés', eur(o.staff + o.veh + o.shared + o.general + o.vehgen + o.mkt), '', 'personnel, véhicules, frais généraux, marketing') + kpi('Marge nette ' + label, eur(nmNet(o)), cls(nmNet(o)), o.ca ? pct(nmNet(o) / o.ca) + ' du CA' : '') }</div>`;
 
 // Contrôle : tout ce qui est comptabilisé comme coût de structure se retrouve dans les colonnes.
 function nmControl(res) {
-  const all = nmSum(res.cols, Object.keys(res.cols)), imputed = all.staff + all.veh + all.shared + all.general + all.vehgen, src = res.sources.staff + res.sources.general + res.sources.veh, gap = src - imputed;
-  const un = res.cols.UNALLOC, unT = un.staff + un.veh + un.shared + un.general + un.vehgen;
+  const all = nmSum(res.cols, Object.keys(res.cols)), imputed = all.staff + all.veh + all.shared + all.general + all.vehgen + all.mkt, src = res.sources.staff + res.sources.general + res.sources.veh + res.sources.mkt, gap = src - imputed;
+  const un = res.cols.UNALLOC, unT = un.staff + un.veh + un.shared + un.general + un.vehgen + un.mkt;
   const ok = c => `<span class="${c ? 'pos' : 'neg'}">${c ? '✔' : '⚠'}</span>`;
   return '<h4 class="sub">Contrôle : tous les coûts sont repris</h4>' + table(['Source', 'Montant', ''], [
     `<tr><td>Personnel : coût réel à ce jour (Shared Services compris)</td><td>${eur(res.sources.staff)}</td><td></td></tr>`,
     `<tr><td>Frais généraux (comptes retenus en « frais généraux »)</td><td>${eur(res.sources.general)}</td><td></td></tr>`,
     `<tr><td>Frais véhicules (classe 615 entière)</td><td>${eur(res.sources.veh)}</td><td></td></tr>`,
+    `<tr><td>Marketing commun (comptes marketing sans BU)</td><td>${eur(res.sources.mkt)}</td><td></td></tr>`,
     `<tr class="tot"><td>Total des coûts sources</td><td>${eur(src)}</td><td></td></tr>`,
     `<tr><td>Total imputé dans le tableau</td><td>${eur(imputed)}</td><td>${ok(Math.abs(gap) < 0.5)} ${Math.abs(gap) < 0.5 ? 'rien ne manque' : 'écart : ' + eur(gap)}</td></tr>`,
     `<tr><td>dont « Non imputé » (pourcentages incomplets, clé absente)</td><td>${eur(unT)}</td><td>${ok(Math.abs(unT) < 0.5)} ${Math.abs(unT) < 0.5 ? 'tout est affecté' : 'à compléter dans « Imputation du personnel » ou « Imputation des frais véhicules »'}</td></tr>`], 'prodtable');
 }
-const nmNote = res => `<small class="na">Du 1er janvier à aujourd’hui. Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel : coût réel à ce jour (fiches de paie et honoraires) × pourcentage d’imputation de chaque personne. Véhicules : pourcentages retenus dans « Imputation des frais véhicules ». Frais communs (Shared Services, frais généraux et véhicules non liés à une BU) : répartis entre XC (${pct(res.shXC)}) et CARS (${pct(res.shCARS)}) selon la clé « ${res.mode === 'pct' ? '% encodé' : 'prorata du CA'} » des frais généraux, puis entre les BU de CARS au prorata de leur chiffre d’affaires. Le loyer (comptes exclus) et le marketing ne sont pas repris.</small>`;
+const nmNote = res => `<small class="na">Du 1er janvier à aujourd’hui. Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel : coût réel à ce jour (fiches de paie et honoraires) × pourcentage d’imputation de chaque personne. Véhicules : pourcentages retenus dans « Imputation des frais véhicules ». Frais communs (Shared Services, frais généraux, véhicules non liés à une BU et marketing commun) : répartis entre XC (${pct(res.shXC)}) et CARS (${pct(res.shCARS)}) selon la clé « ${res.mode === 'pct' ? '% encodé' : 'prorata du CA'} » des frais généraux, puis entre les BU de CARS au prorata de leur chiffre d’affaires. Le marketing rattaché à une BU (comptes 602019, 602059) est déjà dans les coûts directs ; seul le marketing commun (ex. 612050) est ajouté ici. Le loyer (comptes exclus) et l’amortissement des investissements marketing ne sont pas repris.</small>`;
 
 function nmHtml(d, scope) {
   if (!d) return '<p class="na">Chargement…</p>';

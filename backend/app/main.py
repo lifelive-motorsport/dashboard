@@ -316,6 +316,12 @@ def expenses_month(month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), 
     return expenses.month_lines(raw, expenses.store().get()["data"], kind, month)
 
 
+@app.get("/api/expenses/marketing")
+def expenses_marketing(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
+    """Marketing commun (hors comptes déjà rattachés à une BU) pour la marge nette."""
+    return expenses.marketing_view(_expense_lines(year))
+
+
 @app.get("/api/expenses/allocation")
 def expenses_allocation(year: int = Query(..., ge=2000, le=2100), user: str = Depends(require_user)):
     """Frais généraux (rubrique « general ») imputés à XC et CARS selon les deux clés ; le CA est celui du 1er janvier à aujourd'hui."""

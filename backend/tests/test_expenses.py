@@ -212,3 +212,10 @@ def test_general_vehicles_are_not_identified():
     out = expenses.vehicles_view(lines, {"saved": True, "selected": {}, "general_vehicles": ["bmw x5"]}, 2026, "all615")
     by = {v["vehicle"]: v for v in out["vehicles"]}
     assert by["BMW X5"]["identified"] is False and by["BMW X5"]["forced_general"] is True and by["Quad Kodiak"]["identified"] is True
+
+
+def test_marketing_view_splits_bu_accounts_from_common():
+    lines = [{"code": "602019", "name": "Marketing XC", "total": 100.0, "by_month": {}}, {"code": "612050", "name": "Marketing", "total": 40.0, "by_month": {}},
+             {"code": "611000", "name": "Loyer", "total": 999.0, "by_month": {}}]
+    out = expenses.marketing_view(lines)
+    assert out["common"] == 40.0 and out["in_direct_costs"] == 100.0 and [a["code"] for a in out["accounts"]] == ["602019", "612050"]

@@ -50,8 +50,10 @@ function exLinksEditor(v, cal) {
   const links = ex.links || v.links || {}, res = [...new Set((cal.usage || []).map(u => u.vehicle))].sort(), canEdit = !!v.can_edit;
   const todo = v.vehicles.filter(x => x.vehicle !== '(non classé)').map(x => x.vehicle);
   const odooNames = todo.concat(Object.keys(links).filter(k => !todo.some(t => t.toLowerCase() === k.toLowerCase())));      // les véhicules fusionnés restent listés pour pouvoir défaire la fusion
-  const rows = odooNames.map(n => ({vehicle: n})).map(x => { const auto = !links[x.vehicle] && exMatchUsage(cal.usage, x.vehicle);
-    return `<tr><td class="prod">${esc(x.vehicle)}</td><td>${canEdit ? `<input type="text" list="exp-res-names" data-ex-link="${esc(x.vehicle)}" value="${esc(links[x.vehicle] || '')}" placeholder="${esc(auto ? 'auto : ' + auto.vehicle : 'à associer')}">` : esc(links[x.vehicle] || (auto ? 'auto : ' + auto.vehicle : '–'))}</td></tr>`; });
+  const GEN = new Set(['util', 'utilitaire', 'truck', 'semi', 'trailer', 'remorque', 'camion', 'vehicule']);
+  const twin = n => { if (links[n]) return null; const t = exVTok(n).filter(w => w.length >= 4 && !GEN.has(w)); return todo.find(o => o !== n && exVTok(o).some(w => t.includes(w))) || null; };
+  const rows = odooNames.map(n => ({vehicle: n})).map(x => { const auto = !links[x.vehicle] && exMatchUsage(cal.usage, x.vehicle), tw = !auto && twin(x.vehicle);
+    return `<tr><td class="prod">${esc(x.vehicle)}</td><td>${canEdit ? `<input class="sdin" type="text" list="exp-res-names" data-ex-link="${esc(x.vehicle)}" value="${esc(links[x.vehicle] || '')}" placeholder="${esc(auto ? 'auto : ' + auto.vehicle : tw ? 'même véhicule que « ' + tw + ' » ?' : 'à associer')}">` : esc(links[x.vehicle] || (auto ? 'auto : ' + auto.vehicle : '–'))}</td></tr>`; });
   return '<h4 class="sub">Correspondance véhicule Odoo ↔ ressource de l’agenda</h4>' + `<datalist id="exp-res-names">${res.concat(todo).map(n => `<option value="${esc(n)}">`).join('')}</datalist>`
     + table(['Véhicule (compte 615)', 'Ressource de l’agenda'], rows, 'prodtable')
     + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-links-save${ex.linksDirty ? '' : ' disabled'}>Enregistrer les correspondances</button><span class="na">${esc(ex.linksMsg || 'Laissez vide pour le rapprochement automatique par le nom ; choisissez une ressource quand il ne trouve pas. Pour deux comptes qui désignent le même véhicule, choisissez l’autre véhicule de la liste : leurs coûts sont additionnés.')}</span></div>` : '');

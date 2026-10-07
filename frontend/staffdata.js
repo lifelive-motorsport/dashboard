@@ -136,12 +136,20 @@ function sdControl() {
   const a = sd.acc;
   if (!a) return '<p class="na">Chargement des données comptables…</p>';
   if (a.unavailable) return `<p class="na">${esc(a.unavailable)}</p>`;
-  const pay = SC.payrollByMonth(sd.doc.people), cur = new Date().toISOString().slice(0, 7), months = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`).filter(m => m < cur);   // mois clôturés seulement
-  let tp = 0, ta = 0;
-  const rows = months.map(m => { const mine = pay[m] || 0, acc = (a.pay_by_month || {})[m] || 0; if (!mine && !acc) return ''; tp += mine; ta += acc;
-    const diff = mine - acc; return `<tr><td>${m}</td><td>${sdEur2(mine)}</td><td>${sdEur2(acc)}</td><td class="${Math.abs(diff) < 1 ? '' : 'neg'}">${sdEur2(diff)}</td></tr>`; }).filter(Boolean);
+  const pay = SC.payrollByMonth(sd.doc.people), accM = a.pay_by_month || {}, cur = new Date().toISOString().slice(0, 7);
+  const all = Array.from({length: 12}, (_, i) => `${SD_YEAR}-${String(i + 1).padStart(2, '0')}`), next = m => all[all.indexOf(m) + 1];
+  const used = new Set(); let tp = 0, ta = 0;
+  // Les écritures de paie sont parfois passées le mois suivant : pour chaque mois on retient, parmi le mois et le suivant (non encore utilisé), l'écriture la plus proche de la fiche.
+  const rows = all.filter(m => m < cur).map(m => {
+    const mine = pay[m] || 0; let am = m;
+    if (mine) { const n = next(m), dn = n && !used.has(n) && accM[n] ? Math.abs(mine - accM[n]) : Infinity, d0 = used.has(m) ? Infinity : Math.abs(mine - (accM[m] || 0));
+      if (dn < d0 && d0 >= 1) am = n; }
+    else if (used.has(m)) return '';
+    const acc = used.has(am) ? 0 : (accM[am] || 0); if (!mine && !acc) return ''; used.add(am); tp += mine; ta += acc;
+    const diff = mine - acc;
+    return `<tr><td>${m}${am !== m ? ` <small class="na">(écritures de ${am})</small>` : ''}</td><td>${sdEur2(mine)}</td><td>${sdEur2(acc)}</td><td class="${Math.abs(diff) < 1 ? '' : 'neg'}">${sdEur2(diff)}</td></tr>`; }).filter(Boolean);
   return (rows.length ? table(['Mois', 'Fiches de paie (brut + patronal)', `Comptabilité (comptes ${esc((a.pay_prefixes || []).join(', '))})`, 'Écart'], rows.concat([`<tr class="tot"><td>Total</td><td>${sdEur2(tp)}</td><td>${sdEur2(ta)}</td><td>${sdEur2(tp - ta)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune donnée à comparer pour ' + SD_YEAR + '.</p>')
-    + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Le mois en cours n'est pas comparé. Les personnes dont la rémunération n'est pas en 620/621 (case décochée dans leur fiche, ex. le gérant) sont exclues. Un écart peut venir d'une écriture passée avec un mois de décalage, d'un pécule ou d'une prime comptabilisés autrement, ou d'une fiche manquante. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
+    + `<small class="na">Compare, mois par mois, la rémunération des fiches de paie saisies (salariés) avec les écritures comptables des comptes de rémunération. Le mois en cours n'est pas comparé ; une paie dont les écritures sont datées du mois suivant est rapprochée de celles-ci (mention « écritures de … »). Les personnes dont la rémunération n'est pas en 620/621 (case décochée dans leur fiche, ex. le gérant) sont exclues. Un écart peut venir d'une écriture passée avec un mois de décalage, d'un pécule ou d'une prime comptabilisés autrement, ou d'une fiche manquante. Autres charges de personnel en comptabilité (hors rémunération) : ${sdEur2(Object.values(a.other_by_month || {}).reduce((t, v) => t + v, 0))}.</small>`;
 }
 
 function sdDrawSource() {

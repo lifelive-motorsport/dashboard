@@ -164,10 +164,10 @@ def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query
     cfg = expenses.store().get()["data"]
     out = expenses.kind_view(_expense_lines(year), cfg, year, kind)
     try:
-        out["od"] = expenses.od_view(provider().expenses_od(year), cfg, kind)
+        out["excluded"] = expenses.excluded_view(provider().expenses_excluded(year)) if kind == "general" else {"total": 0.0, "moves": []}
     except Exception:
-        log.exception("OD indisponibles")
-        out["od"] = {"total": 0.0, "moves": [], "error": True}
+        log.exception("Écritures exclues indisponibles")
+        out["excluded"] = {"total": 0.0, "moves": [], "error": True}
     return out
 
 

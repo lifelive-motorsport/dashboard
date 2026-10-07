@@ -135,10 +135,13 @@ def test_fuel_scope_uses_all_615_accounts_even_when_classed_as_general_expenses(
     assert v["total"] == 3000 and v["vehicles"][0]["types"] == {"Carburant": 3000.0}
 
 
-def test_od_view_lists_only_od_on_retained_accounts():
-    od = [{"code": "611010", "name": "Loyer Batiment", "date": "2026-07-31", "amount": 21000.0, "move": "DIV/2026/07/0001", "label": "Loyer 01-07/26"},
-          {"code": "613000", "name": "Honoraires", "date": "2026-07-31", "amount": 500.0, "move": "DIV/2026/07/0002", "label": "x"},
-          {"code": "604010", "name": "Achats XC", "date": "2026-07-31", "amount": 900.0, "move": "DIV/2026/07/0003", "label": "hors périmètre"}]
-    v = expenses.od_view(od, {"saved": False, "selected": {}}, "general")
-    assert v["total"] == 21000 and [m["move"] for m in v["moves"]] == ["DIV/2026/07/0001"]                  # 613 non retenu, 604 traité ailleurs
-    assert expenses.od_view(od, {"saved": True, "selected": {"611010": "vehicle"}}, "general")["moves"] == []
+def test_rent_account_is_excluded_from_general_expenses_and_listed_apart():
+    lines = [{"code": "611010", "name": "Loyer Batiment", "total": 21000.0, "by_month": {"2026-07": 21000.0}, "partners": {}},
+             {"code": "611011", "name": "Entr. Batiment", "total": 1350.0, "by_month": {"2026-07": 1350.0}, "partners": {}}]
+    assert expenses.family("611010", "Loyer Batiment") == "excluded"
+    g = expenses.kind_view(lines, {"saved": False, "selected": {}}, 2026, "general")
+    assert g["total"] == 1350 and [a["code"] for a in g["accounts"]] == ["611011"]
+    assert [a["code"] for a in expenses.accounts_view(lines, {"saved": False, "selected": {}}, 2026)["accounts"]] == ["611011"]
+    assert expenses.accounts_view(lines, {}, 2026)["elsewhere"]["excluded"] == 21000
+    x = expenses.excluded_view([{"code": "611010", "name": "Loyer Batiment", "date": "2026-07-31", "amount": 21000.0, "move": "DIV/2026/07/0001", "label": "Loyer 01-07/26"}])
+    assert x["total"] == 21000 and x["moves"][0]["move"] == "DIV/2026/07/0001"

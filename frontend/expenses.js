@@ -148,15 +148,16 @@ function exDrawSource() {
     + `<h4 class="sub">Traité ailleurs (non repris ici)</h4>` + table(['Famille', 'Depuis le 1er janvier', 'Où'], [
         ['Achats, sous-traitance et frais directs par BU (comptes 60x)', el2.bu, 'Overview, XC Detail et CARS Detail'],
         ['Personnel (comptes 62x, rémunération et cotisations des administrateurs 618)', el2.staff, 'STAFF costs'],
-        ['Marketing (comptes ' + (s.marketing_accounts || []).join(', ') + ')', el2.marketing, 'Marketing › Dépenses marketing']].filter(r => r[1] != null).map(r => `<tr><td class="prod">${esc(r[0])}</td><td>${eur(r[1])}</td><td>${esc(r[2])}</td></tr>`), 'prodtable')
+        ['Marketing (comptes ' + (s.marketing_accounts || []).join(', ') + ')', el2.marketing, 'Marketing › Dépenses marketing'],
+        ['Loyer exclu (compte ' + (s.excluded_accounts || []).join(', ') + ')', el2.excluded, 'mentionné sous le graphique de la page Général']].filter(r => r[1] != null).map(r => `<tr><td class="prod">${esc(r[0])}</td><td>${eur(r[1])}</td><td>${esc(r[2])}</td></tr>`), 'prodtable')
     + '<small class="na">Choisissez, pour chaque compte de charges, s’il compte dans les frais généraux, dans les véhicules de service (menu Service Vehicles) ou s’il est laissé de côté. Les comptes « old » sont ignorés. Un compte qui mélange des natures différentes (par exemple un compte 640 qui contient aussi des taxes de véhicules) se range en entier dans une seule rubrique ; dites-le-moi si un compte doit être scindé.</small>';
 }
 
-// Remarque sous le graphique : écritures d'opérations diverses (OD) exclues des chiffres (ex. loyer comptabilisé par OD alors que le bâtiment est mis à disposition).
+// Remarque sous le graphique : comptes exclus des frais généraux (le loyer du bâtiment, mis gratuitement à disposition par les actionnaires).
 function exOdNote(g) {
-  const od = g.od; if (!od || od.error || !od.moves.length) return '';
-  return `<div class="note"><b>Opérations diverses (OD) exclues de ces chiffres : ${exEur2(od.total)}</b><ul>${od.moves.map(o => `<li>${fmtDate(o.date)} · ${esc(o.move)} · ${esc(o.code)} ${esc(o.name)} · ${esc(o.label)} : <b>${exEur2(o.amount)}</b></li>`).join('')}</ul>
-    <small class="na">Ces écritures (journaux d’opérations diverses) ne sont pas de vraies dépenses de la période : elles sont retirées de la courbe, des totaux et de la projection.</small></div>`;
+  const x = g.excluded; if (!x || x.error || !x.moves.length) return '';
+  return `<div class="note"><b>Loyer du bâtiment exclu de ces chiffres : ${exEur2(x.total)}</b> <small class="na">(bâtiment mis gratuitement à disposition par les actionnaires)</small><ul>${x.moves.map(o => `<li>${fmtDate(o.date)} · ${esc(o.move)} · ${esc(o.code)} ${esc(o.name)} · ${esc(o.label)} : <b>${exEur2(o.amount)}</b></li>`).join('')}</ul>
+    <small class="na">Écritures comptabilisées en charge mais qui ne correspondent à aucun paiement ; elles sont retirées de la courbe, des totaux et de la projection.</small></div>`;
 }
 // Détail d'un mois : mois choisi (par défaut le plus élevé) et ses plus grosses écritures, pour expliquer un pic.
 function exMonthBlock(g, kind) {

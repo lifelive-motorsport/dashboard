@@ -828,18 +828,11 @@ def test_staff_invoices_report_fees_on_613_accounts_only():
     assert ("account_id.code", "=like", "613%") in seen["domain"] and ("move_id", "in", [1, 3, 2]) in seen["domain"]
 
 
-def test_expenses_lines_leave_out_od_journal_entries_and_list_them_separately():
+def test_excluded_accounts_entries_are_listed_apart():
     p = OdooProvider.__new__(OdooProvider)
 
     def call(model, method, **kw):
-        if model == "account.journal":
-            return [{"id": 1, "code": "DIV", "type": "general"}, {"id": 2, "code": "ACH", "type": "purchase"}]
-        dom = kw["domain"]
-        od_only = any(t[0] == "journal_id" for t in dom if isinstance(t, tuple))
-        rows = [{"date": "2026-07-31", "balance": 21000.0, "account_id": [1, "611010 Loyer Batiment"], "partner_id": False, "journal_id": [1, "DIV"], "move_id": [9, "DIV/2026/07/0001"], "name": "Loyer 01-07/26"},
-                {"date": "2026-07-31", "balance": 1350.0, "account_id": [2, "611011 Entr. Batiment"], "partner_id": [5, "Garden"], "journal_id": [2, "ACH"], "move_id": [10, "GE/1"], "name": "haies"}]
-        return [r for r in rows if (r["journal_id"][0] == 1) == od_only] if od_only else rows
+        assert ("account_id.code", "in", ["611010"]) in kw["domain"]
+        return [{"date": "2026-07-31", "balance": 21000.0, "account_id": [1, "611010 Loyer Batiment"], "move_id": [9, "DIV/2026/07/0001"], "name": "Loyer 01-07/26"}]
     p._call = call
-    acc = p.expenses_lines(2026)
-    assert [a["code"] for a in acc] == ["611011"]                                                              # le loyer d'OD n'entre pas dans les comptes
-    assert [(o["code"], o["amount"], o["move"]) for o in p.expenses_od(2026)] == [("611010", 21000.0, "DIV/2026/07/0001")]
+    assert [(o["code"], o["amount"], o["move"]) for o in p.expenses_excluded(2026)] == [("611010", 21000.0, "DIV/2026/07/0001")]

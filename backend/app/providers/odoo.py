@@ -549,23 +549,14 @@ class OdooProvider:
                 "accounts": [{**a, "total": round(a["total"]), "by_month": {m: round(v) for m, v in a["by_month"].items()}} for a in sorted(accounts.values(), key=lambda a: a["code"])],
                 "pay_by_month": {m: round(v) for m, v in sorted(pay.items())}, "other_by_month": {m: round(v) for m, v in sorted(other.items())}}
 
-    def _od_journals(self) -> set[int]:
-        """Journaux d'opérations diverses (OD) : type EXPENSES_OD_JOURNAL_TYPES ou code EXPENSES_OD_JOURNAL_CODES. Vide si la lecture échoue."""
-        try:
-            rows = self._call("account.journal", "search_read", domain=[], fields=["code", "type"], limit=300)
-        except Exception:
-            log.exception("Journaux indisponibles : les OD ne sont pas distinguées")
-            return set()
-        return {r["id"] for r in rows if r.get("type") in settings.EXPENSES_OD_JOURNAL_TYPES or r.get("code") in settings.EXPENSES_OD_JOURNAL_CODES}
-
-    def expenses_od(self, year: int) -> list[dict]:
-        """Écritures de charges (classe 6) passées par OD sur l'année : exclues des frais généraux, listées à part. Comptes « old » ignorés."""
-        od = self._od_journals()
-        if not od:
+    def expenses_excluded(self, year: int) -> list[dict]:
+        """Écritures de l'année sur les comptes exclus des frais généraux (EXPENSES_EXCLUDED_ACCOUNTS, par exemple le loyer), pour les mentionner à part. Lecture seule."""
+        codes = settings.EXPENSES_EXCLUDED_ACCOUNTS
+        if not codes:
             return []
         lines = self._call("account.move.line", "search_read",
-                           domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), ("account_id.code", "=like", "6%"), ("journal_id", "in", sorted(od))],
-                           fields=["date", "balance", "account_id", "move_id", "name"], limit=5000)
+                           domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), ("account_id.code", "in", codes)],
+                           fields=["date", "balance", "account_id", "move_id", "name"], limit=2000)
         out = []
         for ln in lines:
             code, name = self._code_name(ln["account_id"][1])
@@ -577,12 +568,11 @@ class OdooProvider:
         """Charges de classe 6 de l'année, par compte : total, montant par mois et par fournisseur (débit net). Comptes « old » ignorés. Lecture seule."""
         lines = self._call("account.move.line", "search_read",
                            domain=[("parent_state", "=", "posted"), ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), ("account_id.code", "=like", "6%")],
-                           fields=["date", "balance", "account_id", "partner_id", "journal_id"])
-        od = self._od_journals()
+                           fields=["date", "balance", "account_id", "partner_id"])
         accs: dict[str, dict] = {}
         for ln in lines:
             code, name = self._code_name(ln["account_id"][1])
-            if not code or (ln.get("journal_id") or [0])[0] in od:         # écritures d'OD : à part
+            if not code:
                 continue
             a = accs.setdefault(code, {"code": code, "name": name, "total": 0.0, "by_month": {}, "partners": {}})
             amt = float(ln["balance"] or 0.0)
@@ -601,12 +591,11 @@ class OdooProvider:
         end = date(y + (m == 12), 1 if m == 12 else m + 1, 1)
         lines = self._call("account.move.line", "search_read",
                            domain=[("parent_state", "=", "posted"), ("date", ">=", f"{month}-01"), ("date", "<", end.isoformat()), ("account_id.code", "=like", "6%")],
-                           fields=["date", "balance", "account_id", "partner_id", "move_id", "name", "journal_id"])
-        od = self._od_journals()
+                           fields=["date", "balance", "account_id", "partner_id", "move_id", "name"])
         out = []
         for ln in lines:
             code, name = self._code_name(ln["account_id"][1])
-            if not code or (ln.get("journal_id") or [0])[0] in od:
+            if not code or code in settings.EXPENSES_EXCLUDED_ACCOUNTS:
                 continue
             out.append({"code": code, "name": name, "date": str(ln["date"])[:10], "amount": float(ln["balance"] or 0.0), "partner_id": (ln["partner_id"] or [0, ""])[0],
                         "partner": (ln["partner_id"] or [0, ""])[1] or "(sans fournisseur)", "move": (ln["move_id"] or [0, ""])[1], "label": (ln.get("name") or "")[:120]})

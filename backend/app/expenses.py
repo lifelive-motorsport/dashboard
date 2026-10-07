@@ -99,6 +99,8 @@ def family(code: str, name: str) -> str:
     """« old » (ancien plan, ignoré) | « bu » (achats et sous-traitance par BU) | « staff » | « marketing » | « candidate »."""
     if is_old(name):
         return "old"
+    if code in settings.EXPENSES_EXCLUDED_ACCOUNTS:
+        return "excluded"
     if code in settings.MARKETING_ACCOUNTS:
         return "marketing"
     if code.startswith("62") or code in settings.STAFF_DIRECTOR_PAY or code in settings.STAFF_DIRECTOR_SOCIAL:
@@ -155,7 +157,7 @@ def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
     elsewhere: dict[str, float] = {}
     for a in lines:
         f = family(a["code"], a["name"])
-        if f in ("bu", "staff", "marketing"):
+        if f in ("bu", "staff", "marketing", "excluded"):
             elsewhere[f] = elsewhere.get(f, 0.0) + a["total"]
     accounts = []
     for a in sorted(cand, key=lambda a: a["code"]):
@@ -165,7 +167,7 @@ def accounts_view(lines: list[dict], config: dict, year: int) -> dict:
                            for pid, p in sorted(a["partners"].items(), key=lambda kv: -abs(kv[1]["amount"]))[:80]]
         accounts.append(row)
     return {"year": year, "saved": bool(config.get("saved")), "accounts": accounts,
-            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS, "vehicle_prefixes": settings.EXPENSES_VEHICLE_PREFIXES,
+            "elsewhere": {k: round(v) for k, v in elsewhere.items()}, "marketing_accounts": settings.MARKETING_ACCOUNTS, "excluded_accounts": settings.EXPENSES_EXCLUDED_ACCOUNTS, "vehicle_prefixes": settings.EXPENSES_VEHICLE_PREFIXES,
             "partner_rules": config.get("partners") or {}}
 
 
@@ -258,11 +260,7 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
             "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
 
 
-def od_view(od: list[dict], config: dict, kind: str) -> dict:
-    """Écritures d'OD exclues, sur les comptes retenus pour la rubrique `kind` (une OD sur un compte laissé de côté ne concerne pas cette vue)."""
-    codes = sorted({o["code"] for o in od})
-    sel = effective(config, codes)
-    mine = [o for o in od if sel.get(o["code"]) in (kind, "partners") and family(o["code"], o["name"]) == "candidate"
-            and (sel.get(o["code"]) == kind or ((config.get("partners") or {}).get(o["code"], {}).get("0") == kind))]
-    mine.sort(key=lambda o: (o["date"], o["move"]))
-    return {"total": round(sum(o["amount"] for o in mine), 2), "moves": [{**o, "amount": round(o["amount"], 2)} for o in mine]}
+def excluded_view(lines: list[dict]) -> dict:
+    """Écritures des comptes exclus des frais généraux (le loyer) : total et liste, à mentionner sous le graphique."""
+    mv = sorted(lines, key=lambda o: (o["date"], o["move"]))
+    return {"total": round(sum(o["amount"] for o in mv), 2), "moves": [{**o, "amount": round(o["amount"], 2)} for o in mv]}

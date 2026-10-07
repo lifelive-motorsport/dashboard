@@ -116,4 +116,4 @@ Les comptes de charges retenus se choisissent dans l'application (GENERAL EXPENS
 - Les ressources dont le nom commence par `(Circuit)` ou `(Rally)` (voitures de course) sont ignorées : réglable avec `CALENDAR_EXCLUDE_REGEX`.
 - Réglages facultatifs : `CALENDAR_VEHICLE_REGEX` (ne garder que les ressources dont le nom correspond, par exemple `sprinter|citan|camion|remorque`) et `FUEL_BUFFER_DAYS` (jours avant et après un événement pendant lesquels le véhicule est en déplacement, 3 par défaut).
 
-Les écritures passées par les journaux d'opérations diverses (OD : type « general », ou codes listés dans `EXPENSES_OD_JOURNAL_CODES`) sortent des frais généraux et des véhicules ; elles sont listées sous le graphique de la page Général. `EXPENSES_OD_JOURNAL_TYPES` (par défaut `general`) règle le type de journal concerné.
+`EXPENSES_EXCLUDED_ACCOUNTS` (par défaut `611010`, loyer du bâtiment mis gratuitement à disposition) : comptes sortis des frais généraux et mentionnés sous le graphique de la page Général.

@@ -135,7 +135,7 @@ class DemoProvider:
                                      2: {"name": "ADC St-Vith (comptable)" if code == "613000" else "Fournisseur B", "amount": sum(by.values()) * 0.4, "by_month": {m: v * 0.4 for m, v in by.items()}}}})
         return out
 
-    def expenses_od(self, year: int) -> list[dict]:
+    def expenses_excluded(self, year: int) -> list[dict]:
         return [{"code": "611010", "name": "Loyer Batiment", "date": f"{year}-07-31", "amount": 21000.0, "move": f"DIV/{year}/07/0001", "label": "Loyer 01-07/26"}]
 
     def expenses_month(self, month: str) -> list[dict]:

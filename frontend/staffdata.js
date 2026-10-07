@@ -220,15 +220,15 @@ function sdDrawPeople() {
   const el = document.getElementById('staff-people'); if (!el) return;
   const gate = sdGate(); if (gate) { el.innerHTML = gate; return; }
   if (!sd.acc) sdLoadAcc();
-  const people = sd.doc.people.filter(p => p.active);
+  const people = sd.doc.people.slice().sort((x, y) => (y.active - x.active));      // actifs d'abord ; les personnes sorties ou ponctuelles restent imputables (coût réel)
   people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).forEach(p => sdLoadInvoices(p).then(() => { const t = document.getElementById('sd-alloc-tot'); if (t) t.innerHTML = sdAllocTotals(); }));
   const rows = people.map(p => { const a = p.alloc || {}, used = SD_SHARES.reduce((t, [k]) => t + (+a[k] || 0), 0);
-    return `<tr data-row="${p.id}"><td class="prod">${esc(p.name)}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}${p.function ? ' · ' + esc(p.function) : ''}</small></td><td data-annual="${p.id}">${eur(sdPersonAnnual(p))}</td>`
+    return `<tr data-row="${p.id}"><td class="prod">${esc(p.name)}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}${p.function ? ' · ' + esc(p.function) : ''}${p.active ? '' : ' · <b>inactif</b>'}</small></td><td data-annual="${p.id}">${p.active ? eur(sdPersonAnnual(p)) : eur(sdPersonReal(p)) + '<br><small class="na">réel à ce jour</small>'}</td>`
       + SD_SHARES.map(([k]) => `<td>${sdIn('alloc:' + k, a[k], {pid: p.id, sub: 'alloc', step: '1'})}</td>`).join('') + `<td data-pct="${p.id}" class="${used > 100.0001 ? 'neg' : used < 99.9999 ? 'na' : ''}">${num(used)} %</td></tr>`; });
   el.innerHTML = sdBar()
     + (rows.length ? table(['Personne', 'Coût annualisé'].concat(SD_SHARES.map(s => s[1] + ' (%)'), ['Total']), rows, 'prodtable sdtable sdalloc') : '<p class="na">Aucune personne : créez d’abord les salariés et indépendants dans « Données source ».</p>')
-    + '<h4 class="sub">Coût imputé</h4><div id="sd-alloc-tot">' + sdAllocTotals() + '</div>'
-    + '<small class="na">Pour chaque personne, indiquez le pourcentage de son coût imputé sur chacune des 4 BU et sur Shared Services (fonctions de support et de management). Le total ne doit pas dépasser 100 % ; ce qui n’est pas imputé apparaît en « non imputé ». Seuls les membres actifs sont listés.</small>';
+    + '<h4 class="sub">Coût imputé (personnes actives, annualisé)</h4><div id="sd-alloc-tot">' + sdAllocTotals() + '</div>'
+    + '<small class="na">Pour chaque personne, indiquez le pourcentage de son coût imputé sur chacune des 4 BU et sur Shared Services (fonctions de support et de management). Le total ne doit pas dépasser 100 % ; ce qui n’est pas imputé apparaît en « non imputé ». Les personnes inactives (sorties, missions ponctuelles) sont listées en dessous des actifs : leur imputation sert au mode « Coût réel à ce jour » des pages XC, CARS, Shared Services et Général.</small>';
 }
 
 function sdAllocTotals() {

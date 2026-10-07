@@ -366,7 +366,24 @@ def vehicles_view(lines: list[dict], config: dict, year: int, scope: str = "conf
             "vehicles": [{"vehicle": d["vehicle"], "total": round(d["total"], 2), "share": (d["total"] / total) if total else 0.0,
                           "types": {t: round(v, 2) for t, v in d["types"].items()}, "accounts": d["accounts"], "merged": d.get("merged", []), "identified": is_identified(d["vehicle"]),
                           "by_month": {t: {m: round(x, 2) for m, x in bm.items()} for t, bm in d["by_month"].items()}} for d in sorted(veh.values(), key=lambda d: -d["total"])],
-            "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved"))}
+            "unclassified": [d["accounts"] for d in veh.values() if d["vehicle"] == "(non classé)"], "empty": not mine, "configured": bool(config.get("saved")),
+            "reconciliation": vehicle_reconciliation(lines, config, total) if scope == "all615" else None}
+
+
+def vehicle_reconciliation(lines: list[dict], config: dict, included_total: float) -> dict:
+    """Contrôle comptable de la classe 615 : total des écritures, part ignorée (comptes « old »), part reprise dans l'imputation, écart,
+    et comptes 615 qui seraient aussi comptés dans les frais généraux (double emploi)."""
+    mine = [a for a in lines if any(a["code"].startswith(p) for p in settings.EXPENSES_VEHICLE_PREFIXES)]
+    total = sum(a["total"] for a in mine)
+    old = [a for a in mine if family(a["code"], a["name"]) == "old"]
+    other = [a for a in mine if family(a["code"], a["name"]) not in ("old", "candidate")]
+    sel = effective(config, [a["code"] for a in mine if family(a["code"], a["name"]) == "candidate"])
+    both = [a for a in mine if family(a["code"], a["name"]) == "candidate" and sel.get(a["code"]) in ("general", "partners")]
+    row = lambda a: {"code": a["code"], "name": a["name"], "total": round(a["total"], 2)}  # noqa: E731
+    return {"total": round(total, 2), "old": round(sum(a["total"] for a in old), 2), "old_accounts": [row(a) for a in old],
+            "other": round(sum(a["total"] for a in other), 2), "other_accounts": [row(a) for a in other], "included": round(included_total, 2),
+            "gap": round(total - sum(a["total"] for a in old) - sum(a["total"] for a in other) - included_total, 2),
+            "also_general": [row(a) for a in both]}
 
 
 def excluded_view(lines: list[dict]) -> dict:

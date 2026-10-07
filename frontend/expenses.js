@@ -405,9 +405,18 @@ function exDrawSplit() {
     rowsAll.map(r => `<tr><td class="prod">${esc(r.x.vehicle)}</td><td>${eur(r.x.total)}</td>${EX_SPLIT.map(([k]) => `<td>${amt(r)[k] ? eur(amt(r)[k]) : '–'}</td>`).join('')}<td><small class="na">${r.ret.src}</small></td></tr>`)
       .concat([`<tr class="tot"><td>Total</td><td>${eur(grand)}</td>${EX_SPLIT.map(([k]) => `<td>${eur(tot[k])}</td>`).join('')}<td></td></tr>`, `<tr class="tot"><td>Part</td><td>100,0 %</td>${EX_SPLIT.map(([k]) => `<td>${grand ? pct(tot[k] / grand) : '–'}</td>`).join('')}<td></td></tr>`]), 'prodtable');
   const bad = rowsAll.filter(r => r.ret.src === 'saisi' && Math.abs(r.sum - 100) > 0.5);
+  const rc = v.reconciliation, imputed = Object.values(tot).reduce((a, b) => a + b, 0), unalloc = grand - imputed;
+  const ok = (c) => `<span class="${c ? 'pos' : 'neg'}">${c ? '✔' : '⚠'}</span>`, acc = l => l.map(a => `${esc(a.code)} ${esc(a.name)} (${eur(a.total)})`).join(', ');
+  const control = rc ? '<h4 class="sub">Contrôle : tout ce qui est comptabilisé est imputé</h4>' + table(['Contrôle', 'Montant', ''], [
+    `<tr><td>Total comptable de la classe 615 (Odoo, depuis le 1er janvier)</td><td>${eur(rc.total)}</td><td></td></tr>`,
+    `<tr><td>− comptes « old » ignorés par convention${rc.old_accounts.length ? `<br><small class="na">${acc(rc.old_accounts)}</small>` : ''}</td><td>${eur(rc.old)}</td><td></td></tr>`,
+    rc.other ? `<tr><td>− comptes 615 rangés ailleurs (exclus, personnel, marketing…)<br><small class="na">${acc(rc.other_accounts)}</small></td><td>${eur(rc.other)}</td><td></td></tr>` : '',
+    `<tr><td>= repris dans ce tableau</td><td>${eur(rc.included)}</td><td>${ok(Math.abs(rc.gap) < 0.5)} ${Math.abs(rc.gap) < 0.5 ? 'aucun écart avec la comptabilité' : 'écart non repris : ' + eur(rc.gap)}</td></tr>`,
+    `<tr><td>Imputé aux BU et aux frais généraux avec les % retenus</td><td>${eur(imputed)}</td><td>${ok(Math.abs(unalloc) < 0.5)} ${Math.abs(unalloc) < 0.5 ? 'tout est imputé' : 'non imputé : ' + eur(unalloc) + ' (une ligne saisie ne totalise pas 100 %)'}</td></tr>`,
+    rc.also_general.length ? `<tr><td>Comptes 615 aussi retenus en frais généraux<br><small class="na">${acc(rc.also_general)}</small></td><td>${eur(rc.also_general.reduce((t, a) => t + a.total, 0))}</td><td>${ok(false)} risque de double comptage : à retirer de la rubrique « frais généraux » dans « Données source »</td></tr>` : ''].filter(Boolean), 'prodtable') : '';
   el.innerHTML = `<div class="kpis">${kpi('Frais véhicules depuis le 1er janvier', eur(grand), '', 'tous les comptes de la classe 615')}${kpi('Imputé aux BU', eur(grand - tot.GENERAL), '', 'avec les % retenus')}${kpi('Frais généraux', eur(tot.GENERAL))}</div>`
     + (cal ? '' : `<p class="na">Agenda indisponible : les propositions indicatives placent tout en frais généraux.</p>`)
-    + tbl
+    + control + tbl
     + (canEdit ? `<div class="sdbar"><button type="button" class="primary" data-ex-split-save${ex.splitDirty ? '' : ' disabled'}>Enregistrer les pourcentages</button><span class="${bad.length ? 'neg' : 'na'}">${esc(bad.length ? 'Total différent de 100 % : ' + bad.map(r => r.x.vehicle).join(', ') : (ex.splitMsg || 'Saisissez les % qui seront utilisés pour la marge nette ; une ligne sans saisie utilise la proposition indicative.'))}</span></div>` : '')
     + '<h4 class="sub">Résultat avec les pourcentages retenus</h4>' + res
     + `<small class="na">« Indicatif » : jours de déplacement du véhicule dans l’agenda de chaque BU (réservation ± ${cal ? cal.buffer_days : 3} jours). Les jours Logistics (transports, enlèvements), les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple le carburant des véhicules loués) sont proposés en frais généraux. Dans une ligne que vous renseignez, une case vide compte pour 0 % et le total doit faire 100 %. Les montants couvrent tous les comptes de la classe 615, y compris ceux que vous auriez laissés de côté dans « Données source ».</small>`;

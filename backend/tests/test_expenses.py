@@ -194,3 +194,14 @@ def test_split_config_and_identified():
     with pytest.raises(ValueError):
         expenses.Config.model_validate({"split": {"CITAN": {"LOGISTICS": 10}}})
     assert expenses.is_identified("SPRINTER 1") and not expenses.is_identified("véhicules loués") and not expenses.is_identified("(non classé)")
+
+
+def test_vehicle_reconciliation_accounts_for_every_euro():
+    lines = [{"code": "615100", "name": "Carburant Util. CITAN", "total": 100.0, "by_month": {"2026-03": 100.0}},
+             {"code": "615200", "name": "old - Assurance", "total": 40.0, "by_month": {"2026-03": 40.0}},
+             {"code": "615300", "name": "Carburant véhicules loués", "total": 60.0, "by_month": {"2026-03": 60.0}},
+             {"code": "611000", "name": "Loyer", "total": 999.0, "by_month": {}}]
+    out = expenses.vehicles_view(lines, {"saved": True, "selected": {"615100": "vehicle", "615300": "general"}}, 2026, "all615")
+    r = out["reconciliation"]
+    assert r["total"] == 200.0 and r["old"] == 40.0 and r["included"] == 160.0 and r["gap"] == 0.0
+    assert [a["code"] for a in r["also_general"]] == ["615300"]

@@ -70,8 +70,8 @@ function sdCalcCards(p) {
     return `<div class="kpis">${kpi('Coût société annualisé', eur(c.annual), '', `(${sdEur2(c.brut)} + ${sdEur2(c.patronal)}) × ${num(c.factor)}`)}${kpi('Coût société mensuel', eur(c.monthly))}${kpi('Coût société journalier', sdEur2(c.daily), '', `${num(params.days_per_year * p.fte / 100)} jours / an`)}${kpi('Coût société horaire', sdEur2(c.hourly), '', `${num(p.hours_week / 5)} h / jour`)}${kpi('Coût société journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût société horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`
       + `<small class="na">Rémunération annualisée : ${eur(c.remunAnnual)} · autres coûts récurrents (×12) : ${eur(c.recurringAnnual)} · hors salaire (×12) : ${eur(c.extrasAnnual)}.</small>`;
   }
-  const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, c = SC.independentCosts(p, params, tot, sdMonthsElapsed());
-  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
+  const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0, fees = sdFees(inv), c = SC.independentCosts(p, params, fees, sdMonthsElapsed());
+  return `<div class="kpis">${kpi('Facturé ' + SD_YEAR + ' (HT)', eur(tot), '', inv ? sdPlural(inv.list.length, 'facture') : 'à charger')}${kpi('Honoraires ' + SD_YEAR + ' (comptes 613)', eur(fees), 'adj', inv ? (tot - fees > 0.5 ? `hors ${eur(tot - fees)} de frais avancés` : 'toute la facturation') : 'à charger')}${kpi('Coût annualisé', eur(c.annual), '', `honoraires : moyenne ${eur(c.invoicedMonthlyAvg)} / mois × 12 + hors facture`)}${kpi('Coût mensuel', eur(c.monthly))}${kpi('Coût journalier', sdEur2(c.daily))}${kpi('Coût horaire', sdEur2(c.hourly))}${kpi('Coût journalier ajusté', sdEur2(c.dailyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}${kpi('Coût horaire ajusté', sdEur2(c.hourlyAdj), c.adjFactor === 1 ? '' : 'adj', `facturable ${num(p.billable_pct ?? 100)} % · temps presté ${num(p.hours_pct ?? 100)} %`)}</div>`;
 }
 
 function sdExtras(p) {
@@ -121,8 +121,8 @@ function sdIndependentCompanies(p) {
   const list = !(p.partners || []).length ? '<p class="na">Rattachez une ou plusieurs sociétés Odoo pour faire remonter les factures de cet indépendant.</p>'
     : !inv ? '<p class="na">Chargement des factures…</p>'
     : inv.error ? `<p class="neg">${esc(inv.error)}</p>`
-    : inv.list.length ? table(['Date', 'Facture', 'Référence', 'Société', 'HT', 'TTC', 'Payée'], inv.list.map(x => `<tr><td>${fmtDate(x.date)}</td><td>${esc(x.number)}${x.refund ? ' <small class="na">(avoir)</small>' : ''}</td><td>${esc(x.ref)}</td><td>${esc(x.partner)}</td><td>${sdEur2(x.untaxed)}</td><td>${sdEur2(x.total)}</td><td>${x.paid ? '✓' : '–'}</td></tr>`)
-        .concat([`<tr class="tot"><td>Total ${SD_YEAR}</td><td></td><td></td><td></td><td>${sdEur2(inv.list.reduce((t, x) => t + x.untaxed, 0))}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.total, 0))}</td><td></td></tr>`]), 'prodtable sdtable')
+    : inv.list.length ? table(['Date', 'Facture', 'Référence', 'Société', 'HT', 'Honoraires (613)', 'TTC', 'Payée'], inv.list.map(x => `<tr><td>${fmtDate(x.date)}</td><td>${esc(x.number)}${x.refund ? ' <small class="na">(avoir)</small>' : ''}</td><td>${esc(x.ref)}</td><td>${esc(x.partner)}</td><td>${sdEur2(x.untaxed)}</td><td${Math.abs((x.fees || 0) - x.untaxed) > 0.5 ? ' class="adjv" title="Une partie de la facture n’est pas un honoraire (frais avancés…)"' : ''}>${sdEur2(x.fees || 0)}</td><td>${sdEur2(x.total)}</td><td>${x.paid ? '✓' : '–'}</td></tr>`)
+        .concat([`<tr class="tot"><td>Total ${SD_YEAR}</td><td></td><td></td><td></td><td>${sdEur2(inv.list.reduce((t, x) => t + x.untaxed, 0))}</td><td>${sdEur2(sdFees(inv))}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.total, 0))}</td><td></td></tr>`]), 'prodtable sdtable')
       : `<p class="na">Aucune facture comptabilisée en ${SD_YEAR}.</p>`;
   return `<h4 class="sub">Sociétés et factures</h4><div>${chips || '<small class="na">Aucune société rattachée.</small>'}</div>`
     + (sd.canEdit ? `<div class="sdadd"><input type="text" id="sd-q" placeholder="Rechercher une société Odoo" value="${esc(sd.q)}"> <button type="button" data-sd-search data-pid="${p.id}">Rechercher</button></div>${res}` : '') + list;
@@ -195,10 +195,10 @@ async function sdLoadAcc() {
   return sd.accLoading;
 }
 
+const sdFees = inv => inv ? inv.list.reduce((t, x) => t + (+x.fees || 0), 0) : 0;      // honoraires : lignes des comptes 613 (hors frais avancés)
 function sdPersonCosts(p) {
   if (p.kind === 'salarie') return SC.employeeCosts(p, sd.doc.params, sdSocial(p));
-  const inv = sd.inv[p.id], tot = inv ? inv.list.reduce((t, x) => t + x.untaxed, 0) : 0;
-  return SC.independentCosts(p, sd.doc.params, tot, sdMonthsElapsed());
+  return SC.independentCosts(p, sd.doc.params, sdFees(sd.inv[p.id]), sdMonthsElapsed());
 }
 const sdPersonAnnual = p => sdPersonCosts(p).annual;
 

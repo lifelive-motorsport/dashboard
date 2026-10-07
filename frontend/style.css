@@ -173,3 +173,4 @@ table.prodtable.decomp th:nth-child(2),table.prodtable.decomp td:nth-child(2){te
 input.sdin[type=checkbox]{width:auto}.sdtable td{vertical-align:middle}.sdtable td:first-child{min-width:0}.sdalloc input.sdin{width:76px;text-align:right}
 .sdadd{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}.sdadd input{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font:inherit}
 .sdres{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}.sdpeople{margin-top:8px}
+td.adjv{text-decoration:underline dotted;cursor:help}

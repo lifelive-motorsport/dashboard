@@ -15,6 +15,7 @@ async function nmEnsure() {
         exGet(`/api/expenses/general?year=${EX_YEAR}&kind=general`).then(j => { nm.gen = j; }),
         exGet(`/api/expenses/allocation?year=${EX_YEAR}`).then(j => { nm.alloc = j; }),
         exGet(`/api/expenses/marketing?year=${EX_YEAR}`).then(j => { nm.mk = j; }),
+        exGet(`/api/pnl/unassigned?year=${EX_YEAR}`).then(j => { nm.una = j; }).catch(() => { nm.una = null; }),
         exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`).then(j => { ex.vsplit = j; }),
         exGet(`/api/vehicles/usage?year=${EX_YEAR}`).then(j => { ex.vusage = j; }).catch(() => { ex.vusage = null; }),
       ]);
@@ -79,6 +80,14 @@ function nmControl(res) {
 }
 const nmNote = res => `<small class="na">Du 1er janvier à aujourd’hui. Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel : coût réel à ce jour (fiches de paie et honoraires) × pourcentage d’imputation de chaque personne. Véhicules : pourcentages retenus dans « Imputation des frais véhicules ». Frais communs (Shared Services, frais généraux, véhicules non liés à une BU et marketing commun) : répartis entre XC (${pct(res.shXC)}) et CARS (${pct(res.shCARS)}) selon la clé « ${res.mode === 'pct' ? '% encodé' : 'prorata du CA'} » des frais généraux, puis entre les BU de CARS au prorata de leur chiffre d’affaires. Le marketing rattaché à une BU (comptes 602019, 602059) est déjà dans les coûts directs ; seul le marketing commun (ex. 612050) est ajouté ici. Le loyer (comptes exclus) et l’amortissement des investissements marketing ne sont pas repris.</small>`;
 
+// Comptes de la colonne « Non affecté » : à corriger dans Odoo (suffixe de BU) ou à rattacher à une BU.
+function nmUnassigned(c) {
+  if (!(c.UNASSIGNED.ca || c.UNASSIGNED.dc)) return '';
+  const u = nm.una; if (!u || !u.accounts || !u.accounts.length) return '<small class="na">« Non affecté » : écritures des comptes 700, 602, 603 et 604 dont le suffixe ne correspond à aucune BU. Le détail des comptes n’est pas disponible pour le moment.</small>';
+  return '<h4 class="sub">Comptes « Non affecté » : à rattacher à une BU</h4>' + table(['Compte', 'Libellé', 'Nature', 'Montant'], u.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}</td><td>${a.kind === 'revenue' ? 'Chiffre d’affaires' : 'Coûts directs'}</td><td>${eur(a.amount)}</td></tr>`)
+    .concat([`<tr class="tot"><td></td><td>Chiffre d’affaires ${eur(u.revenue)} · coûts directs ${eur(u.costs)}</td><td></td><td>${eur(u.revenue - u.costs)}</td></tr>`]), 'prodtable')
+    + '<small class="na">Le plan comptable encode la BU dans les trois derniers chiffres du compte (010-016, 019 : XC ; 020 : Modern Rally ; 030 : Historic Rally ; 040 : Historic Racing ; 050, 059 : CARS Others). Un compte avec un autre suffixe n’est rattaché à aucune BU : ni coûts de personnel, ni frais communs ne lui sont imputés, et son chiffre d’affaires manque à XC et CARS.</small>';
+}
 function nmHtml(d, scope) {
   if (!d) return '<p class="na">Chargement…</p>';
   if (sd.loaded && sd.restricted) return '<p class="na">La marge nette inclut les rémunérations : elle est réservée aux administrateurs du dashboard.</p>';
@@ -92,7 +101,8 @@ function nmHtml(d, scope) {
     return bars(items, 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + (b.ca ? pct(b.margin / b.ca) : '–')}) + nmTable(res, carsCols.concat([{label: 'CARS', keys: NM_CARS}])) + nmNote(res); }
   const spec = [{label: 'XC', keys: ['XC']}, {label: 'CARS', keys: NM_CARS}];
   if (c.UNASSIGNED.ca || c.UNASSIGNED.dc) spec.push({label: 'Non affecté', keys: ['UNASSIGNED']});
-  spec.push({label: 'Non imputé', keys: ['UNALLOC']}, {label: 'Total', keys: Object.keys(c)});
-  return nmKpis(tot, '') + nmTable(res, spec) + '<h4 class="sub">Détail des BU de CARS</h4>' + nmTable(res, carsCols) + nmControl(res) + nmNote(res);
+  const un = nmSum(c, ['UNALLOC']); if (Math.abs(un.staff + un.veh + un.shared + un.general + un.vehgen + un.mkt) >= 0.5) spec.push({label: 'Non imputé', keys: ['UNALLOC']});      // masqué quand tout est imputé
+  spec.push({label: 'Total', keys: Object.keys(c)});
+  return nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Détail des BU de CARS</h4>' + nmTable(res, carsCols) + nmControl(res) + nmNote(res);
 }
 const NM_BLOCK = (scope, title) => B('nm-' + scope, title, d => { nm.d = d; nmEnsure(); return `<div class="nm-host" data-scope="${scope}">${nmHtml(d, scope)}</div>`; }, true);

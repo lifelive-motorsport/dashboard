@@ -16,6 +16,9 @@ class DemoProvider:
     def old_plan_revenue(self, d_from: date, d_to: date) -> float:
         return 0.0
 
+    def unassigned_accounts(self, d_from: date, d_to: date) -> list[dict]:
+        return [{"code": "700099", "name": "CA divers sans BU", "kind": "revenue", "amount": round(3_000 * _scale(d_from, d_to), 2)}]
+
     def pnl_balances(self, d_from: date, d_to: date) -> dict[str, float]:
         s = _scale(d_from, d_to)
         ca = {"700010": 1_300_000, "700011": 20_000, "700012": 60_000, "700013": 190_000, "700014": 30_000,

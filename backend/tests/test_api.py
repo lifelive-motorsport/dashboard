@@ -228,3 +228,9 @@ def test_staff_import_zip_adds_people_merges_slips_and_stores_pdfs(monkeypatch):
         assert c.post("/api/staff/import", content=b"pas une archive").status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_pnl_unassigned_demo():
+    c = TestClient(app)
+    r = c.get("/api/pnl/unassigned?year=2026")
+    assert r.status_code == 200 and r.json()["accounts"][0]["code"] == "700099"

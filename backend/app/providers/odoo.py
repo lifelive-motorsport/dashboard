@@ -57,6 +57,22 @@ class OdooProvider:
                 out[m.group(1)] = out.get(m.group(1), 0.0) + row["balance:sum"]
         return out
 
+    def unassigned_accounts(self, d_from: date, d_to: date) -> list[dict]:
+        """Comptes 700/602/603/604 dont le suffixe ne correspond à aucune BU (colonne « Non affecté ») : code, libellé et solde sur la période."""
+        from .. import bu
+        domain = [("parent_state", "=", "posted"), ("date", ">=", d_from.isoformat()), ("date", "<=", d_to.isoformat()),
+                  "|", "|", "|"] + [("account_id.code", "=like", f"{p}%") for p in ("700", "602", "603", "604")]
+        out: dict[str, dict] = {}
+        for row in self._grouped(domain, ["account_id"]):
+            m = re.match(r"^\s*(\d+)\s*(.*)$", row["account_id"][1])
+            if not m:
+                continue
+            c = bu.classify(m.group(1), m.group(2))
+            if c and c.bu == "UNASSIGNED":
+                d = out.setdefault(m.group(1), {"code": m.group(1), "name": m.group(2).strip(), "kind": c.kind, "amount": 0.0})
+                d["amount"] += -row["balance:sum"] if c.kind == "revenue" else row["balance:sum"]
+        return sorted((dict(d, amount=round(d["amount"], 2)) for d in out.values()), key=lambda d: -abs(d["amount"]))
+
     def old_plan_revenue(self, d_from: date, d_to: date) -> float:
         """Produits (comptes 70…) de l'ANCIEN plan comptable, ceux dont le libellé commence par « OLD » : écartés des chiffres
         courants mais indispensables pour comparer avec 2025, année où cet ancien plan était encore utilisé. Montant positif."""

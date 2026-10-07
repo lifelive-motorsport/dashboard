@@ -316,6 +316,18 @@ def expenses_month(month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"), 
     return expenses.month_lines(raw, expenses.store().get()["data"], kind, month)
 
 
+@app.get("/api/pnl/unassigned")
+def pnl_unassigned(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
+    """Comptes de CA et de coûts directs sans BU reconnue (colonne « Non affecté »), du 1er janvier à aujourd'hui."""
+    today = date.today()
+    try:
+        accounts = provider().unassigned_accounts(date(year, 1, 1), today if year == today.year else date(year, 12, 31))
+    except Exception:
+        log.exception("Comptes non affectés indisponibles")
+        raise HTTPException(503, "Comptes non affectés indisponibles pour le moment")
+    return {"accounts": accounts, "revenue": round(sum(a["amount"] for a in accounts if a["kind"] == "revenue"), 2), "costs": round(sum(a["amount"] for a in accounts if a["kind"] != "revenue"), 2)}
+
+
 @app.get("/api/expenses/marketing")
 def expenses_marketing(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
     """Marketing commun (hors comptes déjà rattachés à une BU) pour la marge nette."""

@@ -87,7 +87,10 @@ const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') retur
   // Plusieurs ressources possibles (« TRUCK » : 3 camions) : on écarte celles que les autres véhicules Odoo identifient sans ambiguïté (« GOLD TRU. », « RALLY TRU. »).
   const peers = [...new Set([...((ex.veh || {}).vehicles || []), ...((ex.vfuel || {}).vehicles || [])].map(v => v.vehicle))].filter(n => n && exNorm(n) !== exNorm(veh));
   const taken = new Set(); peers.forEach(n => { const m = all.filter(u => exSameVeh(u.vehicle, n)); if (m.length === 1) taken.add(m[0].vehicle); });
-  const left = c.filter(u => !taken.has(u.vehicle)); return left.length === 1 ? left[0] : undefined; };
+  let left = c.filter(u => !taken.has(u.vehicle));
+  // Les ressources « (TO HIRE) … to rent » sont des véhicules à louer, pas des véhicules de service : dernier départage.
+  if (left.length > 1) { const own = left.filter(u => !/\(to hire\)|to rent/i.test(u.vehicle)); if (own.length) left = own; }
+  return left.length === 1 ? left[0] : undefined; };
 // Liste dédoublonnée : les noms des agendas font foi ; un nom Odoo n'est ajouté que s'il ne correspond à aucun.
 const exVehChoices = (odoo, cal) => { const out = [...new Set(cal)]; (odoo || []).forEach(n => { if (!out.some(c => exNorm(c) === exNorm(n) || exSameVeh(c, n) && cal.filter(k => exSameVeh(k, n)).length === 1)) out.push(n); }); return out; };
 // Part de chaque BU dans les jours de déplacement d'un véhicule (agenda) : {BU: part}, somme = 1 ; vide si le véhicule n'a aucune réservation.

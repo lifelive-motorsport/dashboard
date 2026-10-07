@@ -19,7 +19,7 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','staff/source','staff/people','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -423,6 +423,10 @@ const PAGES = {
   'others/tags': () => tagsBlocks(),
   'staff/source': () => staffSourceBlocks(),
   'staff/people': () => staffPeopleBlocks(),
+  'staff/general': () => staffViewBlocks('general'),
+  'staff/xc': () => staffViewBlocks('xc'),
+  'staff/cars': () => staffViewBlocks('cars'),
+  'staff/shared': () => staffViewBlocks('shared'),
   'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
   'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
@@ -537,7 +541,7 @@ function render(force) {
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
   if (key === 'xc/inventory') loadStock(!!force).then(drawStock);
-  if (key === 'staff/source' || key === 'staff/people') { sdDraw(); sdLoad().then(sdDraw); }
+  if (/^staff\/(source|people|general|xc|cars|shared)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

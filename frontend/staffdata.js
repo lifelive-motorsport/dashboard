@@ -221,7 +221,7 @@ function sdAllocTotals() {
   return `<div class="kpis">${SD_SHARES.map(([k, l]) => kpi(l, eur(tot[k]), '', all ? pct(tot[k] / all) + ' du coût du personnel' : '')).join('')}${tot.UNALLOCATED > 1 ? kpi('Non imputé', eur(tot.UNALLOCATED), 'neg', 'à répartir') : ''}</div>`;
 }
 
-function sdDraw() { sdDrawSource(); sdDrawPeople(); }
+function sdDraw() { sdDrawSource(); sdDrawPeople(); sdDrawView(); }
 
 // ---- Événements ----------------------------------------------------------------------------------------------------
 function sdParse(el) {
@@ -307,4 +307,50 @@ async function sdImport(el) {
     sd.msg = `Import terminé : ${sdPlural(j.added.length, 'personne')} ajoutée${j.added.length > 1 ? 's' : ''}, ${sdPlural(j.merged.length, 'personne')} fusionnée${j.merged.length > 1 ? 's' : ''}, ${sdPlural(j.pdfs, 'PDF')} déposé${j.pdfs > 1 ? 's' : ''}.`;
   } catch (err) { sd.msg = 'Échec de l’import : ' + err.message; }
   sdDraw();
+}
+
+// ---- Affichage des coûts du personnel (Général, XC, CARS, Shared Services) -------------------------------------------
+const SD_VIEWS = {
+  general: {title: 'Coûts du personnel : vue générale', scope: null},
+  xc: {title: 'Coûts du personnel imputés à XC', scope: ['XC']},
+  cars: {title: 'Coûts du personnel imputés à CARS', scope: ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']},
+  shared: {title: 'Coûts du personnel des Shared Services', scope: ['SHARED']},
+};
+function staffViewBlocks(view) {
+  return [{static: `<section class="block" data-bid="staff-view-${view}"><div class="block-head"><h3>${esc(SD_VIEWS[view].title)}</h3></div><div class="block-body" id="staff-view" data-view="${view}"><p class="na">Chargement…</p></div></section>`}];
+}
+const sdLabel = k => (SD_SHARES.find(x => x[0] === k) || [k, k])[1];
+function sdViewRows() {
+  return sd.doc.people.filter(p => p.active).map(p => { const annual = sdPersonAnnual(p), a = SC.allocate(annual, p.alloc); return {p, annual, a}; });
+}
+function sdDrawView() {
+  const el = document.getElementById('staff-view'); if (!el) return;
+  const gate = sdGate(); if (gate) { el.innerHTML = gate; return; }
+  if (!sd.acc) sdLoadAcc();
+  const v = SD_VIEWS[el.dataset.view], rows = sdViewRows(), total = rows.reduce((t, r) => t + r.annual, 0), sum = (r, ks) => ks.reduce((t, k) => t + (r.a[k] || 0), 0);
+  const people = (list, n = rows.length) => `${sdPlural(list.filter(r => r.p.kind === 'salarie').length, 'salarié')} · ${sdPlural(list.filter(r => r.p.kind === 'independant').length, 'indépendant')}`;
+  if (!rows.length) { el.innerHTML = '<p class="na">Aucune personne active : renseignez d’abord « Données source » puis « Imputation du personnel ».</p>'; return; }
+  const note = '<small class="na">Coût annualisé : voir « Données source » (rémunération × coefficient d’annualisation + coûts récurrents et hors salaire ; indépendants : facturé depuis le 1er janvier ramené sur 12 mois). L’imputation provient de « Imputation du personnel ». Attention : les avantages hors salaire (véhicule, carte essence) peuvent aussi figurer dans les pages Service Vehicles ; ne pas les compter deux fois en cumulant les vues.</small>';
+  if (!v.scope) {
+    const groups = [['XC', ['XC']], ['CARS', ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']], ['Shared Services', ['SHARED']], ['Non imputé', ['UNALLOCATED']]];
+    const gt = groups.map(([l, ks]) => [l, rows.reduce((t, r) => t + sum(r, ks), 0)]);
+    const acc = sd.acc && !sd.acc.unavailable ? Object.values(sd.acc.pay_by_month || {}).concat(Object.values((sd.acc.director || {}).pay_by_month || {}), Object.values((sd.acc.director || {}).social_by_month || {})).reduce((t, x) => t + x, 0) : null;
+    const bu = SD_SHARES.map(([k, l]) => { const amt = rows.reduce((t, r) => t + (r.a[k] || 0), 0), who = rows.filter(r => (r.a[k] || 0) > 0);
+      return `<tr><td>${esc(l)}</td><td>${eur(amt)}</td><td>${total ? pct(amt / total) : '–'}</td><td><small class="na">${who.length ? people(who) : '–'}</small></td></tr>`; });
+    const un = rows.reduce((t, r) => t + r.a.UNALLOCATED, 0);
+    el.innerHTML = `<div class="kpis">${kpi('Coût annualisé du personnel', eur(total), '', people(rows))}${gt.filter(([l, x]) => l !== 'Non imputé' || x > 1).map(([l, x]) => kpi(l, eur(x), l === 'Non imputé' ? 'neg' : '', total ? pct(x / total) : '')).join('')}${acc != null ? kpi('Réalisé en comptabilité ' + SD_YEAR, eur(acc), '', 'comptes 620/621 + 618000/618001, depuis le 1er janvier') : ''}</div>`
+      + '<h4 class="sub">Répartition par BU</h4>' + table(['Entité', 'Coût annualisé imputé', 'Part', 'Personnes concernées'], bu.concat(un > 1 ? [`<tr><td>Non imputé</td><td class="neg">${eur(un)}</td><td>${pct(un / total)}</td><td><small class="na">à répartir dans « Imputation du personnel »</small></td></tr>`] : []), 'prodtable')
+      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', 'Coût annualisé', 'XC', 'CARS', 'Shared Services', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
+          `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td></tr>`]), 'prodtable') + note;
+    return;
+  }
+  const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sum(y, v.scope) - sum(x, v.scope)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);
+  const fte = mine.reduce((t, r) => t + v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0) / 100, 0);
+  const multi = v.scope.length > 1, head = ['Personne', 'Type'].concat(multi ? v.scope.map(k => sdLabel(k) + ' (%)') : [], ['Imputé (%)', 'Coût annualisé imputé']);
+  const body = mine.map(r => { const pc = v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0);
+    return `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td>${multi ? v.scope.map(k => `<td>${num(+r.p.alloc[k] || 0)} %</td>`).join('') : ''}<td>${num(pc)} %</td><td>${eur(sum(r, v.scope))}</td></tr>`; });
+  const tail = `<tr class="tot"><td>Total</td><td></td>${multi ? v.scope.map(k => `<td>${num(mine.reduce((t, r) => t + (+r.p.alloc[k] || 0) / 100, 0))} ETP</td>`).join('') : ''}<td>${num(fte)} ETP</td><td>${eur(amt)}</td></tr>`;
+  const split = multi ? '<h4 class="sub">Par BU</h4><div class="kpis">' + v.scope.map(k => { const x = rows.reduce((t, r) => t + (r.a[k] || 0), 0); return kpi(sdLabel(k), eur(x), '', amt ? pct(x / amt) + ' de CARS' : ''); }).join('') + '</div>' : '';
+  el.innerHTML = `<div class="kpis">${kpi('Coût annualisé imputé', eur(amt), '', total ? pct(amt / total) + ' du coût du personnel' : '')}${kpi('Équivalents temps plein imputés', num(fte), '', sdPlural(mine.length, 'personne'))}${kpi('Coût moyen par ETP', fte ? eur(amt / fte) : '–')}</div>`
+    + split + (mine.length ? table(head, body.concat([tail]), 'prodtable') : '<p class="na">Personne n’est imputé ici pour le moment : voir « Imputation du personnel ».</p>') + note;
 }

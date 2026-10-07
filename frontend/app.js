@@ -15,7 +15,6 @@ const MENU = [
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
   ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
-  ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
@@ -42,9 +41,6 @@ const PLAN = {
   'vehicles/byvehicle': ['Coût complet par véhicule (BMW X5, Citan, Sprinter, camions…).', 'Les comptes 615 sont déjà classés par véhicule : prêt à brancher.'],
   'vehicles/usage': ['Taux d’utilisation de chaque véhicule d’après les agendas Google des ressources.',
     'Un accès en lecture aux agendas Google des véhicules et leur convention de nommage.'],
-  'racecars/listing': ['Liste des voitures de course (état, lieu, propriétaire, prochaines échéances).',
-    'Où ces voitures sont gérées dans Odoo (stock, produits, flotte…) et les champs à afficher.'],
-  'racecars/alerts': ['Alertes : échéances (homologation, entretien…), stock bas, etc.', 'La liste des alertes voulues et leur source.'],
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;

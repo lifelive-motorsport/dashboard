@@ -586,6 +586,49 @@ class OdooProvider:
                         "partner": (ln["partner_id"] or [0, ""])[1] or "(sans fournisseur)", "move": (ln["move_id"] or [0, ""])[1], "label": (ln.get("name") or "")[:120]})
         return out
 
+    def fuel_invoices(self, year: int) -> list[dict]:
+        """Factures et avoirs du fournisseur de la carte carburant (FUEL_SUPPLIER_NAME) de l'année, avec leurs pièces jointes et leurs lignes sur les
+        comptes 615 (imputation encodée dans Odoo, par compte = véhicule et nature). Lecture seule."""
+        partners = self._call("res.partner", "search_read", domain=[("name", "ilike", settings.FUEL_SUPPLIER_NAME)], fields=["id"], limit=50)
+        if not partners:
+            return []
+        moves = self._call("account.move", "search_read",
+                           domain=[("move_type", "in", ["in_invoice", "in_refund"]), ("state", "=", "posted"), ("commercial_partner_id", "in", [p["id"] for p in partners]),
+                                   ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")],
+                           fields=["name", "ref", "invoice_date", "date", "amount_untaxed", "amount_total", "payment_state", "move_type"], order="date desc", limit=300)
+        if not moves:
+            return []
+        ids = [m["id"] for m in moves]
+        atts = self._call("ir.attachment", "search_read", domain=[("res_model", "=", "account.move"), ("res_id", "in", ids)], fields=["name", "mimetype", "file_size", "res_id"], limit=1000)
+        lines = self._call("account.move.line", "search_read", domain=[("move_id", "in", ids), ("parent_state", "=", "posted"), ("account_id.code", "=like", "615%")],
+                           fields=["move_id", "balance", "account_id"], limit=5000)
+        out = []
+        for m in moves:
+            sign = -1 if m["move_type"] == "in_refund" else 1
+            ls: dict[str, dict] = {}
+            for ln in lines:
+                if ln["move_id"][0] != m["id"]:
+                    continue
+                code, name = self._code_name(ln["account_id"][1])
+                d = ls.setdefault(code or "", {"code": code or "", "name": name, "amount": 0.0})
+                d["amount"] += float(ln["balance"] or 0.0)
+            out.append({"id": m["id"], "number": m["name"], "ref": m.get("ref") or "", "date": str(m.get("invoice_date") or m["date"]), "untaxed": round(sign * float(m["amount_untaxed"] or 0), 2),
+                        "total": round(sign * float(m["amount_total"] or 0), 2), "paid": m.get("payment_state") in ("paid", "in_payment"), "refund": sign < 0,
+                        "attachments": [{"id": a["id"], "name": a["name"], "mimetype": a.get("mimetype") or "", "size": a.get("file_size") or 0} for a in atts if a["res_id"] == m["id"]],
+                        "lines": [{**v, "amount": round(v["amount"], 2)} for v in ls.values()]})
+        return out
+
+    def fuel_attachment(self, att_id: int, year: int) -> tuple[bytes, str, str] | None:
+        """Contenu d'une pièce jointe d'une facture de la carte carburant (et d'aucune autre : le numéro est vérifié). Retourne (octets, type, nom)."""
+        import base64
+        ok = {a["id"] for inv in self.fuel_invoices(year) for a in inv["attachments"]}
+        if att_id not in ok:
+            return None
+        rows = self._call("ir.attachment", "read", ids=[att_id], fields=["name", "mimetype", "datas"])
+        if not rows or not rows[0].get("datas"):
+            return None
+        return base64.b64decode(rows[0]["datas"]), rows[0].get("mimetype") or "", rows[0].get("name") or ""
+
     def staff_partners(self, q: str) -> list[dict]:
         """Sociétés Odoo dont le nom contient `q` (pour rattacher un indépendant)."""
         rows = self._call("res.partner", "search_read", domain=[("is_company", "=", True), ("name", "ilike", q.strip())],

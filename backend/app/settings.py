@@ -78,3 +78,11 @@ EXPENSES_VEHICLE_PREFIXES = [x.strip() for x in os.getenv("EXPENSES_VEHICLE_PREF
 EXPENSES_DEFAULT_PREFIXES = [x.strip() for x in os.getenv("EXPENSES_DEFAULT_PREFIXES", "611,612,614,64").split(",") if x.strip()]   # comptes proposés au départ comme frais généraux
 STAFF_FEE_PREFIXES = [x.strip() for x in os.getenv("STAFF_FEE_PREFIXES", "613").split(",") if x.strip()]   # comptes des honoraires des indépendants (hors frais avancés, refacturés)
 STAFF_PAY_PREFIXES = [x.strip() for x in os.getenv("STAFF_PAY_PREFIXES", "620,621").split(",") if x.strip()]   # comptes comparés aux fiches de paie : rémunérations et cotisations patronales
+
+# Google Agenda (lecture seule) : réservations des véhicules (ressources) sur les événements de course. Compte de service du dashboard à inviter en lecture
+# sur les agendas listés ; sans CALENDAR_SERVICE_ACCOUNT on réutilise GA_SERVICE_ACCOUNT (usurpation de compte de service, aucune clé stockée).
+CALENDAR_IDS = [x.strip() for x in os.getenv("CALENDAR_IDS", "").split(",") if x.strip()]            # agendas où sont créés les événements de course (adresses d'agenda)
+CALENDAR_SERVICE_ACCOUNT = os.getenv("CALENDAR_SERVICE_ACCOUNT", "") or GA_SERVICE_ACCOUNT
+CALENDAR_VEHICLE_REGEX = os.getenv("CALENDAR_VEHICLE_REGEX", "")                                       # ne garder que les ressources dont le nom correspond (vide : toutes les ressources)
+FUEL_SUPPLIER_NAME = os.getenv("FUEL_SUPPLIER_NAME", "DKV Euro Service")                               # fournisseur des cartes carburant (recherche par nom)
+FUEL_BUFFER_DAYS = int(os.getenv("FUEL_BUFFER_DAYS", "3"))                                              # jours avant / après un événement pendant lesquels le véhicule est en déplacement

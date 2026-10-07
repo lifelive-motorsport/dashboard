@@ -18,7 +18,7 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -36,8 +36,6 @@ const PLAN = {
   'expenses/general': ['Frais généraux (loyer, IT, assurances, divers, véhicules) : total et évolution.',
     'Liste des comptes à inclure et à exclure (honoraires, personnel, véhicules de service).'],
   'expenses/rules': ['Tableau des clés de répartition des frais généraux.', 'Où stocker ces clés et qui peut les modifier.'],
-  'vehicles/fuel': ['Carburant : données encodées dans Odoo croisées avec les factures DKV et l’utilisation des véhicules dans l’agenda Google.',
-    'Une facture DKV type (avec le détail par carte), l’accès en lecture aux agendas des véhicules et leur convention de nommage.'],
   'vehicles/usage': ['Taux d’utilisation de chaque véhicule d’après les agendas Google des ressources.',
     'Un accès en lecture aux agendas Google des véhicules et leur convention de nommage.'],
 };
@@ -420,6 +418,7 @@ const PAGES = {
   'vehicles/source': () => expensesSourceBlocks('vehicle'),
   'vehicles/general': () => expensesGeneralBlocks('vehicle'),
   'vehicles/byvehicle': () => vehiclesByBlocks(),
+  'vehicles/fuel': () => fuelBlocks(),
   'staff/source': () => staffSourceBlocks(),
   'staff/people': () => staffPeopleBlocks(),
   'staff/general': () => staffViewBlocks('general'),
@@ -545,6 +544,7 @@ function render(force) {
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
   if (key === 'vehicles/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'vehicles/general') { exDrawGeneral(); exLoadGeneral('vehicle').then(exDrawGeneral); }
+  if (key === 'vehicles/fuel') { exDrawFuel(); exLoadFuel().then(exDrawFuel); }
   if (key === 'vehicles/byvehicle') { exDrawVehicles(); exLoadVehicles().then(exDrawVehicles); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }

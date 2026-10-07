@@ -44,6 +44,47 @@ function exDrawVehicles() {
     + '<small class="na">Chaque compte de la classe 615 est un véhicule et une nature de dépense (libellé « Nature Util. Véhicule », par exemple « Carburant Util. CITAN »). Le carburant est à contrôler : voir la rubrique Carburant.</small>';
 }
 
+async function exLoadFuel() {
+  try { ex.fuel = await exGet(`/api/fuel?year=${EX_YEAR}`); ex.fuelErr = null; } catch (e) { ex.fuelErr = e.message; }
+  try { if (!ex.veh) ex.veh = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}`); } catch (e) { /* le reste de la page fonctionne sans */ }
+}
+function fuelBlocks() {
+  return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na">Chargement…</p></div></section>'}];
+}
+const exNorm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function exDrawFuel() {
+  const el = document.getElementById('exp-fuel'); if (!el) return;
+  if (ex.fuelErr) { el.innerHTML = `<p class="neg">${esc(ex.fuelErr)}</p>`; return; }
+  const f = ex.fuel; if (!f) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const cal = f.calendar || {}, usage = cal.usage || [];
+  const match = veh => usage.find(u => { const a = exNorm(u.vehicle), b = exNorm(veh); return b !== '(non classe)' && (a.includes(b) || b.includes(a)); });
+  // 1. Carburant encodé dans Odoo, par véhicule, rapproché des jours de réservation de l'agenda
+  const fuelBy = ex.veh ? ex.veh.vehicles.filter(v => v.types.Carburant).map(v => ({vehicle: v.vehicle, fuel: v.types.Carburant, u: match(v.vehicle)})) : [];
+  const tfuel = fuelBy.reduce((t, x) => t + x.fuel, 0);
+  const sec1 = '<h4 class="sub">1. Carburant tel qu’encodé dans Odoo (comptes 615, nature « Carburant »)</h4>' + (fuelBy.length ? table(['Véhicule', 'Carburant depuis le 1er janvier', 'Part', 'Jours de déplacement (agenda)', 'Carburant par jour de déplacement'],
+      fuelBy.sort((a, b) => b.fuel - a.fuel).map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.u ? ` <small class="na">≈ ${esc(x.u.vehicle)}</small>` : ''}</td><td>${eur(x.fuel)}</td><td>${tfuel ? pct(x.fuel / tfuel) : '–'}</td><td>${x.u ? num(x.u.away_days) : '–'}</td><td>${x.u && x.u.away_days ? eur(x.fuel / x.u.away_days) : '–'}</td></tr>`)
+        .concat([`<tr class="tot"><td>Total</td><td>${eur(tfuel)}</td><td>100,0 %</td><td></td><td></td></tr>`]), 'prodtable')
+      + '<small class="na">Rapprochement indicatif par ressemblance de nom entre le véhicule du compte et la ressource de l’agenda.</small>' : '<p class="na">Aucun compte de nature « Carburant » parmi les véhicules de service (voir « Par véhicule »).</p>');
+  // 2. Factures de la carte carburant
+  const sumHt = f.invoices.reduce((t, i) => t + i.untaxed, 0), sum615 = f.invoices.reduce((t, i) => t + i.lines.reduce((u, l) => u + l.amount, 0), 0);
+  const sec2 = `<h4 class="sub">2. Factures ${esc(f.supplier)} ${EX_YEAR}</h4>` + (f.invoices.length ? table(['Date', 'Facture', 'HT', 'Imputé en 615', 'Imputation par véhicule', 'Pièce jointe', ''],
+      f.invoices.map(i => { const im = i.lines.reduce((t, l) => t + l.amount, 0), gap = Math.abs(i.untaxed - im) > 1;
+        return `<tr><td>${fmtDate(i.date)}</td><td>${esc(i.number)}${i.refund ? ' <small class="na">(avoir)</small>' : ''}<br><small class="na">${esc(i.ref)}</small></td><td>${exEur2(i.untaxed)}</td><td class="${gap ? 'neg' : ''}">${exEur2(im)}</td>
+          <td class="prod">${i.lines.map(l => `${esc(l.name)} : ${exEur2(l.amount)}`).join('<br>') || '–'}</td><td>${i.attachments.length ? i.attachments.map(a => esc(a.name)).join('<br>') : '<small class="na">aucune</small>'}</td>
+          <td>${i.attachments.length ? `<button type="button" data-ex-att="${i.attachments[0].id}">Texte extrait</button>` : ''}</td></tr>`; })
+        .concat([`<tr class="tot"><td colspan="2">Total</td><td>${exEur2(sumHt)}</td><td>${exEur2(sum615)}</td><td colspan="3"></td></tr>`]), 'prodtable sdtable') + '<div id="exp-att"></div>'
+      + '<small class="na">« Imputé en 615 » = lignes de la facture sur les comptes 615 : en rouge, un écart avec le HT de la facture (partie imputée ailleurs, ou carburant non ventilé).</small>' : '<p class="na">Aucune facture trouvée pour ce fournisseur (recherche par nom : variable FUEL_SUPPLIER_NAME).</p>');
+  // 3. Agenda
+  let sec3 = '<h4 class="sub">3. Réservations des véhicules dans l’agenda Google</h4>';
+  if (!cal.configured) sec3 += `<p class="na">${esc(cal.note || 'Agenda non configuré.')}</p>`;
+  else if (cal.error) sec3 += `<p class="neg">${esc(cal.error)}</p>`;
+  else sec3 += usage.length ? table(['Ressource (véhicule)', 'Réservations', 'Jours réservés', `Jours de déplacement (± ${cal.buffer_days} j)`, 'Derniers événements'],
+      usage.map(u => `<tr><td class="prod">${esc(u.vehicle)}</td><td>${num(u.events)}</td><td>${num(u.booked_days)}</td><td>${num(u.away_days)}</td><td class="prod"><small class="na">${u.list.slice(-3).map(e => esc(e.title) + ' (' + fmtDate(e.start) + (e.end !== e.start ? ' → ' + fmtDate(e.end) : '') + ')').join('<br>')}</small></td></tr>`), 'prodtable')
+      + `<small class="na">Un véhicule est « en déplacement » de ${cal.buffer_days} jours avant à ${cal.buffer_days} jours après sa réservation : le carburant de ces jours se rattache à l’événement. </small>` : '<p class="na">Aucun événement avec une ressource véhicule trouvé sur la période.</p>';
+  el.innerHTML = sec1 + sec2 + sec3
+    + '<small class="na">Le contrôle croisé (carburant DKV par carte ou plaque, véhicule réservé à la date) se branche une fois l’analyse des lignes de transaction calibrée sur une facture réelle : utilisez « Texte extrait » pour vérifier ce que l’application lit dans la pièce jointe.</small>';
+}
+
 async function exLoadAlloc() {
   try { const j = await exGet(`/api/expenses/allocation?year=${EX_YEAR}`); ex.alloc = j; ex.allocErr = null;
     if (!ex.keyDirty) { ex.keyMode = j.key_mode; ex.keyPct = j.xc_pct; } } catch (e) { ex.allocErr = e.message; }
@@ -153,6 +194,13 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.exAtt !== undefined) {
+    const box = document.getElementById('exp-att'); if (!box) return; box.innerHTML = '<p class="na">Lecture de la pièce jointe…</p>';
+    try { const j = await exGet(`/api/fuel/attachment?att=${t.dataset.exAtt}&year=${EX_YEAR}`);
+      box.innerHTML = `<h4 class="sub">${esc(j.name)} : ${num(j.chars)} caractères lus, ${num(j.candidate_lines.length)} lignes avec date et montant</h4>` + (j.chars ? `<pre class="exatt">${esc(j.text.slice(0, 6000))}</pre>` : '<p class="na">Aucun texte lisible (PDF scanné ou format non reconnu).</p>');
+    } catch (err) { box.innerHTML = `<p class="neg">${esc(err.message)}</p>`; }
+    return;
+  }
   if (t.dataset.exKey !== undefined && ex.alloc) { ex.keyMode = t.dataset.exKey; ex.keyDirty = true; ex.msg = ''; exDrawRules(); return; }
   if (t.dataset.exKeySave !== undefined) {
     ex.msg = 'Enregistrement…'; exDrawRules();

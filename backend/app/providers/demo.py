@@ -141,6 +141,14 @@ class DemoProvider:
                  "partner": "Fournisseur A" if i % 2 == 0 else "ADC St-Vith", "move": f"FACT/{month}/{i:04d}", "label": f"Facture {n}"}
                 for i, (c, n) in enumerate([("611010", "Loyer"), ("612000", "Électricité"), ("612010", "Fournitures"), ("614000", "Publicité"), ("640000", "Taxes")])]
 
+    def fuel_invoices(self, year: int) -> list[dict]:
+        return [{"id": 100 + m, "number": f"DKV/{year}/{m:02d}", "ref": f"DKV-{m:02d}", "date": f"{year}-{m:02d}-28", "untaxed": 1200.0 + 40 * m, "total": 1452.0 + 48 * m, "paid": m < 9, "refund": False,
+                 "attachments": [{"id": 900 + m, "name": f"DKV_{year}_{m:02d}.pdf", "mimetype": "application/pdf", "size": 52000}],
+                 "lines": [{"code": "615021", "name": "Carburant Util. CITAN", "amount": 300.0 + 10 * m}, {"code": "615031", "name": "Carburant Util. SPRINTER", "amount": 900.0 + 30 * m}]} for m in range(1, 10)]
+
+    def fuel_attachment(self, att_id: int, year: int):
+        return b"DKV Euro Service\nRechnung 2026\n12.05.2026 1-ABC-123 Diesel 45,20 L 82,35 EUR\n13.05.2026 1-ABC-123 Diesel 60,00 L 109,20 EUR\n", "text/plain", "demo.txt"
+
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]
 

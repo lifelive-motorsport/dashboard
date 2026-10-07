@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, expenses, ga, settings, staff
+from . import adjustments, dkv, expenses, ga, gcal, settings, staff
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -162,6 +162,49 @@ def put_expenses_config(body: expenses.SaveBody, user: str = Depends(admin)):
 @app.get("/api/expenses/general")
 def expenses_general(year: int = Query(..., ge=2000, le=2100), kind: str = Query("general", pattern="^(general|vehicle)$"), _user: str = Depends(require_user)):
     return expenses.kind_view(_expense_lines(year), expenses.store().get()["data"], year, kind)
+
+
+def _calendar(d_from: date, d_to: date) -> dict:
+    """Réservations de véhicules de l'agenda Google, ou la raison pour laquelle elles manquent."""
+    if settings.PROVIDER == "demo":
+        evs = gcal.demo(d_from, d_to)
+    elif not gcal.configured():
+        return {"configured": False, "note": "Agenda non configuré (variable CALENDAR_IDS) : voir la marche à suivre dans infra/README_DEPLOY.md."}
+    else:
+        try:
+            evs = gcal.events(d_from, d_to)
+        except Exception as e:
+            log.exception("Google Agenda indisponible")
+            return {"configured": True, "error": str(e)[:300]}
+    return {"configured": True, "buffer_days": settings.FUEL_BUFFER_DAYS, "events": len(evs), "usage": gcal.usage(evs, settings.FUEL_BUFFER_DAYS)}
+
+
+@app.get("/api/fuel")
+def fuel(year: int = Query(..., ge=2000, le=2100), _user: str = Depends(require_user)):
+    """Carburant : imputation encodée dans Odoo, factures de la carte carburant et réservations de véhicules dans l'agenda."""
+    try:
+        invoices = provider().fuel_invoices(year)
+    except Exception:
+        log.exception("Factures de la carte carburant indisponibles")
+        raise HTTPException(503, "Factures de la carte carburant indisponibles pour le moment")
+    today = date.today()
+    return {"year": year, "supplier": settings.FUEL_SUPPLIER_NAME, "invoices": invoices,
+            "calendar": _calendar(date(year, 1, 1), today if year == today.year else date(year, 12, 31))}
+
+
+@app.get("/api/fuel/attachment")
+def fuel_attachment(att: int, year: int = Query(..., ge=2000, le=2100), text: bool = True, _user: str = Depends(admin)):
+    """Texte extrait d'une pièce jointe d'une facture de la carte carburant (diagnostic de l'analyse)."""
+    try:
+        got = provider().fuel_attachment(att, year)
+    except Exception:
+        log.exception("Pièce jointe indisponible")
+        raise HTTPException(503, "Pièce jointe indisponible pour le moment")
+    if got is None:
+        raise HTTPException(404, "Pièce jointe introuvable")
+    content, mime, name = got
+    t = dkv.extract_text(content, mime, name)
+    return {"name": name, "mimetype": mime, "size": len(content), "chars": len(t), "text": t[:60000], "candidate_lines": dkv.candidate_lines(t)[:300]}
 
 
 @app.get("/api/expenses/vehicles")

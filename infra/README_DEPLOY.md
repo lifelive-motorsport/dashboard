@@ -108,3 +108,9 @@ Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste foncti
 ## Frais généraux (GENERAL EXPENSES)
 
 Les comptes de charges retenus se choisissent dans l'application (GENERAL EXPENSES › Données source) ; le choix est enregistré dans Firestore (document `dashboard/expenses`) et seuls les `ADMIN_EMAILS` peuvent le modifier. Tant que rien n'est enregistré, la proposition de départ est celle de `EXPENSES_DEFAULT_PREFIXES` (par défaut `611,612,614,640`). Les achats par BU (60x), le personnel (62x, 618) et le marketing (`MARKETING_ACCOUNTS`) sont traités dans leurs propres rubriques.
+
+## Carburant et agenda des véhicules (SERVICE VEHICLES)
+
+- **Factures de la carte carburant** : lues dans Odoo (lecture seule) chez le fournisseur dont le nom contient `FUEL_SUPPLIER_NAME` (par défaut « DKV Euro Service »), avec leurs pièces jointes. Le texte des PDF est extrait côté serveur (bibliothèque `pypdf`).
+- **Agenda Google** : les véhicules sont des ressources invitées aux événements. Étapes : (1) activer l'API Google Calendar du projet (`gcloud services enable calendar-json.googleapis.com`) ; (2) partager en lecture, avec l'adresse du compte de service du dashboard (`dashboard-run@…`), l'agenda où sont créés les événements de course ; (3) renseigner `CALENDAR_IDS` (adresses d'agenda séparées par des virgules) sur Cloud Run. Le compte de service est le même que pour Google Analytics (`GA_SERVICE_ACCOUNT`, usurpation sans clé) ; `CALENDAR_SERVICE_ACCOUNT` permet d'en indiquer un autre.
+- Réglages facultatifs : `CALENDAR_VEHICLE_REGEX` (ne garder que les ressources dont le nom correspond, par exemple `sprinter|citan|camion|remorque`) et `FUEL_BUFFER_DAYS` (jours avant et après un événement pendant lesquels le véhicule est en déplacement, 3 par défaut).

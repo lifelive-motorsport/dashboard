@@ -92,3 +92,17 @@ gcloud run services update dashboard --region=europe-west1 \
 Dans Google Analytics (Admin › Gestion des accès à la propriété) : ajouter `dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com` avec le rôle **Lecteur**.
 
 Variables : `GA_PROPERTY_ID` (identifiant NUMÉRIQUE de la propriété, pas « G-… »), ou une propriété par site : `GA_PROPERTY_XC`, `GA_PROPERTY_GS`, `GA_PROPERTY_SITE` ; noms d'hôte : `GA_HOST_XC` (www.lifelive-motorsport.com), `GA_HOST_GS` (www.goldspeedtires-xc.com), `GA_HOST_SITE` (par défaut GA_HOST_XC) ; `GA_SHOP_PATH` (/shop).
+
+## Fiches de paie (STAFF costs › Données source)
+
+Les rémunérations sont des données sensibles : tout le personnel (salariés, indépendants, fiches de paie) n'est lisible et modifiable que par les adresses de `ADMIN_EMAILS`. Pour pouvoir déposer les PDF des fiches de paie, créez un bucket **privé** :
+
+```
+gcloud config set project lifelive-dashboard-app
+gcloud storage buckets create gs://lifelive-dashboard-payslips --location=europe-west1 --uniform-bucket-level-access --public-access-prevention
+gcloud storage buckets add-iam-policy-binding gs://lifelive-dashboard-payslips \
+  --member="serviceAccount:dashboard-run@lifelive-dashboard-app.iam.gserviceaccount.com" --role=roles/storage.objectAdmin
+gcloud run services update dashboard --region=europe-west1 --update-env-vars="STAFF_BUCKET=lifelive-dashboard-payslips"
+```
+
+Sans `STAFF_BUCKET`, le dépôt de PDF est désactivé mais tout le reste fonctionne (les chiffres se saisissent à la main). `STAFF_PAY_PREFIXES` (par défaut `620,621`) désigne les comptes comparés aux fiches de paie.

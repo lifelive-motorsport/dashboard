@@ -12,14 +12,14 @@ const MENU = [
   ['overview', 'Overview', [['ca','CA'], ['mb','MB'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
-  ['staff', 'STAFF costs', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['rules','Règles de répartition']]],
+  ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services']]],
   ['expenses', 'GENERAL EXPENSES', [['general','Général'], ['xc','XC'], ['cars','CARS'], ['rules','Règles de répartition']]],
   ['vehicles', 'SERVICE VEHICLES', [['general','Général'], ['byvehicle','Par véhicule'], ['usage','Taux d’utilisation']]],
   ['racecars', 'RACE CARS', [['listing','Listing'], ['alerts','Alertes']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','staff/source','staff/people','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -34,8 +34,6 @@ const PLAN = {
   'staff/xc': ['Part du personnel imputée à XC selon la règle de répartition.', 'La règle de répartition validée.'],
   'staff/cars': ['Part du personnel imputée à chaque BU de CARS (clés nominatives par personne).', 'Les clés nominatives validées et à jour.'],
   'staff/shared': ['Coûts des Shared Services (indépendante, polyvalent, Managing Director).', 'Décider si ces coûts sont affichés et comment ils sont répartis.'],
-  'staff/rules': ['Tableau des clés de répartition du personnel, consultable par les actionnaires.',
-    'Où stocker ces clés (dans l’application) et qui peut les modifier.'],
   'expenses/general': ['Frais généraux (loyer, IT, assurances, divers, véhicules) : total et évolution.',
     'Liste des comptes à inclure et à exclure (honoraires, personnel, véhicules de service).'],
   'expenses/xc': ['Part des frais généraux imputée à XC (50 % dans l’analyse de septembre).', 'La règle de répartition validée.'],
@@ -423,6 +421,8 @@ const PAGES = {
   'xc/inventory': () => stockBlocks(),
   'marketing/expenses': () => marketingBlocks(),
   'others/tags': () => tagsBlocks(),
+  'staff/source': () => staffSourceBlocks(),
+  'staff/people': () => staffPeopleBlocks(),
   'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
   'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
@@ -537,6 +537,7 @@ function render(force) {
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
   if (key === 'xc/inventory') loadStock(!!force).then(drawStock);
+  if (key === 'staff/source' || key === 'staff/people') { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

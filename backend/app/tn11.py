@@ -61,18 +61,19 @@ def is_labour(product: dict, patterns: list[str], uom: str = "") -> str | None:
     return None
 
 
-def explode(prod_id: int, qty: float, boms: dict[int, dict], info: dict[int, dict], depth: int = 0, path: tuple = (), uom: str = "") -> list[dict]:
+def explode(prod_id: int, qty: float, boms: dict[int, dict], info: dict[int, dict], depth: int = 0, path: tuple = (), uom: str = "", top: tuple | None = None) -> list[dict]:
     """Composants (feuilles) d'un article à la quantité `qty`, en descendant dans les nomenclatures des sous-ensembles (profondeur 5 max).
     Retourne [{product, qty, depth, uom}] ; un article sans nomenclature est une feuille. Les opérations (temps de poste de travail) sont retournées avec product=None."""
     bom = boms.get(prod_id)
     if not bom or depth >= 5 or prod_id in path:
-        return [{"product": prod_id, "qty": qty, "depth": depth, "uom": uom}]
+        return [{"product": prod_id, "qty": qty, "depth": depth, "uom": uom, "top": top}]
     out = []
     base = bom["qty"] or 1.0
     for ln in bom["lines"]:
-        out.extend(explode(ln["product"], qty * ln["qty"] / base, boms, info, depth + 1, path + (prod_id,), ln.get("uom", "")))
+        q = qty * ln["qty"] / base
+        out.extend(explode(ln["product"], q, boms, info, depth + 1, path + (prod_id,), ln.get("uom", ""), top or (ln["product"], q, ln.get("uom", ""))))
     for op in bom["operations"]:
-        out.append({"product": None, "op": op, "qty": qty / base, "depth": depth + 1})
+        out.append({"product": None, "op": op, "qty": qty / base, "depth": depth + 1, "top": top})
     return out
 
 
@@ -99,7 +100,7 @@ def line_costs(prod_id: int, qty: float, boms, info, unit_real, unit_info=None) 
             counted = op["cost_hour"] > 0          # opération à coût horaire nul : temps indicatif, non compté (souvent doublon d'une ligne « Heure … » de la nomenclature)
             labour.append({"kind": "operation", "label": f"{op['name']} ({op['workcenter']})", "minutes": round(minutes, 1) if counted else 0.0, "cost": round(cost, 2),
                            "reason": "" if counted else f"coût horaire nul : {round(minutes, 1)} min indicatives, non comptées"})
-            detail.append({"ref": "", "name": f"Opération : {op['name']} ({op['workcenter']})", "qty": round(minutes / 60, 3), "uom": "h", "odoo": op["cost_hour"], "unit": op["cost_hour"], "cost": round(cost, 2), "source": "opération", "labour": True, "warn": False})
+            detail.append({"ref": "", "name": f"Opération : {op['name']} ({op['workcenter']})", "qty": round(minutes / 60, 3), "uom": "h", "odoo": op["cost_hour"], "unit": op["cost_hour"], "cost": round(cost, 2), "source": "opération", "labour": True, "warn": False, "depth": part["depth"], "top": _top(part, info)})
             comp_real += cost
             continue
         ci = info.get(part["product"], {})
@@ -121,11 +122,20 @@ def line_costs(prod_id: int, qty: float, boms, info, unit_real, unit_info=None) 
             labour.append({"kind": "article", "label": f"[{ci.get('ref', '')}] {ci.get('name', '')}", "minutes": round(part["qty"] * 60, 1) if hours else None, "cost": round(cost, 2), "reason": reason})
         inf = (unit_info or {}).get(part["product"]) or {}
         detail.append({"ref": ci.get("ref", ""), "name": ci.get("name", ""), "qty": round(part["qty"], 4), "uom": part.get("uom", ""), "odoo": round(odoo_unit, 4), "real_unit": None if real_unit is None else round(real_unit, 4), "unit": round(unit, 4),
-                       "cost": round(cost, 2), "source": source, "labour": bool(reason), "warn": warn, "purchased_qty": inf.get("qty"), "buy_source": inf.get("source"), "buy_flags": inf.get("flags", [])})
+                       "cost": round(cost, 2), "source": source, "labour": bool(reason), "warn": warn, "purchased_qty": inf.get("qty"), "buy_source": inf.get("source"), "buy_flags": inf.get("flags", []), "depth": part["depth"], "top": _top(part, info)})
         comp_real += cost
     own_labour = is_labour(p, pats)
     return {"has_bom": has_bom, "real": round(comp_real, 2), "labour": labour, "labour_cost": round(sum(l["cost"] for l in labour), 2),
-            "labour_minutes": round(sum(l["minutes"] or 0 for l in labour), 1), "self_labour": own_labour, "flags": sorted(flags), "components": len(parts), "parts": detail[:120]}
+            "labour_minutes": round(sum(l["minutes"] or 0 for l in labour), 1), "self_labour": own_labour, "flags": sorted(flags), "components": len(parts), "parts": detail[:400]}
+
+
+def _top(part: dict, info: dict) -> dict | None:
+    """Ligne de premier niveau de la nomenclature de la ligne vendue à laquelle appartient ce composant (les sous-ensembles sont ouverts récursivement)."""
+    t = part.get("top")
+    if not t:
+        return None
+    ti = info.get(t[0], {})
+    return {"id": t[0], "ref": ti.get("ref", ""), "name": ti.get("name", ""), "qty": round(t[1], 4), "uom": t[2], "odoo": round(ti.get("cost", 0.0), 4)}
 
 
 def margins_labour_patterns() -> list[str]:

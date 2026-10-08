@@ -1,7 +1,7 @@
 // XC Detail › Contrôle des marges s/ TN11 : on dépose le PDF d'un devis ; chaque ligne vendue (marquée « x ») est comparée à Odoo :
 // prix de vente propre de l'article, coût Odoo (théorique), coût réel estimé (nomenclature Odoo + achats réels + transport) et main-d'œuvre rendue visible.
 // Chargé avant app.js ; utilise ses fonctions (esc, num, kpi, table, fmtDate…) au moment de l'appel.
-let tn = {open: new Set(), rep: null, loading: false, error: null, name: '', grouped: true, sort: {k: 'devis', dir: 'asc'}};
+let tn = {open: new Set(), openTop: new Set(), rep: null, loading: false, error: null, name: '', grouped: true, sort: {k: 'devis', dir: 'asc'}};
 // Colonnes triables : clé -> [libellé, valeur d'une ligne, valeur d'un groupe (calculée sur ses lignes retrouvées)]
 const TN_COLS = {ref: ['Réf.'], name: ['Désignation'], qty: ['Qté'], sale: ['Prix de vente'], odoo: ['Coût Odoo'], real: ['Coût réel estimé'], mtheo: ['Marge théorique'], mreal: ['Marge réelle'], labour: ['Main-d’œuvre']};
 const TN_SORTS = [['devis', 'Ordre du devis'], ['sale', 'Prix de vente'], ['odoo', 'Coût Odoo'], ['real', 'Coût réel estimé'], ['mtheo', 'Marge théorique'], ['mreal', 'Marge réelle'], ['gap', 'Écart entre les deux marges'], ['labour', 'Main-d’œuvre'], ['name', 'Désignation'], ['ref', 'Référence']];
@@ -46,9 +46,21 @@ function tnLabourSection(rep) {
     + '<small class="na">La main-d’œuvre est repérée de trois façons : (1) les opérations des nomenclatures Odoo (temps × coût horaire du poste de travail) ; (2) les composants qui sont des articles de type service ou dont le nom ou la catégorie contient un motif de main-d’œuvre (' + esc((rep.labour_like || []).slice(0, 8).join(', ')) + '…) ; (3) les lignes vendues qui sont elles-mêmes de la main-d’œuvre. Elle est déjà comprise dans le coût réel ; elle est isolée ici pour la rendre visible.</small>';
 }
 
+function tnPartRow(p, ind) {
+  return `<tr class="${p.warn ? 'tn-warn' : ''}"><td>${esc(p.ref)}</td><td class="prod" style="padding-left:${ind}px">${p.labour ? '🛠 ' : ''}${esc(p.name)}</td><td>${num(p.qty)} ${esc(p.uom || '')}</td><td>${tnEur(p.odoo)}</td><td>${p.real_unit == null ? '–' : tnEur(p.real_unit)}</td><td>${tnEur(p.unit)}</td><td>${tnEur(p.cost)}</td><td>${p.warn ? '<b class="neg">⚠ ' : '<small class="na">'}${esc(p.source)}${p.purchased_qty != null ? ' · ' + num(p.purchased_qty) + ' achetés' : ''}${(p.buy_flags || []).length ? ' · ' + esc(p.buy_flags.join(', ')) : ''}${p.warn ? '</b>' : '</small>'}</td></tr>`;
+}
+
+// Détail d'une ligne vendue : une ligne par ligne de la nomenclature Odoo (premier niveau) ; les sous-ensembles (qui ont leur propre nomenclature) se déplient sur leurs composants.
 function tnParts(r) {
-  const rows = r.parts.map(p => `<tr class="${p.warn ? 'tn-warn' : ''}"><td>${esc(p.ref)}</td><td class="prod">${p.labour ? '🛠 ' : ''}${esc(p.name)}</td><td>${num(p.qty)} ${esc(p.uom || '')}</td><td>${tnEur(p.odoo)}</td><td>${p.real_unit == null ? '–' : tnEur(p.real_unit)}</td><td>${tnEur(p.unit)}</td><td>${tnEur(p.cost)}</td><td>${p.warn ? '<b class="neg">⚠ ' : '<small class="na">'}${esc(p.source)}${p.purchased_qty != null ? ' · ' + num(p.purchased_qty) + ' achetés' : ''}${(p.buy_flags || []).length ? ' · ' + esc(p.buy_flags.join(', ')) : ''}${p.warn ? '</b>' : '</small>'}</td></tr>`).join('');
-  return `<tr class="tn-detail"><td colspan="9"><table class="prodtable"><thead><tr><th>Réf.</th><th>Composant</th><th>Quantité</th><th>Coût Odoo unit.</th><th>Coût réel unit.</th><th>Retenu</th><th>Coût</th><th>Source</th></tr></thead><tbody>${rows}</tbody></table>${r.components > r.parts.length ? '<small class="na">Détail limité aux ' + r.parts.length + ' premiers composants.</small>' : ''}</td></tr>`;
+  const groups = [];
+  r.parts.forEach(p => { const t = p.top || {id: 0, ref: '', name: 'Opérations', qty: 1, uom: ''}; let g = groups.find(x => x.t.id === t.id && x.t.ref === t.ref); if (!g) groups.push(g = {t, parts: []}); g.parts.push(p); });
+  const body = groups.map(g => {
+    const single = g.parts.length === 1 && g.parts[0].depth <= 1, key = r.id + ':' + g.t.id, open = tn.openTop.has(key), cost = g.parts.reduce((a, p) => a + p.cost, 0);
+    if (single) return tnPartRow(g.parts[0], 4);
+    const warn = g.parts.some(p => p.warn);
+    return `<tr class="tn-sub"><td>${esc(g.t.ref)}</td><td class="prod"><button type="button" class="tnopen" data-tnsub="${key}">${open ? '▾' : '▸'}</button> <b>${esc(g.t.name)}</b> <small class="na">sous-ensemble · ${g.parts.length} composants</small>${warn ? ' <span class="neg">⚠</span>' : ''}</td><td>${num(g.t.qty)} ${esc(g.t.uom || '')}</td><td>${tnEur(g.t.odoo)}</td><td></td><td></td><td><b>${tnEur(cost)}</b></td><td></td></tr>` + (open ? g.parts.map(p => tnPartRow(p, 18)).join('') : '');
+  }).join('');
+  return `<tr class="tn-detail"><td colspan="9"><table class="prodtable"><thead><tr><th>Réf.</th><th>Ligne de la nomenclature</th><th>Quantité</th><th>Coût Odoo unit.</th><th>Coût réel unit.</th><th>Retenu</th><th>Coût</th><th>Source</th></tr></thead><tbody>${body}</tbody></table>${r.components > r.parts.length ? '<small class="na">Détail limité aux ' + r.parts.length + ' premiers composants.</small>' : ''}</td></tr>`;
 }
 
 function tnOutliers(rep) {
@@ -97,6 +109,7 @@ function drawTn11() {
 document.addEventListener('change', e => { if (e.target.id === 'tn11-file' && e.target.files && e.target.files[0]) tnUpload(e.target.files[0]); });
 document.addEventListener('change', e => { if (e.target.id === 'tn11-sort') { const [k, dir] = e.target.value.split(':'); tn.sort = {k, dir}; drawTn11(); } });
 document.addEventListener('click', e => {
+  const sb = e.target.closest('[data-tnsub]'); if (sb) { const k = sb.dataset.tnsub; tn.openTop.has(k) ? tn.openTop.delete(k) : tn.openTop.add(k); drawTn11(); return; }
   const ob = e.target.closest('[data-tnopen]'); if (ob) { const id = +ob.dataset.tnopen; tn.open.has(id) ? tn.open.delete(id) : tn.open.add(id); drawTn11(); return; }
   if (e.target.id === 'tn11-group') { tn.grouped = !tn.grouped; drawTn11(); return; }
   const th = e.target.closest('th[data-tnk]'); if (th) { const k = th.dataset.tnk; tn.sort = tn.sort.k === k ? (tn.sort.dir === 'asc' ? {k, dir: 'desc'} : {k: 'devis', dir: 'asc'}) : {k, dir: 'asc'}; drawTn11(); }

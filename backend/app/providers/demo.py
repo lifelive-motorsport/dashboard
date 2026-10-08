@@ -177,6 +177,24 @@ class DemoProvider:
         rows = build_rows(prods, real, 0.03)
         return {"rows": rows, "summary": summary(rows), "pif_field": "x_pif", "lookback_months": 24, "since": "2024-10-01", "real_error": None, "freight": {"pool": 3200.0, "rate": 0.03, "accounts": "602010"}}
 
+    def tn11_data(self, refs: list[str], freight_rate: float = 0.0) -> dict:
+        """Données de démonstration : prix et coûts déterministes ; les références finissant par 0 ont une nomenclature (2 composants + 1 opération), par 5 sont de la main-d'œuvre."""
+        info, products, boms, unit = {}, {}, {}, {}
+        for i, ref in enumerate(refs):
+            n = int("".join(c for c in ref if c.isdigit()) or 0)
+            pid = 1000 + i
+            sale = 100.0 + n % 97
+            info[pid] = {"id": pid, "ref": ref, "name": f"Article {ref}", "sale": sale, "cost": round(sale * 0.6, 2), "type": "service" if ref.endswith("5") else "consu", "categ": "TN11", "tmpl": pid}
+            products[ref] = info[pid]
+            if ref.endswith("0"):
+                for j in (1, 2):
+                    cid = 5000 + pid * 10 + j
+                    info[cid] = {"id": cid, "ref": f"C{ref}{j}", "name": f"Composant {j} de {ref}", "sale": 20.0 * j, "cost": 12.0 * j, "type": "consu", "categ": "Pièces", "tmpl": cid}
+                    unit[cid] = 15.0 * j
+                boms[pid] = {"qty": 1.0, "lines": [{"product": 5000 + pid * 10 + 1, "qty": 2.0}, {"product": 5000 + pid * 10 + 2, "qty": 1.0}],
+                             "operations": [{"name": "Soudure et montage", "workcenter": "Atelier châssis", "minutes": 90.0, "cost_hour": 45.0}]}
+        return {"products": products, "boms": boms, "info": info, "unit_real": unit, "bom_error": None}
+
     def stock_report(self) -> dict:
         from ..stock import build_report
         rnd = random.Random(5)

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar
+from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar, tn11
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -129,6 +129,46 @@ def xc_margins(refresh: bool = False, _user: str = Depends(require_user)):
         raise HTTPException(502, "Contrôle des marges momentanément indisponible")
     _margins_cache["m"] = (time.time(), data)
     return data
+
+
+def _freight_rate() -> float:
+    """Taux de transport (part du prix de vente) utilisé pour le coût réel des articles : celui du contrôle des marges s/ produits."""
+    hit = _margins_cache.get("m")
+    if not hit:
+        try:
+            data = {**provider().margin_products(), "as_of": date.today().isoformat(), "source": provider().name}
+            _margins_cache["m"] = hit = (time.time(), data)
+        except Exception:
+            log.exception("Taux de transport indisponible pour le contrôle TN11")
+            return 0.0
+    return float(((hit[1] or {}).get("freight") or {}).get("rate") or 0.0)
+
+
+def _tn11_report(text: str) -> dict:
+    parsed = tn11.parse_quote(text)
+    sold = [l for l in parsed["lines"] if l["included"]]
+    if not sold:
+        raise HTTPException(422, "Aucune ligne vendue (colonne « INCLUS (X) ») dans ce document : est-ce bien un devis TN11 ?")
+    rate = _freight_rate()
+    try:
+        data = provider().tn11_data(sorted({l["ref"] for l in sold if l["ref"]}), rate)
+    except Exception:
+        log.exception("Données Odoo du devis TN11 indisponibles")
+        raise HTTPException(502, "Odoo est momentanément injoignable")
+    rep = tn11.build_report(parsed, data["products"], data["boms"], data["info"], data["unit_real"].get, rate)
+    return {**rep, "bom_error": data.get("bom_error"), "labour_like": [x.strip() for x in settings.TN11_LABOUR_LIKE.split(",") if x.strip()], "as_of": date.today().isoformat(),
+            "lines_total": len(parsed["lines"])}
+
+
+@app.post("/api/xc/tn11/check")
+async def tn11_check(request: Request, _user: str = Depends(require_user)):
+    """Contrôle d'un devis TN11 (PDF envoyé tel quel dans le corps de la requête) : prix de vente, coût Odoo, coût réel estimé, main-d'œuvre. Le PDF n'est pas conservé."""
+    body = await request.body()
+    if not body.startswith(b"%PDF"):
+        raise HTTPException(422, "Envoyez le PDF du devis")
+    if len(body) > 8_000_000:
+        raise HTTPException(413, "PDF trop volumineux (8 Mo maximum)")
+    return _tn11_report(dkv.extract_text(body, "application/pdf", "devis.pdf"))
 
 
 @app.get("/api/stock")

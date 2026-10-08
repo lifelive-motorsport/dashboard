@@ -112,6 +112,43 @@ document.addEventListener('click', async e => {
     await exRestoreSplit(); await exRestoreKey(); nmRedraw(); sdDraw();
   }
 });
+// Hypothèses d'imputation : ce sur quoi repose le résultat, avec les valeurs en vigueur (référence ou simulation) et les points d'attention.
+function nmAssumptions(res) {
+  const c = res.cols, li = a => '<ul>' + a.filter(Boolean).map(x => `<li>${x}</li>`).join('') + '</ul>';
+  const blk = (title, how, watch) => `<details class="nmhyp"><summary>${title}</summary><div><b>Méthode</b>${li(how)}<b>Points d’attention</b>${li(watch)}</div></details>`;
+  const rows = sdViewRows(true), people = rows.filter(r => r.annual > 0), unalloc = people.filter(r => (r.a.UNALLOCATED || 0) > 1), withSplit = people.filter(r => Object.values(r.p.common_split || {}).some(v => v > 0)), inactive = people.filter(r => !r.p.active);
+  const vrows = exSplitRows(ex.vsplit), saisi = vrows.filter(r => r.ret.src === 'saisi'), forced = vrows.filter(r => r.x.forced), fgVeh = vrows.reduce((t, r) => t + r.x.total * r.ret.p.GENERAL, 0);
+  const gen = nm.gen || {}, mk = nm.mk || {}, un = c.UNASSIGNED, key = res.mode === 'pct' ? '% encodé' : 'prorata du CA';
+  const adj = typeof adjOn !== 'undefined' && adjOn;
+  return '<h4 class="sub">Hypothèses d’imputation</h4><p class="na">Ce résultat repose sur les hypothèses ci-dessous. Elles sont modifiables dans STAFF costs, SERVICE VEHICLES et GENERAL EXPENSES' + (nmSimulating() ? ' (vos modifications sont une simulation)' : '') + '.</p>'
+    + blk('Période et périmètre',
+      ['Du 1er janvier à aujourd’hui, comptabilité Odoo (écritures comptabilisées). Les comptes dont le libellé commence par « old » sont ignorés.', 'Marge nette = marge brute − personnel − frais véhicules − frais généraux − marketing commun.', adj ? '<b>Les ajustements de marge brute sont activés</b> : la marge brute en tient compte.' : 'Marge brute comptable, sans ajustement (voir « Ajustements MB »).'],
+      ['Le résultat comptable de l’exercice contient aussi les amortissements, les comptes « old », les frais financiers et le loyer : voir « Éléments hors marge nette ».', 'Les montants sont à date : un mois en cours est partiel.'])
+    + blk('Marge brute (CA et coûts directs)',
+      ['Chaque compte 700 (CA) et 602, 603, 604 (coûts directs) est rattaché à une BU par ses trois derniers chiffres : 010-016 et 019 XC, 020 Modern Rally, 030 Historic Rally, 040 Historic Racing, 050 et 059 CARS Others.'],
+      [`Les comptes sans BU reconnue (« Non affecté ») pèsent ${eur(un.ca)} de CA et ${eur(un.dc)} de coûts : ils ne reçoivent aucun coût de structure.`, 'Le marketing rattaché à une BU (602019, 602059) est déjà dans ses coûts directs.'])
+    + blk('Personnel : part directe des BU',
+      ['Coût réel à ce jour de chaque personne : fiches de paie (brut + cotisations patronales, primes et pécule compris), coûts récurrents, et honoraires facturés pour les indépendants (comptes 613, hors frais avancés).', 'Multiplié par le pourcentage d’imputation que vous avez saisi pour chaque personne sur XC, Modern Rally, Historic Rally et Historic Racing.'],
+      [`${people.length} personnes comptées${inactive.length ? `, dont ${inactive.length} inactive${inactive.length > 1 ? 's' : ''} (sorties ou ponctuelles)` : ''}.`, unalloc.length ? `<b class="neg">${unalloc.length} personne${unalloc.length > 1 ? 's' : ''} ${unalloc.length > 1 ? 'ont' : 'a'} moins de 100 % imputés</b> : le solde est « non imputé » (${unalloc.map(r => esc(r.p.name)).join(', ')}).` : 'Toutes les personnes sont imputées à 100 %.', 'Le coût réel dépend des fiches saisies : un mois sans fiche n’est pas compté.', 'Le coût des BU de CARS Others est nul : le personnel ne s’impute pas sur cette BU.'])
+    + blk('Shared Services et Management',
+      ['Part du coût de chaque personne imputée à ces deux catégories (frais communs).', 'Si un découpage sur les 4 BU est saisi pour la personne, il s’applique directement ; sinon la part suit la clé générale des frais communs (voir plus bas).', 'Les boutons « avec / sans » permettent d’exclure l’une ou l’autre catégorie du résultat.'],
+      [`Découpage propre à la personne pour ${withSplit.length} personne${withSplit.length > 1 ? 's' : ''} ; clé générale pour les autres.`, `Management : ${nm.withMgmt ? 'inclus' : '<b>exclu</b>'} ; Shared Services : ${nm.withShared ? 'inclus' : '<b>exclu</b>'}.`, 'Un découpage de moins de 100 % laisse un solde « non imputé ».'])
+    + blk('Frais véhicules (classe 615)',
+      ['Chaque compte est un véhicule et une nature (carburant, entretien, assurance…). Le coût de chaque véhicule est réparti sur les 4 BU et les frais généraux selon vos pourcentages retenus.', 'Sans saisie, la proposition indicative se base sur les jours de déplacement du véhicule dans les agendas Google (réservation ± quelques jours) ; Logistics est réparti au prorata des jours des BU.'],
+      [`${saisi.length} ligne${saisi.length > 1 ? 's' : ''} saisie${saisi.length > 1 ? 's' : ''} sur ${vrows.length} ; les autres suivent la proposition indicative.`, `${eur(fgVeh)} de frais véhicules vont en frais généraux${forced.length ? ` (dont ${forced.map(r => esc(r.x.vehicle)).join(', ')} classé${forced.length > 1 ? 's' : ''} ainsi)` : ''}, répartis par la clé générale.`, 'Les véhicules sans réservation et les frais non liés à un véhicule précis (par exemple les véhicules loués) vont en frais généraux.', 'Les comptes « old » (renting BMW X5…) ne sont pas repris.'])
+    + blk('Frais généraux',
+      [`Comptes retenus en « frais généraux » dans GENERAL EXPENSES › Données source (loyers et charges, bureau, IT, assurances, divers, honoraires de l’expert-comptable et de l’IT…) : ${eur(gen.total || 0)} depuis le 1er janvier.`, 'Ils vont à XC ou CARS selon la clé choisie, puis aux BU de CARS au prorata de leur chiffre d’affaires.'],
+      ['Le loyer (compte 611010, écritures non payées) est exclu.', 'Un compte non retenu dans « Données source » n’est pas dans le résultat : le contrôle ci-dessus compare le total aux sources.', 'Les comptes 616000 et 618300 (formation) ne sont pas proposés par défaut.'])
+    + blk('Marketing commun',
+      [`Comptes marketing sans BU dans leur numéro (ex. 612050) : ${eur(mk.common || 0)}.`, 'Répartis comme les autres frais communs.'],
+      ['Les investissements marketing immobilisés (compte 240050) et leur amortissement ne sont pas repris.'])
+    + blk('Clé de répartition des frais communs',
+      [`XC contre CARS : clé « ${key} » (XC ${pct(res.shXC)}, CARS ${pct(res.shCARS)}).`, 'Prorata du CA : part de chaque famille dans le CA XC + CARS depuis le 1er janvier ; % encodé : la part XC saisie dans GENERAL EXPENSES › Imputation des frais généraux.', 'Puis, entre les BU de CARS : au prorata de leur chiffre d’affaires.'],
+      ['Le prorata du CA favorise les BU qui facturent beaucoup, indépendamment du support qu’elles consomment.', 'Une clé en % par BU de CARS serait plus fine : elle n’existe pas encore.', 'Le CA de CARS Others (comptes 050, 059) compte dans la clé.'])
+    + blk('Éléments hors marge nette',
+      ['Amortissements (comptes 63), frais et produits financiers, comptes « old », loyer exclu, autres produits d’exploitation sans compte détaillé.'],
+      ['Ils figurent dans le résultat comptable d’Odoo mais pas ici : la marge nette est avant amortissements et avant éléments financiers.', 'Voir le rapprochement avec le P&L d’Odoo pour les montants.']);
+}
 function nmHtml(d, scope) {
   if (!d) return '<p class="na">Chargement…</p>';
   if (sd.loaded && sd.restricted) return '<p class="na">La marge nette inclut les rémunérations : elle est réservée aux administrateurs du dashboard.</p>';
@@ -129,6 +166,6 @@ function nmHtml(d, scope) {
   if (c.UNASSIGNED.ca || c.UNASSIGNED.dc) spec.push({label: 'Non affecté', keys: ['UNASSIGNED']});
   const un = nmSum(c, ['UNALLOC']); if (Math.abs(un.staff + un.veh + un.shared + un.mgmt + un.general + un.vehgen + un.mkt) >= 0.5) spec.push({label: 'Non imputé', keys: ['UNALLOC']});      // masqué quand tout est imputé
   spec.push({label: 'Total', keys: Object.keys(c)});
-  return ctl + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmNote(res);
+  return ctl + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmAssumptions(res) + nmNote(res);
 }
 const NM_BLOCK = (scope, title) => B('nm-' + scope, title, d => { nm.d = d; nmEnsure(); return `<div class="nm-host" data-scope="${scope}">${nmHtml(d, scope)}</div>`; }, true);

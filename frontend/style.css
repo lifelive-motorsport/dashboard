@@ -193,3 +193,6 @@ pre.exatt{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:12px;bac
 .sdsplit td.sdact{width:1%}.sdsplit button.sdfill{padding:2px 6px;font-size:12px;line-height:1.2;margin-left:3px;white-space:nowrap}
 .sdsplit tr.grp td{height:30px;background:transparent!important;padding-top:10px}
 #exp-split .sdbar{position:sticky;bottom:0;background:var(--bg);padding:10px 0;margin:0;z-index:5;border-top:1px solid var(--line)}
+
+.nmhyp{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:0 12px}.nmhyp summary{cursor:pointer;padding:10px 0;font-weight:600}.nmhyp[open] summary{border-bottom:1px solid var(--line);margin-bottom:8px}
+.nmhyp div{padding-bottom:10px;font-size:13px}.nmhyp b{display:block;margin:8px 0 2px;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}.nmhyp ul{margin:0;padding-left:18px}.nmhyp li{margin:3px 0}

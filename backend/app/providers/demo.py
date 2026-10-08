@@ -174,8 +174,8 @@ class DemoProvider:
                  {"id": 3, "ref": "611002", "name": "Durite silicone", "pif": "B", "sale": 40.0, "cost": 36.0},
                  {"id": 4, "ref": "611003", "name": "Pièce sans fournisseur", "pif": "C", "sale": 15.0, "cost": 6.0}]
         real = {1: {"total": 640.0, "qty": 20.0, "source": "factures", "lines": 3}, 2: {"total": 1100.0, "qty": 10.0, "source": "commandes", "lines": 1}, 3: {"total": 380.0, "qty": 10.0, "source": "factures", "lines": 2}}
-        rows = build_rows(prods, real)
-        return {"rows": rows, "summary": summary(rows), "pif_field": "x_pif", "lookback_months": 24, "since": "2024-10-01"}
+        rows = build_rows(prods, real, 0.03)
+        return {"rows": rows, "summary": summary(rows), "pif_field": "x_pif", "lookback_months": 24, "since": "2024-10-01", "real_error": None, "freight": {"pool": 3200.0, "rate": 0.03, "accounts": "602010"}}
 
     def stock_report(self) -> dict:
         from ..stock import build_report

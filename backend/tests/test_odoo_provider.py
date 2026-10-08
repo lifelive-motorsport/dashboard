@@ -841,20 +841,29 @@ def test_excluded_accounts_entries_are_listed_apart():
 def test_margin_products_from_odoo_data(monkeypatch):
     from app import settings
     monkeypatch.setattr(settings, "STOCK_PIF_FIELD", "x_pif")
+    monkeypatch.setattr(settings, "MARGIN_FREIGHT_ACCOUNTS", "602010")
     p = OdooProvider.__new__(OdooProvider)
 
     def call(model, method, **kw):
         if model == "product.product":
-            return [{"id": 7, "default_code": "611363", "name": "3D connector", "x_pif": "N", "list_price": 58.77, "standard_price": 33.58},
-                    {"id": 8, "default_code": "611364", "name": "Sans coût", "x_pif": "N", "list_price": 446.0, "standard_price": 0.0}]
-        if model == "account.move.line" and kw.get("groupby") == ["product_id"]:
-            return [{"product_id": [7, "x"], "balance:sum": 700.0}]
-        if model == "account.move.line":
-            return [{"product_id": [7, "x"], "move_type": "in_invoice", "quantity:sum": 22.0, "__count": 3}, {"product_id": [7, "x"], "move_type": "in_refund", "quantity:sum": 2.0, "__count": 1}]
+            return [{"id": 7, "default_code": "325061", "name": "Tubes TN11", "x_pif": "F", "list_price": 382.0, "standard_price": 382.0},
+                    {"id": 8, "default_code": "611010", "name": "Découpe-cintrage", "x_pif": "F", "list_price": 1000.0, "standard_price": 820.0},
+                    {"id": 9, "default_code": "X", "name": "Sans coût", "x_pif": "N", "list_price": 446.0, "standard_price": 0.0}]
+        if model == "account.move.line" and method == "search_read":
+            return [{"product_id": [7, "x"], "balance": 17661.84, "quantity": 1.0, "move_type": "in_invoice", "purchase_line_id": [10, "l"]}]
+        if model == "account.move.line":                                       # solde du compte de transport
+            return [{"account_id": [1, "602010"], "balance:sum": 2000.0}]
+        if model == "purchase.order.line" and method == "read":
+            return [{"id": 10, "order_id": [1, "P00668"]}]
+        if model == "purchase.order.line" and method == "search_read":
+            return [{"id": 10, "order_id": [1, "P"], "product_id": [7, "x"], "product_qty": 30.0, "qty_received": 30.0, "price_unit": 198.33},
+                    {"id": 11, "order_id": [1, "P"], "product_id": [8, "x"], "product_qty": 24.0, "qty_received": 24.0, "price_unit": 820.0}]
         return []
     p._call = call
     j = p.margin_products()
-    r, z = j["rows"]
-    assert r["real"]["unit"] == 35.0 and r["real"]["source"] == "factures" and r["real"]["qty"] == 20.0         # 700 € pour 22 − 2 unités
-    assert r["margin"]["theoretical"] == 42.86 and r["margin"]["real"] == 40.45 and r["gap"] == -2.41 and j["real_error"] is None
-    assert z["margin"]["theoretical"] is None and z["rate"]["theoretical"] is None and z["gap"] is None         # coût nul : marge non calculable, pas 100 %
+    t, c, z = j["rows"]
+    assert t["real"]["buy"] == 198.33 and "globale" in t["real"]["flags"] and t["real"]["source"] == "commandes + factures"
+    assert c["real"]["qty"] == 24.0 and round(c["real"]["buy"], 2) == round((17661.84 - 198.33 * 30) / 24, 2)
+    rate = 2000.0 / (382.0 * 30 + 1000.0 * 24)                                  # transport réparti au prorata du prix de vente des unités achetées
+    assert j["freight"]["pool"] == 2000.0 and abs(j["freight"]["rate"] - rate) < 1e-5 and abs(t["real"]["freight"] - rate * 382.0) < 1e-3
+    assert z["margin"]["theoretical"] is None and z["gap"] is None and j["real_error"] is None             # coût nul : marge non calculable, pas 100 %

@@ -22,16 +22,75 @@ def margin_pct(sale: float, cost: float | None) -> float | None:
     return round((sale - cost) / sale * 100, 2)
 
 
-def build_rows(products: list[dict], real: dict[int, dict]) -> list[dict]:
+TOL = 0.10          # écart toléré entre le montant facturé et (quantité × prix de la commande) avant de juger la facture « globale »
+
+
+def allocate_orders(orders: dict[int, dict]) -> dict[int, dict]:
+    """Coût d'achat réel par article d'après les commandes d'achat et leurs factures.
+
+    orders : id commande -> {"lines": {id ligne: {product, qty, received, price}}, "bills": {id ligne: {amount, qty}}} (montants en euros ; avoirs en négatif).
+    - facture cohérente (montant ≈ quantité facturée × prix de la commande) : on prend le montant réellement facturé ;
+    - facture « globale » (ex. 1 pièce facturée pour 30 reçues, ou facture qui couvre aussi d'autres lignes de la commande) : quantité = quantité reçue, la ligne
+      reçoit au plus son prix de commande × quantité, et l'excédent est réparti sur les autres lignes reçues non facturées de la même commande, au prorata de leur valeur.
+    Retourne article -> {amount, qty, flags} avec flags ⊂ {« globale »}."""
+    out: dict[int, dict] = {}
+
+    def add(pid, amount, qty, flag=None):
+        d = out.setdefault(pid, {"amount": 0.0, "qty": 0.0, "flags": set(), "lines": 0})
+        d["amount"] += amount
+        d["qty"] += qty
+        d["lines"] += 1
+        if flag:
+            d["flags"].add(flag)
+
+    for o in orders.values():
+        lines, bills = o["lines"], o["bills"]
+        excess = 0.0
+        for lid, b in bills.items():
+            ln = lines.get(lid)
+            if ln is None or not ln.get("product"):
+                continue
+            price, nb = ln["price"], b["qty"]
+            if nb > 0 and price > 0 and abs(b["amount"] - price * nb) <= TOL * price * nb:
+                add(ln["product"], b["amount"], nb)                                  # facture cohérente
+                continue
+            basis = ln["received"] if ln["received"] > 0 else ln["qty"]
+            value = price * basis
+            if basis <= 0 or value <= 0:
+                if nb > 0:
+                    add(ln["product"], b["amount"], nb)
+                continue
+            if b["amount"] <= value * (1 + TOL):
+                add(ln["product"], b["amount"], basis, "globale")                       # facturé moins cher que commandé, ou à peine plus
+            else:
+                add(ln["product"], value, basis, "globale")
+                excess += b["amount"] - value
+        if excess > 0.005:
+            pending = {lid: ln for lid, ln in lines.items() if lid not in bills and ln.get("product") and ln["received"] > 0 and ln["price"] > 0}
+            weight = sum(ln["price"] * ln["received"] for ln in pending.values())
+            for lid, ln in pending.items():
+                add(ln["product"], excess * ln["price"] * ln["received"] / weight, ln["received"], "globale")
+    return out
+
+
+def freight_rate(pool: float, products: list[dict], real: dict[int, dict]) -> float:
+    """Transport : `pool` (euros, comptes de frais de transport) réparti au prorata du prix de vente des unités achetées. Retourne la part du prix de vente (ex. 0,031 = 3,1 %)."""
+    base = sum(p["sale"] * real[p["id"]]["qty"] for p in products if p["id"] in real and real[p["id"]]["qty"] > 0 and p["sale"] > 0)
+    return pool / base if base > 0 and pool > 0 else 0.0
+
+
+def build_rows(products: list[dict], real: dict[int, dict], freight: float = 0.0) -> list[dict]:
     """products : {id, ref, name, pif, sale, cost} ; real : id article -> {total, qty, source, lines}.
     `gap` = marge réelle − marge théorique, en points (négatif : l'article rapporte moins que ce que son coût Odoo laisse croire)."""
     rows = []
     for p in products:
         r = real.get(p["id"])
-        est = round(r["total"] / r["qty"], 4) if r and r["qty"] > 0 and r["total"] > 0 else None
+        buy = r["total"] / r["qty"] if r and r["qty"] > 0 and r["total"] > 0 else None
+        fr = round(freight * p["sale"], 4) if buy is not None else 0.0                      # transport : part du prix de vente
+        est = round(buy + fr, 4) if buy is not None else None
         m_theo, m_real = margin_pct(p["sale"], p["cost"]), margin_pct(p["sale"], est)
         rows.append({"id": p["id"], "ref": p["ref"], "name": p["name"], "pif": p["pif"], "sale": round(p["sale"], 4), "cost": round(p["cost"], 4),
-                     "real": ({"unit": est, "qty": round(r["qty"], 2), "source": r["source"], "lines": r.get("lines", 0)} if est is not None else None),
+                     "real": ({"unit": est, "buy": round(buy, 4), "freight": fr, "qty": round(r["qty"], 2), "source": r["source"], "lines": r.get("lines", 0), "flags": sorted(r.get("flags", []))} if est is not None else None),
                      "margin": {"theoretical": m_theo, "real": m_real}, "rate": {"theoretical": rate(m_theo), "real": rate(m_real)},
                      "gap": round(m_real - m_theo, 2) if m_theo is not None and m_real is not None else None})
     return sorted(rows, key=lambda x: (x["ref"] or "", x["name"]))

@@ -734,34 +734,77 @@ class OdooProvider:
 
     # ---- Contrôle des marges XC --------------------------------------------------------------------------------------
     def _real_costs(self, ids: list[int], since: str) -> dict[int, dict]:
-        """Prix unitaire moyen pondéré payé par article : factures d'achat comptabilisées (avoirs déduits) depuis `since`, à défaut commandes d'achat confirmées."""
+        """Coût d'achat réel par article (hors transport) : factures d'achat comptabilisées (avoirs déduits) rapprochées de leurs commandes d'achat (quantités reçues,
+        factures « globales » réparties entre les lignes de la commande : voir margins.allocate_orders) ; factures sans commande : montant ÷ quantité facturée ;
+        à défaut de facture, prix des commandes d'achat confirmées."""
+        from ..margins import allocate_orders
         real: dict[int, dict] = {}
-        for k in range(0, len(ids), 400):
-            chunk = ids[k:k + 400]
-            dom = [("parent_state", "=", "posted"), ("move_type", "in", ["in_invoice", "in_refund"]), ("product_id", "in", chunk), ("date", ">=", since)]
-            tot = {r["product_id"][0]: float(r["balance:sum"] or 0.0)
-                   for r in self._call("account.move.line", "formatted_read_group", domain=dom, groupby=["product_id"], aggregates=["balance:sum"]) if r.get("product_id")}
-            cnt: dict[int, dict] = {}
-            for r in self._call("account.move.line", "formatted_read_group", domain=dom, groupby=["product_id", "move_type"], aggregates=["quantity:sum", "__count"]):
-                if r.get("product_id"):
-                    c = cnt.setdefault(r["product_id"][0], {"qty": 0.0, "lines": 0})
-                    c["qty"] += (-1.0 if r.get("move_type") == "in_refund" else 1.0) * float(r["quantity:sum"] or 0.0)
-                    c["lines"] += int(r.get("__count") or 0)
-            for pid, t in tot.items():
-                if cnt.get(pid, {}).get("qty", 0) > 0 and t > 0:
-                    real[pid] = {"total": t, "qty": cnt[pid]["qty"], "source": "factures", "lines": cnt[pid]["lines"]}
+        for k in range(0, len(ids), 2000):            # un seul lot en pratique : une commande dont les lignes seraient réparties sur deux lots serait mal répartie
+            chunk = ids[k:k + 2000]
+            dom = [("parent_state", "=", "posted"), ("move_type", "in", ["in_invoice", "in_refund"]), ("product_id", "in", chunk), ("date", ">=", since), ("display_type", "=", "product")]
+            lines = self._call("account.move.line", "search_read", domain=dom, limit=50000, fields=["product_id", "balance", "quantity", "move_type", "purchase_line_id"])
+            direct: dict[int, dict] = {}
+            by_pl: dict[int, dict] = {}
+            for ln in lines:
+                sign = -1.0 if ln.get("move_type") == "in_refund" else 1.0
+                pid = ln["product_id"][0] if ln.get("product_id") else None
+                if pid is None:
+                    continue
+                if ln.get("purchase_line_id"):
+                    b = by_pl.setdefault(ln["purchase_line_id"][0], {"amount": 0.0, "qty": 0.0})
+                    b["amount"] += float(ln.get("balance") or 0.0)
+                    b["qty"] += sign * float(ln.get("quantity") or 0.0)
+                else:
+                    d = direct.setdefault(pid, {"amount": 0.0, "qty": 0.0, "lines": 0})
+                    d["amount"] += float(ln.get("balance") or 0.0)
+                    d["qty"] += sign * float(ln.get("quantity") or 0.0)
+                    d["lines"] += 1
+            orders: dict[int, dict] = {}
+            if by_pl:
+                pl_ids = sorted(by_pl)
+                order_ids = sorted({o["order_id"][0] for n in range(0, len(pl_ids), 400)
+                                    for o in self._call("purchase.order.line", "read", ids=pl_ids[n:n + 400], fields=["order_id"])})
+                for n in range(0, len(order_ids), 200):
+                    for pl in self._call("purchase.order.line", "search_read", domain=[("order_id", "in", order_ids[n:n + 200]), ("display_type", "=", False)], limit=20000,
+                                         fields=["order_id", "product_id", "product_qty", "qty_received", "price_unit"]):
+                        o = orders.setdefault(pl["order_id"][0], {"lines": {}, "bills": {}})
+                        o["lines"][pl["id"]] = {"product": pl["product_id"][0] if pl.get("product_id") else None, "qty": float(pl.get("product_qty") or 0.0),
+                                                "received": float(pl.get("qty_received") or 0.0), "price": float(pl.get("price_unit") or 0.0)}
+                line_order = {pl: oid for oid, o in orders.items() for pl in o["lines"]}
+                for pl, b in by_pl.items():
+                    if pl in line_order:
+                        orders[line_order[pl]]["bills"][pl] = b
+            for pid, a in allocate_orders(orders).items():
+                if pid in chunk or pid in ids:
+                    if a["qty"] > 0 and a["amount"] > 0:
+                        real[pid] = {"total": a["amount"], "qty": a["qty"], "source": "commandes + factures", "lines": a["lines"], "flags": a["flags"]}
+            for pid, d in direct.items():
+                if d["qty"] > 0 and d["amount"] > 0:
+                    cur = real.get(pid)
+                    if cur:
+                        cur["total"] += d["amount"]; cur["qty"] += d["qty"]; cur["lines"] += d["lines"]
+                    else:
+                        real[pid] = {"total": d["amount"], "qty": d["qty"], "source": "factures", "lines": d["lines"], "flags": set()}
             rest = [i for i in chunk if i not in real]
             if rest:
                 pdom = [("state", "in", ["purchase", "done"]), ("product_id", "in", rest), ("date_order", ">=", since)]
                 for r in self._call("purchase.order.line", "formatted_read_group", domain=pdom, groupby=["product_id"], aggregates=["product_qty:sum", "price_subtotal:sum", "__count"]):
                     if r.get("product_id") and (r["product_qty:sum"] or 0) > 0 and (r["price_subtotal:sum"] or 0) > 0:
-                        real[r["product_id"][0]] = {"total": float(r["price_subtotal:sum"]), "qty": float(r["product_qty:sum"]), "source": "commandes", "lines": int(r.get("__count") or 0)}
-        return real
+                        real[r["product_id"][0]] = {"total": float(r["price_subtotal:sum"]), "qty": float(r["product_qty:sum"]), "source": "commandes", "lines": int(r.get("__count") or 0), "flags": set()}
+        return {pid: r for pid, r in real.items() if pid in set(ids)}
+
+    def _freight_pool(self, since: str) -> float:
+        """Frais de transport de la période : solde des comptes MARGIN_FREIGHT_ACCOUNTS (par défaut 602010 FRAIS XC Manufacturer), en euros."""
+        codes = [c.strip() for c in settings.MARGIN_FREIGHT_ACCOUNTS.split(",") if c.strip()]
+        if not codes:
+            return 0.0
+        dom = [("parent_state", "=", "posted"), ("date", ">=", since), ("account_id.code", "in", codes)]
+        return sum(float(r["balance:sum"] or 0.0) for r in self._call("account.move.line", "formatted_read_group", domain=dom, groupby=["account_id"], aggregates=["balance:sum"]))
 
     def margin_products(self) -> dict:
         """Articles dont le code PIF est renseigné : prix de vente, coût renseigné et coût réel d'après les factures d'achat
         (à défaut les commandes d'achat) des MARGIN_LOOKBACK_MONTHS derniers mois. Lecture seule."""
-        from ..margins import build_rows, summary
+        from ..margins import build_rows, freight_rate, summary
         pif = self._pif_field()
         if not pif:
             return {"unavailable": "Champ « code PIF » introuvable dans Odoo : indiquez son nom technique avec la variable STOCK_PIF_FIELD."}
@@ -779,8 +822,14 @@ class OdooProvider:
         except Exception as e:
             log.exception("Coût réel des articles indisponible")
             real_error = self._why(e)
-        rows = build_rows(products, real)
-        return {"rows": rows, "summary": summary(rows), "pif_field": pif, "lookback_months": settings.MARGIN_LOOKBACK_MONTHS, "since": since, "real_error": real_error}
+        pool, rate_f = 0.0, 0.0
+        try:
+            pool = self._freight_pool(since)
+            rate_f = freight_rate(pool, products, real)
+        except Exception:
+            log.exception("Frais de transport indisponibles")
+        rows = build_rows(products, real, rate_f)
+        return {"rows": rows, "summary": summary(rows), "pif_field": pif, "lookback_months": settings.MARGIN_LOOKBACK_MONTHS, "since": since, "real_error": real_error, "freight": {"pool": round(pool, 2), "rate": round(rate_f, 6), "accounts": settings.MARGIN_FREIGHT_ACCOUNTS}}
 
     # ---- Événements : comptes analytiques d'un plan « Événements » -------------------------------------------------
     @staticmethod

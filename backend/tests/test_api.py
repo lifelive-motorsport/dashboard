@@ -273,9 +273,9 @@ def test_margin_control_demo_and_rules():
     assert margins.rate(26) == "green" and margins.rate(25) == "orange" and margins.rate(15.01) == "orange" and margins.rate(15) == "red" and margins.rate(None) is None
     j = c.get("/api/xc/margins").json()
     r1 = next(r for r in j["rows"] if r["ref"] == "611363")
-    assert r1["real"]["unit"] == 32.0 and r1["margin"]["theoretical"] == 42.86 and r1["margin"]["real"] == 45.55 and r1["gap"] == 2.69 and "worst" not in r1
+    assert r1["real"]["buy"] == 32.0 and r1["real"]["freight"] == 1.7631 and r1["real"]["unit"] == 33.7631 and r1["margin"]["theoretical"] == 42.86 and r1["margin"]["real"] == 42.55 and r1["gap"] == -0.31
     r2 = next(r for r in j["rows"] if r["ref"] == "611001")
-    assert r2["gap"] == -10.0 and r2["rate"]["theoretical"] == "orange" and r2["rate"]["real"] == "red"
+    assert r2["gap"] == -13.0 and r2["rate"]["theoretical"] == "orange" and r2["rate"]["real"] == "red"
     r4 = next(r for r in j["rows"] if r["ref"] == "611003")
     assert r4["real"] is None and r4["gap"] is None and r4["rate"]["real"] is None
     assert j["summary"]["count"] == 4 and sum(b["count"] for b in j["summary"]["buckets"]) == j["summary"]["compared"]
@@ -296,3 +296,26 @@ def test_stockvar_roundtrip_and_validation(monkeypatch):
     assert got["items"][0]["amount"] == -12500.5 and got["can_edit"] is True
     assert c.put("/api/stockvar", json={"items": [item, item]}).status_code == 422
     assert c.put("/api/stockvar", json={"items": [{**item, "date": "pas une date"}]}).status_code == 422
+
+
+def test_allocate_orders_global_bill_like_the_tn11_tubes():
+    from app import margins
+    # Commande P00668 : 30 tubes [325061] à 198,33 € et 24 découpes-cintrages [611010] à 820 € ; une seule facture globale (1 pièce, 17 661,84 €) sur la ligne des tubes.
+    orders = {1: {"lines": {10: {"product": 325061, "qty": 30, "received": 30, "price": 198.33}, 11: {"product": 611010, "qty": 24, "received": 24, "price": 820.0},
+                            12: {"product": 999, "qty": 144, "received": 0, "price": 5.27}},
+                  "bills": {10: {"amount": 17661.84, "qty": 1}}}}
+    a = margins.allocate_orders(orders)
+    assert round(a[325061]["amount"] / a[325061]["qty"], 2) == 198.33 and a[325061]["flags"] == {"globale"}      # les tubes gardent leur prix de commande
+    assert round(a[611010]["amount"], 2) == round(17661.84 - 198.33 * 30, 2) and a[611010]["qty"] == 24         # l'excédent va à la découpe-cintrage reçue mais non facturée
+    assert 999 not in a                                                                                         # ligne non reçue : rien
+    # Facture cohérente : on garde le montant facturé (ici 5 % de plus que la commande)
+    ok = margins.allocate_orders({2: {"lines": {1: {"product": 5, "qty": 10, "received": 10, "price": 10.0}}, "bills": {1: {"amount": 105.0, "qty": 10}}}})
+    assert ok[5]["amount"] == 105.0 and ok[5]["qty"] == 10 and not ok[5]["flags"]
+
+
+def test_freight_rate_prorata_of_sale_price():
+    from app import margins
+    prods = [{"id": 1, "sale": 100.0}, {"id": 2, "sale": 50.0}]
+    real = {1: {"qty": 10.0}, 2: {"qty": 20.0}}
+    assert margins.freight_rate(100.0, prods, real) == 0.05                       # 100 € de transport pour 2 000 € de ventes valorisées
+    assert margins.freight_rate(0.0, prods, real) == 0.0 and margins.freight_rate(100.0, prods, {}) == 0.0

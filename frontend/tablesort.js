@@ -4,6 +4,7 @@
   const state = {};                                                         // clé tableau -> {col, dir}
   const NUM = /^[−-]?\s*\d[\d\s.,]*\s*(€|%|j|km|ETP)?$/;
   const val = td => {
+    if (td.dataset && td.dataset.v !== undefined) { const n = parseFloat(td.dataset.v); return isFinite(n) ? n : null; }
     const inp = td.querySelector('input,select'); let t = (inp ? inp.value : td.textContent).replace(/[  ]/g, ' ').trim();
     if (t === '' || /^[–—-]$/.test(t)) return null;
     const d = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); if (d) return +(d[3] + d[2] + d[1]);

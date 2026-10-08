@@ -58,13 +58,14 @@ function adjustedData(d) {
 // Bandeau en haut des pages de marge : interrupteur + rappel de ce qui est affiché.
 function adjBar(key) {
   if (!MB_PAGES.has(key) || !adj.loaded) return null;
+  const stock = /^(overview|xc)\//.test(key) && typeof sv !== 'undefined' && sv.loaded ? stockToggleHtml() : '';
   const n = (adj.items || []).filter(a => a.enabled).length;
   const txt = adjOn
     ? `<b>MB ajustée</b> : ${n} ajustement${n > 1 ? 's' : ''} actif${n > 1 ? 's' : ''} appliqué${n > 1 ? 's' : ''} à la marge brute. <a href="#/overview/adjustments">Voir le détail et le rapprochement</a>`
     : `<b>MB comptable</b> (sans ajustement)${n ? ` — ${n} ajustement${n > 1 ? 's' : ''} disponible${n > 1 ? 's' : ''}` : ''}. <a href="#/overview/adjustments">Ajustements</a>`;
   return {static: `<div class="adjbar ${adjOn ? 'on' : ''}"><div class="seg" role="group" aria-label="Marge brute affichée">
       <button type="button" data-adjmode="0" class="${adjOn ? '' : 'sel'}">MB comptable</button><button type="button" data-adjmode="1" class="${adjOn ? 'sel' : ''}">MB ajustée</button></div>
-      <span class="adjtxt">${txt}</span></div>`};
+      <span class="adjtxt">${txt}</span></div>${stock}`};
 }
 
 // ---- Page « Ajustements MB » ---------------------------------------------------------------------

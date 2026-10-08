@@ -10,7 +10,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
   ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
-  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory']]],
+  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory'], ['margins','Contrôle des marges']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['management','Management']]],
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
@@ -18,7 +18,7 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -419,7 +419,8 @@ const PAGES = {
     B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),
   ],
   'overview/adjustments': () => adjPageBlocks(),
-  'xc/inventory': () => stockBlocks(),
+  'xc/inventory': () => stockBlocks().concat(stockVarBlocks()),
+  'xc/margins': () => marginsBlocks(),
   'marketing/expenses': () => marketingBlocks(),
   'others/tags': () => tagsBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
@@ -519,7 +520,7 @@ function blockHTML(b) {
   if (b.static) return b.static;
   const p = periodOf(bkey(b)), [f, t] = periodRange(p);
   let d = b.fixed ? (anyData() || cached('ytd')) : cached(p);
-  if (d && adjOn && !b.raw) d = adjustedData(d);          // MB ajustée (sauf sur le bloc de rapprochement, qui compare les deux)
+  if (d && !b.raw) d = viewData(d);          // MB ajustée (sauf sur le bloc de rapprochement, qui compare les deux)
   const dates = b.fixed ? 'à date' : `${fmtDate(f)} → ${fmtDate(t)}`;
   return `<section class="block" data-bid="${b.id}"><div class="block-head"><h3>${esc(b.title)}</h3>
     <span class="per-wrap">${b.fixed ? '' : selectHTML(b, p)}<small class="per-dates">${dates}</small></span></div>
@@ -553,7 +554,8 @@ function render(force) {
   $('page').innerHTML = PAGES[key] ? blocks.map(blockHTML).join('') : soon(key);
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
-  if (key === 'xc/inventory') loadStock(!!force).then(drawStock);
+  if (key === 'xc/inventory') { drawStockVar(); loadStock(!!force).then(drawStock); }
+  if (key === 'xc/margins') { drawMargins(); if (!mg.data || force) loadMargins(!!force); }
   if (/^staff\/(source|people|general|xc|cars|shared|management)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'expenses/source') { exDrawSource(); exLoadSource().then(exDrawSource); }
   if (key === 'expenses/rules') { exDrawRules(); exLoadAlloc().then(exDrawRules); }
@@ -573,7 +575,7 @@ function needLogin() {
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
       try { await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); } catch {}      // cookie de session du dashboard (durée longue)
-      loadAdj().then(() => render()); }});
+      Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
 
@@ -630,7 +632,7 @@ $('page').onchange = e => {
   updateBlock(b); fillBlock(b);
 };
 window.addEventListener('hashchange', () => { if ($('login').hidden) { render(); window.scrollTo(0, 0); } });
-const tick = () => { if (document.visibilityState === 'visible' && $('login').hidden) loadAdj().finally(() => render()); };
+const tick = () => { if (document.visibilityState === 'visible' && $('login').hidden) Promise.all([loadAdj(), loadStockVar()]).finally(() => render()); };
 setInterval(tick, 5 * 60000);   // l'API met déjà ses réponses en cache 5 min
 document.addEventListener('visibilitychange', tick);
 
@@ -642,7 +644,7 @@ document.addEventListener('visibilitychange', tick);
     try { ok = (await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}})).ok; } catch {}      // cookie de session valide, ou jeton Google encore valable
     if (!ok) { token = null; sessionStorage.removeItem('idt'); return needLogin(); }
   }
-  await loadAdj();
+  await Promise.all([loadAdj(), loadStockVar()]);
   render();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');

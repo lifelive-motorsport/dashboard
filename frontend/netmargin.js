@@ -167,9 +167,9 @@ function nmHtml(d, scope) {
   if (scope === 'carsbu') { const items = carsCols.map(s => { const o = nmSum(c, s.keys); return {label: s.label, ca: o.ca, margin: nmNet(o)}; });
     return ctl + bars(items, 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + (b.ca ? pct(b.margin / b.ca) : '–')}) + nmTable(res, carsCols.concat([{label: 'CARS', keys: NM_CARS}])) + nmNote(res); }
   const spec = [{label: 'XC', keys: ['XC']}, {label: 'CARS', keys: NM_CARS}];
-  if (c.UNASSIGNED.ca || c.UNASSIGNED.dc) spec.push({label: 'Non affecté', keys: ['UNASSIGNED']});
+  const na = c.UNASSIGNED.ca || c.UNASSIGNED.dc ? `<small class="na">Le total comprend les comptes « Non affecté » (${eur(c.UNASSIGNED.ca)} de CA, ${eur(c.UNASSIGNED.dc)} de coûts directs), détaillés ci-dessous.</small>` : '';
   const un = nmSum(c, ['UNALLOC']); if (Math.abs(un.staff + un.veh + un.shared + un.mgmt + un.general + un.vehgen + un.mkt) >= 0.5) spec.push({label: 'Non imputé', keys: ['UNALLOC']});      // masqué quand tout est imputé
   spec.push({label: 'Total', keys: Object.keys(c)});
-  return ctl + nmBasisNote() + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmAssumptions(res) + nmNote(res);
+  return ctl + nmBasisNote() + nmKpis(tot, '') + nmTable(res, spec) + na + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmAssumptions(res) + nmNote(res);
 }
 const NM_BLOCK = (scope, title) => B('nm-' + scope, title, d => { nm.d = d; nmEnsure(); return `<div class="nm-host" data-scope="${scope}">${nmHtml(d, scope)}</div>`; }, true);

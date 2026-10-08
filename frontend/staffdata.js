@@ -399,11 +399,11 @@ function sdDrawView() {
     const un = rows.reduce((t, r) => t + r.a.UNALLOCATED, 0);
     el.innerHTML = toggle + `<div class="kpis">${kpi(L + ' du personnel', eur(total), '', people(rows))}${gt.filter(([l, x]) => l !== 'Non imputé' || x > 1).map(([l, x]) => kpi(l, eur(x), l === 'Non imputé' ? 'neg' : '', total ? pct(x / total) : '')).join('')}${acc != null ? kpi('Réalisé en comptabilité ' + SD_YEAR, eur(acc), '', 'comptes 620/621 + 618000/618001, depuis le 1er janvier') : ''}</div>`
       + '<h4 class="sub">Répartition par BU</h4>' + table(['Entité', L + ' imputé', 'Part', 'Personnes concernées'], bu.concat(un > 1 ? [`<tr><td>Non imputé</td><td class="neg">${eur(un)}</td><td>${pct(un / total)}</td><td><small class="na">à répartir dans « Imputation du personnel »</small></td></tr>`] : []), 'prodtable')
-      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', L, 'XC', 'CARS', 'Shared Services', 'Management', 'Non imputé'], rows.sort((x, y) => y.annual - x.annual).map(r =>
+      + '<h4 class="sub">Par personne</h4>' + table(['Personne', 'Type', L, 'XC', 'CARS', 'Shared Services', 'Management', 'Non imputé'], rows.sort((x, y) => sdByName(x.p, y.p)).map(r =>
           `<tr><td class="prod">${esc(r.p.name)}<br><small class="na">${esc(r.p.function || '')}</small><br><small class="na">${esc(sdOccupation(r.p))}</small></td><td>${r.p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${eur(r.annual)}</td><td>${eur(r.a.XC)}</td><td>${eur(sum(r, ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING']))}</td><td>${eur(r.a.SHARED)}</td><td>${eur(r.a.MANAGEMENT || 0)}</td><td class="${r.a.UNALLOCATED > 1 ? 'neg' : ''}">${eur(r.a.UNALLOCATED)}</td></tr>`).concat([`<tr class="tot"><td>Total</td><td></td><td>${eur(total)}</td><td>${eur(gt[0][1])}</td><td>${eur(gt[1][1])}</td><td>${eur(gt[2][1])}</td><td>${eur(gt[3][1])}</td><td>${eur(gt[4][1])}</td></tr>`]), 'prodtable') + note;
     return;
   }
-  const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sum(y, v.scope) - sum(x, v.scope)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);
+  const mine = rows.filter(r => sum(r, v.scope) > 0).sort((x, y) => sdByName(x.p, y.p)), amt = mine.reduce((t, r) => t + sum(r, v.scope), 0);
   const fte = mine.reduce((t, r) => t + v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0) / 100, 0);
   const multi = v.scope.length > 1, head = ['Personne', 'Type'].concat(multi ? v.scope.map(k => sdLabel(k) + ' (%)') : [], ['Imputé (%)', L + ' imputé', 'Coût journalier', 'Journalier ajusté', 'Coût horaire', 'Horaire ajusté']);
   const body = mine.map(r => { const pc = v.scope.reduce((u, k) => u + (+r.p.alloc[k] || 0), 0);

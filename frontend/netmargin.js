@@ -102,9 +102,9 @@ const nmSimulating = () => sd.canSave === false || (ex.vsplit || {}).can_save ==
 const nmDirty = () => !!(sd.dirty || ex.splitDirty || ex.keyDirty);
 // Bascule « avec / sans management » + mode simulation (hypothèses modifiées sans être enregistrées) avec retour aux valeurs de référence.
 const nmAdj = () => typeof adjOn !== 'undefined' && adjOn;
+// Rappel (lecture seule) de la marge brute de départ : MB comptable ou ajustée, avec ou sans variation de stock ; réglage dans Overview › Marge brute et XC / CARS Detail.
+const nmBasisNote = () => `<small class="na">Marge brute de départ : <b>${nmAdj() ? 'MB ajustée' : 'MB comptable'}</b>, <b>${typeof stockOn !== 'undefined' && stockOn ? 'avec' : 'sans'} variation de stock</b>. Ces deux options se règlent dans <a href="#/overview/mb">Overview › Marge brute</a>.</small>`;
 const nmControls = () => `<div class="sdbar nmbar"><span class="na">Management :</span><button type="button" data-nm-mgmt="1" class="${nm.withMgmt ? 'primary' : ''}">Avec le coût du management</button><button type="button" data-nm-mgmt="0" class="${nm.withMgmt ? '' : 'primary'}">Sans le coût du management</button></div><div class="sdbar nmbar"><span class="na">Shared Services :</span><button type="button" data-nm-shared="1" class="${nm.withShared ? 'primary' : ''}">Avec le coût des Shared Services</button><button type="button" data-nm-shared="0" class="${nm.withShared ? '' : 'primary'}">Sans le coût des Shared Services</button></div>`
-  + (typeof stockToggleHtml === 'function' && typeof sv !== 'undefined' && sv.loaded ? stockToggleHtml() : '')
-  + `<div class="sdbar nmbar"><span class="na">Marge brute :</span><button type="button" data-adjmode="0" class="${nmAdj() ? '' : 'primary'}">MB comptable (réelle)</button><button type="button" data-adjmode="1" class="${nmAdj() ? 'primary' : ''}">MB ajustée</button>${nmAdj() ? `<small class="na">${((typeof adj !== 'undefined' && adj.items) || []).filter(a => a.enabled).length} ajustement(s) actif(s) appliqué(s) à la marge brute</small>` : ''}</div>`
   + (nmSimulating() ? `<div class="sdbar sim">${exSimBar('data-nm-restore', 'Vos hypothèses')}</div><small class="na">${nmDirty() ? 'Simulation en cours : ce tableau utilise vos hypothèses modifiées.' : 'Ce tableau utilise les valeurs de référence.'} Modifiez les imputations dans STAFF costs › Imputation du personnel, SERVICE VEHICLES › Imputation des frais véhicules et GENERAL EXPENSES › Imputation des frais généraux : le résultat se recalcule ici. L’export PDF reprend ce que vous voyez.</small>` : '');
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
@@ -125,7 +125,8 @@ function nmAssumptions(res) {
   const adj = nmAdj();
   return '<h4 class="sub">Hypothèses d’imputation</h4><p class="na">Ce résultat repose sur les hypothèses ci-dessous. Elles sont modifiables dans STAFF costs, SERVICE VEHICLES et GENERAL EXPENSES' + (nmSimulating() ? ' (vos modifications sont une simulation)' : '') + '.</p>'
     + blk('Période et périmètre',
-      ['Du 1er janvier à aujourd’hui, comptabilité Odoo (écritures comptabilisées). Les comptes dont le libellé commence par « old » sont ignorés.', 'Marge nette = marge brute − personnel − frais véhicules − frais généraux − marketing commun.', adj ? '<b>Les ajustements de marge brute sont activés</b> : la marge brute en tient compte.' : 'Marge brute comptable, sans ajustement (voir « Ajustements MB »).'],
+      ['Du 1er janvier à aujourd’hui, comptabilité Odoo (écritures comptabilisées). Les comptes dont le libellé commence par « old » sont ignorés.', 'Marge nette = marge brute − personnel − frais véhicules − frais généraux − marketing commun.', adj ? '<b>Les ajustements de marge brute sont activés</b> : la marge brute en tient compte.' : 'Marge brute comptable, sans ajustement (voir « Ajustements MB »).',
+      typeof stockOn !== 'undefined' && stockOn ? '<b>Les variations de stock sont incluses</b> dans la marge brute de XC (voir XC Detail › Inventory).' : 'Variations de stock non incluses.'],
       ['Le résultat comptable de l’exercice contient aussi les amortissements, les comptes « old », les frais financiers et le loyer : voir « Éléments hors marge nette ».', 'Les montants sont à date : un mois en cours est partiel.'])
     + blk('Marge brute (CA et coûts directs)',
       ['Chaque compte 700 (CA) et 602, 603, 604 (coûts directs) est rattaché à une BU par ses trois derniers chiffres : 010-016 et 019 XC, 020 Modern Rally, 030 Historic Rally, 040 Historic Racing, 050 et 059 CARS Others.'],
@@ -169,6 +170,6 @@ function nmHtml(d, scope) {
   if (c.UNASSIGNED.ca || c.UNASSIGNED.dc) spec.push({label: 'Non affecté', keys: ['UNASSIGNED']});
   const un = nmSum(c, ['UNALLOC']); if (Math.abs(un.staff + un.veh + un.shared + un.mgmt + un.general + un.vehgen + un.mkt) >= 0.5) spec.push({label: 'Non imputé', keys: ['UNALLOC']});      // masqué quand tout est imputé
   spec.push({label: 'Total', keys: Object.keys(c)});
-  return ctl + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmAssumptions(res) + nmNote(res);
+  return ctl + nmBasisNote() + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmAssumptions(res) + nmNote(res);
 }
 const NM_BLOCK = (scope, title) => B('nm-' + scope, title, d => { nm.d = d; nmEnsure(); return `<div class="nm-host" data-scope="${scope}">${nmHtml(d, scope)}</div>`; }, true);

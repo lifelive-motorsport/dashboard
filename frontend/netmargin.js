@@ -101,7 +101,9 @@ function nmUnassigned(c) {
 const nmSimulating = () => sd.canSave === false || (ex.vsplit || {}).can_save === false || (ex.alloc || {}).can_save === false;
 const nmDirty = () => !!(sd.dirty || ex.splitDirty || ex.keyDirty);
 // Bascule « avec / sans management » + mode simulation (hypothèses modifiées sans être enregistrées) avec retour aux valeurs de référence.
+const nmAdj = () => typeof adjOn !== 'undefined' && adjOn;
 const nmControls = () => `<div class="sdbar nmbar"><span class="na">Management :</span><button type="button" data-nm-mgmt="1" class="${nm.withMgmt ? 'primary' : ''}">Avec le coût du management</button><button type="button" data-nm-mgmt="0" class="${nm.withMgmt ? '' : 'primary'}">Sans le coût du management</button></div><div class="sdbar nmbar"><span class="na">Shared Services :</span><button type="button" data-nm-shared="1" class="${nm.withShared ? 'primary' : ''}">Avec le coût des Shared Services</button><button type="button" data-nm-shared="0" class="${nm.withShared ? '' : 'primary'}">Sans le coût des Shared Services</button></div>`
+  + `<div class="sdbar nmbar"><span class="na">Marge brute :</span><button type="button" data-adjmode="0" class="${nmAdj() ? '' : 'primary'}">MB comptable (réelle)</button><button type="button" data-adjmode="1" class="${nmAdj() ? 'primary' : ''}">MB ajustée</button>${nmAdj() ? `<small class="na">${((typeof adj !== 'undefined' && adj.items) || []).filter(a => a.enabled).length} ajustement(s) actif(s) appliqué(s) à la marge brute</small>` : ''}</div>`
   + (nmSimulating() ? `<div class="sdbar sim">${exSimBar('data-nm-restore', 'Vos hypothèses')}</div><small class="na">${nmDirty() ? 'Simulation en cours : ce tableau utilise vos hypothèses modifiées.' : 'Ce tableau utilise les valeurs de référence.'} Modifiez les imputations dans STAFF costs › Imputation du personnel, SERVICE VEHICLES › Imputation des frais véhicules et GENERAL EXPENSES › Imputation des frais généraux : le résultat se recalcule ici. L’export PDF reprend ce que vous voyez.</small>` : '');
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
@@ -119,7 +121,7 @@ function nmAssumptions(res) {
   const rows = sdViewRows(true), people = rows.filter(r => r.annual > 0), unalloc = people.filter(r => (r.a.UNALLOCATED || 0) > 1), withSplit = people.filter(r => Object.values(r.p.common_split || {}).some(v => v > 0)), inactive = people.filter(r => !r.p.active);
   const vrows = exSplitRows(ex.vsplit), saisi = vrows.filter(r => r.ret.src === 'saisi'), forced = vrows.filter(r => r.x.forced), fgVeh = vrows.reduce((t, r) => t + r.x.total * r.ret.p.GENERAL, 0);
   const gen = nm.gen || {}, mk = nm.mk || {}, un = c.UNASSIGNED, key = res.mode === 'pct' ? '% encodé' : 'prorata du CA';
-  const adj = typeof adjOn !== 'undefined' && adjOn;
+  const adj = nmAdj();
   return '<h4 class="sub">Hypothèses d’imputation</h4><p class="na">Ce résultat repose sur les hypothèses ci-dessous. Elles sont modifiables dans STAFF costs, SERVICE VEHICLES et GENERAL EXPENSES' + (nmSimulating() ? ' (vos modifications sont une simulation)' : '') + '.</p>'
     + blk('Période et périmètre',
       ['Du 1er janvier à aujourd’hui, comptabilité Odoo (écritures comptabilisées). Les comptes dont le libellé commence par « old » sont ignorés.', 'Marge nette = marge brute − personnel − frais véhicules − frais généraux − marketing commun.', adj ? '<b>Les ajustements de marge brute sont activés</b> : la marge brute en tient compte.' : 'Marge brute comptable, sans ajustement (voir « Ajustements MB »).'],

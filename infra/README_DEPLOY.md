@@ -134,7 +134,7 @@ Les autres administrateurs peuvent alors modifier les pourcentages pour simuler 
 
 Le **Super User** crée les utilisateurs et choisit leur rôle dans l'application (Settings › Utilisateurs) : aucune adresse n'est à écrire dans le code. Les comptes sont enregistrés dans Firestore (document `dashboard/users`).
 
-Rôles : **Standard** (consulte tout sauf le personnel), **Administrateur** (saisit les ajustements, voit le personnel), **XC** (uniquement XC Webshop, Goldspeed EAX Webshop, Par événement, Inventory et les deux contrôles de marges ; le serveur refuse tout le reste). Une adresse enregistrée peut se connecter même hors du domaine @lifelive-motorsport.com.
+Rôles : **Standard** (consulte tout, sans modifier), **Administrateur** (saisit les ajustements, voit le personnel) et des **catégories** que le Super User crée et nomme en cochant les pages accessibles (une catégorie « XC » est proposée par défaut : XC Webshop, Goldspeed EAX Webshop, Par événement, Inventory et les deux contrôles de marges). Le serveur n'ouvre à une catégorie que les routes et les chiffres de ses pages. Une adresse enregistrée peut se connecter même hors du domaine @lifelive-motorsport.com.
 
 Seule variable à définir : `SUPER_USERS` (adresse du Super User, pas de retrait possible depuis l'écran).
 

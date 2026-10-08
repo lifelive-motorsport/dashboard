@@ -6,7 +6,7 @@ import time
 
 from fastapi import Header, HTTPException, Request, Response
 
-from . import settings, users
+from . import access, settings, users
 
 COOKIE = "lm_session"
 RENEW_AFTER = 24 * 3600          # session glissante : le cookie est reposé s'il a plus d'un jour
@@ -77,15 +77,8 @@ def set_session_cookie(response: Response, request: Request, email: str) -> None
                         samesite="strict", path="/")
 
 
-XC_PATHS = ("/api/session", "/api/dashboard", "/api/stock", "/api/xc/margins", "/api/xc/tn11/check")     # seules routes ouvertes à la catégorie « XC »
-
-
-def is_xc_only(email: str) -> bool:
-    return users.role_of(email) == "xc"
-
-
 def role(email: str) -> str:
-    return "xc" if is_xc_only(email) else "full"
+    return "custom" if users.restricted(email) else "full"
 
 
 def _identify(request: Request, response: Response, authorization: str | None) -> str:
@@ -101,8 +94,9 @@ def _identify(request: Request, response: Response, authorization: str | None) -
 
 def require_user(request: Request, response: Response, authorization: str | None = Header(default=None)) -> str:
     """Utilisateur authentifié : cookie de session du dashboard, sinon jeton Google (Authorization: Bearer).
-    La catégorie « XC » (XC_ONLY_EMAILS) est refusée partout sauf sur XC_PATHS."""
+    Une catégorie d'utilisateurs (pages cochées par le Super User) n'ouvre que les routes de ses pages (voir access.py)."""
     user = _identify(request, response, authorization)
-    if is_xc_only(user) and request.url.path not in XC_PATHS:
-        raise HTTPException(403, "Accès limité aux pages XC (webshops, événements, inventory, contrôles de marges)")
+    pages = users.pages_of(user)
+    if pages is not None and not access.path_ok(request.url.path, pages):
+        raise HTTPException(403, "Cette page n'est pas incluse dans votre catégorie d'utilisateur")
     return user

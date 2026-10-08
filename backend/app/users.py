@@ -13,16 +13,30 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import settings
+from . import access, settings
 
-ROLES = ("admin", "standard", "xc")
+ROLES = ("admin", "standard", "xc")           # « xc » : ancien nom de la catégorie par défaut (équivaut à cat:xc)
 TTL = 20.0
 EMAIL = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 
 
+class Category(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9_-]{1,30}$")
+    name: str = Field(min_length=1, max_length=60)
+    pages: list[str] = Field(max_length=80)
+
+    @field_validator("pages")
+    @classmethod
+    def _pages(cls, v):
+        bad = [p for p in v if p not in access.PAGES]
+        if bad:
+            raise ValueError("page inconnue : " + bad[0])
+        return sorted(set(v))
+
+
 class Entry(BaseModel):
     email: str = Field(max_length=120)
-    role: Literal["admin", "standard", "xc"]
+    role: str = Field(pattern=r"^(admin|standard|xc|cat:[a-z0-9_-]{1,30})$")
     note: str = Field(default="", max_length=120)
 
     @field_validator("email")
@@ -36,20 +50,21 @@ class Entry(BaseModel):
 
 class Payload(BaseModel):
     users: list[Entry] = Field(max_length=200)
+    categories: list[Category] = Field(default_factory=list, max_length=30)
 
 
 class MemoryStore:
     def __init__(self):
-        self._doc = {"users": [], "updated_at": None, "updated_by": None}
+        self._doc = {"users": [], "categories": [], "updated_at": None, "updated_by": None}
         self._lock = threading.Lock()
 
     def get(self) -> dict:
         with self._lock:
             return dict(self._doc)
 
-    def put(self, users: list[dict], user: str) -> dict:
+    def put(self, users: list[dict], user: str, categories: list[dict] | None = None) -> dict:
         with self._lock:
-            self._doc = {"users": users, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user}
+            self._doc = {"users": users, "categories": categories or [], "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user}
             return dict(self._doc)
 
 
@@ -61,16 +76,16 @@ class FirestoreStore:
     def get(self) -> dict:
         snap = self._ref.get()
         d = snap.to_dict() if snap.exists else {}
-        return {"users": d.get("users", []), "updated_at": d.get("updated_at"), "updated_by": d.get("updated_by")}
+        return {"users": d.get("users", []), "categories": d.get("categories", []), "updated_at": d.get("updated_at"), "updated_by": d.get("updated_by")}
 
-    def put(self, users: list[dict], user: str) -> dict:
-        doc = {"users": users, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user}
+    def put(self, users: list[dict], user: str, categories: list[dict] | None = None) -> dict:
+        doc = {"users": users, "categories": categories or [], "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user}
         self._ref.set(doc)
         return doc
 
 
 _store = None
-_cache: dict = {"t": 0.0, "map": {}}
+_cache: dict = {"t": 0.0, "map": {}, "cats": {}}
 
 
 def store():
@@ -88,7 +103,9 @@ def registry() -> dict[str, str]:
     """adresse -> rôle enregistré (mis en cache quelques secondes ; en cas d'indisponibilité du stockage, on garde le dernier état connu)."""
     if time.time() - _cache["t"] > TTL:
         try:
-            _cache["map"] = {u["email"].lower(): u["role"] for u in store().get().get("users", []) if u.get("role") in ROLES}
+            doc = store().get()
+            _cache["map"] = {u["email"].lower(): u["role"] for u in doc.get("users", []) if u.get("role")}
+            _cache["cats"] = {c["id"]: c for c in doc.get("categories", [])}
         except Exception:
             pass
         _cache["t"] = time.time()
@@ -103,20 +120,43 @@ def is_super(email: str) -> bool:
     return (not settings.AUTH_ENABLED) or (email or "").lower() in supers()
 
 
+def categories(cats: list[dict] | None = None) -> list[dict]:
+    """Catégories enregistrées ; la catégorie « XC » par défaut existe toujours tant qu'elle n'a pas été enregistrée autrement."""
+    cats = list(cats if cats is not None else _cache["cats"].values())
+    if not any(c["id"] == "xc" for c in cats):
+        cats.insert(0, {"id": "xc", "name": "XC", "pages": list(access.XC_PAGES)})
+    return cats
+
+
 def role_of(email: str) -> str:
-    """« super », « admin », « standard » ou « xc »."""
+    """« super », « admin », « standard » ou « cat:<id> »."""
     email = (email or "").lower()
     if email in supers():
         return "super"
-    if email in registry():
-        return registry()[email]
+    r = registry().get(email)
+    if r:
+        return "cat:xc" if r == "xc" else r
     if email in settings.XC_ONLY_EMAILS:
-        return "xc"
+        return "cat:xc"
     return "admin" if email in settings.ADMIN_EMAILS else "standard"
+
+
+def pages_of(email: str) -> set[str] | None:
+    """Pages accessibles ; None = toutes (Standard, Administrateur, Super User). Une catégorie supprimée ou inconnue ne donne accès à rien."""
+    r = role_of(email)
+    if not r.startswith("cat:"):
+        return None
+    registry()
+    c = next((c for c in categories() if c["id"] == r[4:]), None)
+    return set(c["pages"]) if c else set()
 
 
 def is_admin(email: str) -> bool:
     return (not settings.AUTH_ENABLED) or role_of(email) in ("super", "admin")
+
+
+def restricted(email: str) -> bool:
+    return pages_of(email) is not None
 
 
 def is_registered(email: str) -> bool:

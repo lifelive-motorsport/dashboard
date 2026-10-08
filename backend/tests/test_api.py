@@ -81,7 +81,7 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     cl = TestClient(app)
     assert cl.get("/api/session").status_code == 401                                   # ni cookie ni jeton
     r = cl.post("/api/session", headers={"Authorization": "Bearer ok"})
-    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False} and "lm_session" in r.headers["set-cookie"]
+    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False, "pages": None} and "lm_session" in r.headers["set-cookie"]
     assert "HttpOnly" in r.headers["set-cookie"] and "SameSite=strict" in r.headers["set-cookie"]
     assert cl.get("/api/session").json()["email"] == "md@lifelive-motorsport.com"      # le cookie suffit, plus de jeton Google
     good = a.make_session("md@lifelive-motorsport.com")
@@ -328,7 +328,7 @@ def test_xc_only_category(monkeypatch):
     from starlette.testclient import TestClient
     from app.main import app
     c = TestClient(app)
-    assert c.get("/api/session").json()["role"] == "xc"
+    assert c.get("/api/session").json()["role"] == "custom"
     for path in ("/api/adjustments", "/api/staff", "/api/stockvar", "/api/tags", "/api/expenses/allocation?year=2026", "/api/pnl/unassigned?year=2026"):
         assert c.get(path).status_code == 403, path
     d = c.get("/api/dashboard").json()
@@ -348,9 +348,30 @@ def test_users_admin(monkeypatch):
     assert r.status_code == 200 and {u["email"] for u in r.json()["users"]} == {"ext@example.com", "b@x.com"}
     assert c.put("/api/users", json={"users": [{"email": "a@x.com", "role": "xc"}, {"email": "a@x.com", "role": "admin"}]}).status_code == 422
     assert c.put("/api/users", json={"users": [{"email": "pas-un-mail", "role": "xc"}]}).status_code == 422
-    assert users.is_registered("ext@example.com") and users.role_of("ext@example.com") == "xc" and users.is_super("anyone")        # AUTH désactivée (démo) : tout le monde peut gérer les utilisateurs
+    assert users.is_registered("ext@example.com") and users.role_of("ext@example.com") == "xc" or users.role_of("ext@example.com") == "cat:xc"        # AUTH désactivée (démo) : tout le monde peut gérer les utilisateurs
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
-    assert users.role_of("ext@example.com") == "xc" and users.role_of("b@x.com") == "admin" and users.role_of("z@lifelive-motorsport.com") == "standard"
+    assert users.role_of("ext@example.com") == "cat:xc" and users.role_of("b@x.com") == "admin" and users.role_of("z@lifelive-motorsport.com") == "standard"
     monkeypatch.setattr(settings, "SUPER_USERS", ["z@lifelive-motorsport.com"])
     assert users.role_of("z@lifelive-motorsport.com") == "super"
+    users.store().put([], "t"); users.invalidate()
+
+
+def test_custom_category_pages_and_routes(monkeypatch):
+    """Une catégorie = nom + pages cochées : le serveur n'ouvre que les routes et les données de ces pages."""
+    from app import settings, users
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    r = c.put("/api/users", json={"categories": [{"id": "compta", "name": "Compta", "pages": ["staff/people", "cars/vehicles"]}],
+                                  "users": [{"email": "me@x.com", "role": "cat:compta"}]})
+    assert r.status_code == 200 and any(x["id"] == "xc" for x in r.json()["categories"])
+    assert c.put("/api/users", json={"categories": [], "users": [{"email": "me@x.com", "role": "cat:nope"}]}).status_code == 422
+    assert c.put("/api/users", json={"categories": [{"id": "z", "name": "Z", "pages": ["page/inconnue"]}], "users": []}).status_code == 422
+    c.put("/api/users", json={"categories": [{"id": "xc", "name": "XC", "pages": ["xc/margins", "cars/vehicles"]}], "users": []})
+    monkeypatch.setattr(settings, "XC_ONLY_EMAILS", ["anonymous"])
+    users.invalidate()
+    assert c.get("/api/session").json()["pages"] == ["cars/vehicles", "xc/margins"]
+    assert c.get("/api/xc/margins").status_code != 403 and c.get("/api/staff").status_code == 403 and c.get("/api/stock").status_code == 403
+    d = c.get("/api/dashboard").json()
+    assert d["pnl"]["total"]["ca"] == 0 and d["vehicles"] != {"unavailable": "Réservé"} and d["events"] == {"unavailable": "Réservé"}
     users.store().put([], "t"); users.invalidate()

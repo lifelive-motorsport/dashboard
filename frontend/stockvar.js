@@ -8,7 +8,7 @@ const svClone = x => JSON.parse(JSON.stringify(x));
 const svId = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
 async function loadStockVar() {
-  if (typeof role !== 'undefined' && role === 'xc') { sv = {...sv, loaded: true}; return; }          // catégorie « XC » : pas d'ajustements ni de variations de stock
+  if (typeof needsAdj === 'function' && !needsAdj()) { sv = {...sv, loaded: true}; return; }          // catégorie « XC » : pas d'ajustements ni de variations de stock
   try {
     const r = await fetch('/api/stockvar', {headers: svAuth()});
     if (!r.ok) throw new Error(r.status);

@@ -8,10 +8,11 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
-let role = 'full', superUser = false;
-const XC_PAGES = new Set(['xc/webshop_xc', 'xc/webshop_gs', 'xc/events', 'xc/inventory', 'xc/margins', 'xc/tn11']);
-const allowedPage = k => (k !== 'others/users' || superUser) && (role !== 'xc' || XC_PAGES.has(k));
-const homePage = () => role === 'xc' ? 'xc/webshop_xc' : 'overview/ca';
+let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
+const allowedPage = k => (k !== 'others/users' || superUser) && (!pagesList || pagesList.has(k));
+const homePage = () => { for (const [g, , items] of MENU) for (const [i] of items) if (allowedPage(g + '/' + i) && LIVE.has(g + '/' + i)) return g + '/' + i; return 'overview/ca'; };
+const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
+const setSession = sj => { role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
@@ -597,7 +598,7 @@ function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
-      try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {}      // cookie de session du dashboard (durée longue)
+      try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); setSession(await sr.json()); } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
@@ -664,10 +665,10 @@ document.addEventListener('visibilitychange', tick);
   if (cfg.auth) {
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
     let ok = false;
-    try { const sr = await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}}); ok = sr.ok; if (ok) { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {}      // cookie de session valide, ou jeton Google encore valable
+    try { const sr = await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}}); ok = sr.ok; if (ok) setSession(await sr.json()); } catch {}      // cookie de session valide, ou jeton Google encore valable
     if (!ok) { token = null; sessionStorage.removeItem('idt'); return needLogin(); }
   }
-  else { try { const sr = await fetch('/api/session'); if (sr.ok) { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {} }
+  else { try { const sr = await fetch('/api/session'); if (sr.ok) setSession(await sr.json()); } catch {} }
   await Promise.all([loadAdj(), loadStockVar()]);
   render();
 })();

@@ -242,3 +242,7 @@ table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-ali
 .tn-detail>td{background:rgba(127,127,127,.07);padding:.4em .6em}
 .tn-detail table{width:100%}
 .tn-warn td{background:rgba(220,60,60,.10)}
+.tn-excl td{opacity:.45;text-decoration:line-through}
+.tn-excl td:first-child,.tn-excl td:nth-child(2){text-decoration:none}
+.tnov{color:#e0a030;cursor:help}
+input.tnx{vertical-align:middle;margin-right:.25em}

@@ -96,7 +96,9 @@ def line_costs(prod_id: int, qty: float, boms, info, unit_real, unit_info=None) 
             op = part["op"]
             minutes = op["minutes"] * part["qty"]
             cost = minutes / 60 * op["cost_hour"]
-            labour.append({"kind": "operation", "label": f"{op['name']} ({op['workcenter']})", "minutes": round(minutes, 1), "cost": round(cost, 2)})
+            counted = op["cost_hour"] > 0          # opération à coût horaire nul : temps indicatif, non compté (souvent doublon d'une ligne « Heure … » de la nomenclature)
+            labour.append({"kind": "operation", "label": f"{op['name']} ({op['workcenter']})", "minutes": round(minutes, 1) if counted else 0.0, "cost": round(cost, 2),
+                           "reason": "" if counted else f"coût horaire nul : {round(minutes, 1)} min indicatives, non comptées"})
             detail.append({"ref": "", "name": f"Opération : {op['name']} ({op['workcenter']})", "qty": round(minutes / 60, 3), "uom": "h", "odoo": op["cost_hour"], "unit": op["cost_hour"], "cost": round(cost, 2), "source": "opération", "labour": True, "warn": False})
             comp_real += cost
             continue
@@ -115,7 +117,8 @@ def line_costs(prod_id: int, qty: float, boms, info, unit_real, unit_info=None) 
         cost = unit * part["qty"]
         reason = is_labour(ci, pats, part.get("uom", ""))
         if reason:
-            labour.append({"kind": "article", "label": f"[{ci.get('ref', '')}] {ci.get('name', '')}", "minutes": None, "cost": round(cost, 2), "reason": reason})
+            hours = bool(re.search(r"\b(hours?|heures?|h)\b", part.get("uom", "") or "", re.I))
+            labour.append({"kind": "article", "label": f"[{ci.get('ref', '')}] {ci.get('name', '')}", "minutes": round(part["qty"] * 60, 1) if hours else None, "cost": round(cost, 2), "reason": reason})
         inf = (unit_info or {}).get(part["product"]) or {}
         detail.append({"ref": ci.get("ref", ""), "name": ci.get("name", ""), "qty": round(part["qty"], 4), "uom": part.get("uom", ""), "odoo": round(odoo_unit, 4), "real_unit": None if real_unit is None else round(real_unit, 4), "unit": round(unit, 4),
                        "cost": round(cost, 2), "source": source, "labour": bool(reason), "warn": warn, "purchased_qty": inf.get("qty"), "buy_source": inf.get("source"), "buy_flags": inf.get("flags", [])})

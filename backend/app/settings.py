@@ -51,7 +51,7 @@ SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))
 STOCK_PIF_FIELD = os.getenv("STOCK_PIF_FIELD", "")
 MARGIN_FREIGHT_ACCOUNTS = os.getenv("MARGIN_FREIGHT_ACCOUNTS", "602010")                                              # comptes de frais de transport répartis sur le coût réel des articles (vide = aucun)
 TN11_OUTLIER_FACTOR = float(os.getenv("TN11_OUTLIER_FACTOR", "3"))      # un coût réel unitaire plus de N fois supérieur au coût Odoo est jugé aberrant (signalé, coût Odoo conservé)
-TN11_LABOUR_LIKE = os.getenv("TN11_LABOUR_LIKE", "hourly rate,taux horaire,main d'oeuvre,main-d'oeuvre,main d'œuvre,main-d'œuvre,labour,labor,montage,mounting,assemblage,assembly,peinture,paint,cintrage,bending,découpe laser,laser cutting")   # motifs (nom ou catégorie) qui signalent de la main-d'œuvre, en plus des articles de type service
+TN11_LABOUR_LIKE = os.getenv("TN11_LABOUR_LIKE", "hourly rate,taux horaire,heure,hour,main d\'oeuvre,main-d\'oeuvre,main d\'œuvre,main-d\'œuvre,labour,labor,montage complet")   # motifs (nom ou catégorie) qui signalent de la main-d'œuvre, en plus des articles de type service
 MARGIN_LOOKBACK_MONTHS = int(os.getenv("MARGIN_LOOKBACK_MONTHS", "24"))          # contrôle des marges XC : période des achats pris en compte pour le coût réel estimé
 STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")
 

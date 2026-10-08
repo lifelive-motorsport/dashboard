@@ -36,7 +36,7 @@ function tnLabourSection(rep) {
   const items = [];
   rep.rows.filter(r => r.found).forEach(r => {
     if (r.self_labour) items.push({line: r, kind: 'Ligne vendue', label: r.name_odoo || r.name, minutes: null, cost: r.real, why: 'article de main-d’œuvre : ' + r.self_labour});
-    else r.labour.forEach(l => items.push({line: r, kind: l.kind === 'operation' ? 'Opération de nomenclature' : 'Composant main-d’œuvre', label: l.label, minutes: l.minutes, cost: l.cost, why: l.reason || 'temps de poste de travail × coût horaire'}));
+    else r.labour.forEach(l => items.push({line: r, kind: l.kind === 'operation' ? 'Opération de nomenclature' : 'Composant main-d’œuvre', label: l.label, minutes: l.minutes, cost: l.cost, why: l.reason || (l.kind === 'operation' ? 'temps de poste de travail × coût horaire' : '')}));
   });
   if (!items.length) return '<h4 class="sub">Main-d’œuvre</h4><p class="na">Aucune main-d’œuvre repérée dans ce devis ni dans les nomenclatures des articles vendus. Si c’est anormal, vérifiez les motifs de détection (' + esc((rep.labour_like || []).join(', ')) + ') ou les opérations de vos nomenclatures.</p>';
   const tot = items.reduce((t, i) => t + i.cost, 0), mins = items.reduce((t, i) => t + (i.minutes || 0), 0);

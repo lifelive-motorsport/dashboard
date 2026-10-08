@@ -17,7 +17,7 @@ def rate(margin_pct: float | None) -> str | None:
 
 
 def margin_pct(sale: float, cost: float | None) -> float | None:
-    if cost is None or sale is None or sale <= 0:
+    if cost is None or sale is None or sale <= 0 or cost <= 0:          # coût nul ou absent : la marge n'est pas calculable (et non 100 %)
         return None
     return round((sale - cost) / sale * 100, 2)
 
@@ -26,6 +26,8 @@ def worst_case(lines: list[dict]) -> dict | None:
     """Prix d'achat le plus défavorable pour 1 unité : pour chaque fournisseur, le prix de son palier de plus petite quantité ; on garde le plus cher."""
     best: dict[str, dict] = {}
     for ln in lines:
+        if ln["price"] <= 0:                                           # prix fournisseur non renseigné (0,00)
+            continue
         p = ln.get("partner") or ""
         cur = best.get(p)
         if cur is None or ln["min_qty"] < cur["min_qty"]:

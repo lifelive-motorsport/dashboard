@@ -291,3 +291,10 @@ def test_stockvar_roundtrip_and_validation(monkeypatch):
     assert got["items"][0]["amount"] == -12500.5 and got["can_edit"] is True
     assert c.put("/api/stockvar", json={"items": [item, item]}).status_code == 422
     assert c.put("/api/stockvar", json={"items": [{**item, "date": "pas une date"}]}).status_code == 422
+
+
+def test_margins_ignore_zero_prices():
+    from app import margins
+    assert margins.margin_pct(446.0, 0.0) is None and margins.margin_pct(100.0, 60.0) == 40.0
+    assert margins.worst_case([{"partner": "C-METAL", "min_qty": 1, "price": 0.0}]) is None
+    assert margins.worst_case([{"partner": "C-METAL", "min_qty": 1, "price": 0.0}, {"partner": "ACM", "min_qty": 1, "price": 9.62}])["partner"] == "ACM"

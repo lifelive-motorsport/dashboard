@@ -24,7 +24,7 @@
   }
   function prepare(tb) {
     tb.dataset.sx = '1'; const head = tb.tHead && tb.tHead.rows;
-    if (!head || head.length !== 1 || [...head[0].cells].some(c => c.colSpan > 1 || c.rowSpan > 1) || !tb.tBodies[0] || tb.tBodies[0].querySelector('tr.grp') || tb.classList.contains('nmtable') || tb.classList.contains('sdsplit') || tb.querySelector('th.sortable')) return;
+    if (!head || head.length !== 1 || [...head[0].cells].some(c => c.colSpan > 1 || c.rowSpan > 1) || !tb.tBodies[0] || tb.tBodies[0].querySelector('tr.grp') || tb.classList.contains('nmtable') || tb.classList.contains('sdsplit') || tb.classList.contains('tn11table') || tb.querySelector('th.sortable')) return;
     if (tb.tBodies[0].rows.length < 4) return;
     tb.classList.add('tsort'); tb.dataset.sk = keyOf(tb);
     [...head[0].cells].forEach(th => { th.title = 'Cliquer pour trier'; });

@@ -1,7 +1,16 @@
 // XC Detail › Contrôle des marges s/ TN11 : on dépose le PDF d'un devis ; chaque ligne vendue (marquée « x ») est comparée à Odoo :
 // prix de vente propre de l'article, coût Odoo (théorique), coût réel estimé (nomenclature Odoo + achats réels + transport) et main-d'œuvre rendue visible.
 // Chargé avant app.js ; utilise ses fonctions (esc, num, kpi, table, fmtDate…) au moment de l'appel.
-let tn = {rep: null, loading: false, error: null, name: '', grouped: true};
+let tn = {rep: null, loading: false, error: null, name: '', grouped: true, sort: {k: 'devis', dir: 'asc'}};
+// Colonnes triables : clé -> [libellé, valeur d'une ligne, valeur d'un groupe (calculée sur ses lignes retrouvées)]
+const TN_COLS = {ref: ['Réf.'], name: ['Désignation'], qty: ['Qté'], sale: ['Prix de vente'], odoo: ['Coût Odoo'], real: ['Coût réel estimé'], mtheo: ['Marge théorique'], mreal: ['Marge réelle'], labour: ['Main-d’œuvre']};
+const TN_SORTS = [['devis', 'Ordre du devis'], ['sale', 'Prix de vente'], ['odoo', 'Coût Odoo'], ['real', 'Coût réel estimé'], ['mtheo', 'Marge théorique'], ['mreal', 'Marge réelle'], ['gap', 'Écart entre les deux marges'], ['labour', 'Main-d’œuvre'], ['name', 'Désignation'], ['ref', 'Référence']];
+const tnLab = r => r.self_labour ? r.real : r.labour_cost;
+const tnVal = (r, k) => !r.found ? null : ({ref: r.ref, name: (r.name_odoo || r.name).toLowerCase(), qty: r.qty, sale: r.sale_total, odoo: r.odoo, real: r.real, mtheo: r.margin.theoretical, mreal: r.margin.real, gap: r.margin.theoretical != null && r.margin.real != null ? r.margin.real - r.margin.theoretical : null, labour: tnLab(r)})[k];
+const tnGroupVal = (rows, k) => { const f = rows.filter(r => r.found), s = f.reduce((a, r) => a + r.sale_total, 0), o = f.reduce((a, r) => a + r.odoo, 0), c = f.reduce((a, r) => a + r.real, 0);
+  return ({sale: s, odoo: o, real: c, labour: f.reduce((a, r) => a + tnLab(r), 0), mtheo: s ? (s - o) / s * 100 : null, mreal: s ? (s - c) / s * 100 : null, gap: s ? (o - c) / s * 100 : null, qty: f.length, name: (rows[0].section || '').toLowerCase(), ref: (rows[0].section || '').toLowerCase()})[k]; };
+const tnCmp = (a, b, dir) => a === null || b === null ? (a === null) - (b === null) : (dir === 'asc' ? 1 : -1) * (typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'fr', {numeric: true}));
+const tnSortRows = rows => tn.sort.k === 'devis' ? rows : rows.slice().sort((x, y) => tnCmp(tnVal(x, tn.sort.k), tnVal(y, tn.sort.k), tn.sort.dir));
 
 function tn11Blocks() {
   return [{static: '<section class="block" data-bid="tn11"><div class="block-head"><h3>Contrôle d’un devis TN11</h3></div><div class="block-body" id="tn11-view"><p class="na">Chargement…</p></div></section>'}];
@@ -53,24 +62,29 @@ function drawTn11() {
       + `<td data-v="${r.sale_total}">${tnEur(r.sale_total)}</td><td data-v="${r.odoo}">${tnEur(r.odoo)}</td><td data-v="${r.real}" title="${esc((r.flags || []).join(' · '))}">${tnEur(r.real)}${(r.flags || []).length ? ' <small class="na">⚑</small>' : ''}</td>`
       + tnM(r.margin.theoretical, r.rate.theoretical) + tnM(r.margin.real, r.rate.real)
       + `<td data-v="${r.self_labour ? r.real : r.labour_cost}">${r.self_labour || r.labour_cost > 0 ? `<span class="tnlab" title="${esc(r.self_labour ? 'Ligne de main-d’œuvre' : r.labour.map(l => l.label + ' : ' + tnEur(l.cost)).join('\n'))}">🛠 ${tnEur0(r.self_labour ? r.real : r.labour_cost)}${r.labour_minutes ? '<br><small>' + tnH(r.labour_minutes) + '</small>' : ''}</span>` : ''}</td></tr>`;
-  const head = ['Réf.', 'Désignation', 'Qté', 'Prix de vente', 'Coût Odoo', 'Coût réel estimé', 'Marge théorique', 'Marge réelle', 'Main-d’œuvre'];
   let body;
   if (tn.grouped) {
     const groups = []; rep.rows.forEach(r => { const g = groups.find(x => x.s === (r.section || '(sans sous-ensemble)')) || (groups.push({s: r.section || '(sans sous-ensemble)', rows: []}), groups[groups.length - 1]); g.rows.push(r); });
-    body = groups.flatMap(g => { const f = g.rows.filter(r => r.found), s = f.reduce((a, r) => a + r.sale_total, 0), c = f.reduce((a, r) => a + r.real, 0), l = f.reduce((a, r) => a + (r.self_labour ? r.real : r.labour_cost), 0);
-      return [`<tr class="grp"><td colspan="9"><strong>${esc(g.s)}</strong> <small class="na">vente ${tnEur0(s)} · coût réel ${tnEur0(c)} · marge ${tnPct(s ? (s - c) / s * 100 : null)}${l ? ' · main-d’œuvre ' + tnEur0(l) : ''}</small></td></tr>`].concat(g.rows.map(row)); });
-  } else body = rep.rows.map(row);
+    const ordered = tn.sort.k === 'devis' ? groups : groups.slice().sort((x, y) => tnCmp(tnGroupVal(x.rows, tn.sort.k), tnGroupVal(y.rows, tn.sort.k), tn.sort.dir));
+    body = ordered.flatMap(g => { const f = g.rows.filter(r => r.found), s = f.reduce((a, r) => a + r.sale_total, 0), c = f.reduce((a, r) => a + r.real, 0), l = f.reduce((a, r) => a + tnLab(r), 0);
+      return [`<tr class="grp"><td colspan="9"><strong>${esc(g.s)}</strong> <small class="na">vente ${tnEur0(s)} · coût réel ${tnEur0(c)} · marge ${tnPct(s ? (s - c) / s * 100 : null)}${l ? ' · main-d’œuvre ' + tnEur0(l) : ''}</small></td></tr>`].concat(tnSortRows(g.rows).map(row)); });
+  } else body = tnSortRows(rep.rows).map(row);
   el.innerHTML = zone
     + `<p class="${gapOk ? 'na' : 'neg'}">${gapOk ? '✔' : '⚠'} Total du devis (PDF) : <b>${tnEur(rep.pdf_total)}</b> HT · somme des prix de vente Odoo des ${found.length} lignes vendues : <b>${tnEur(t.sale)}</b>${gapOk ? ' : les prix correspondent.' : gap == null ? '' : ` : écart de ${tnEur(gap)}. Les prix du devis diffèrent des prix de vente actuels d’Odoo (ou des lignes manquent).`}</p>`
     + `<div class="kpis">${kpi('Prix de vente (Odoo)', tnEur0(t.sale), '', `${found.length} lignes vendues`)}${kpi('Coût Odoo (théorique)', tnEur0(t.odoo), '', 'prix de revient des fiches')}${kpi('Coût réel estimé', tnEur0(t.real), '', 'nomenclatures, achats réels et transport')}`
     + `${kpi('Marge théorique', tnPct(t.margin.theoretical), t.rate.theoretical === 'red' ? 'neg' : t.rate.theoretical === 'green' ? 'pos' : '', t.margin.theoretical == null ? '' : tnEur0(t.sale - t.odoo))}${kpi('Marge réelle estimée', tnPct(t.margin.real), t.rate.real === 'red' ? 'neg' : t.rate.real === 'green' ? 'pos' : '', t.margin.real == null ? '' : tnEur0(t.sale - t.real) + (t.margin.theoretical != null && t.margin.real != null ? ' · ' + (t.margin.real - t.margin.theoretical > 0 ? '+' : '−') + Math.abs(Math.round((t.margin.real - t.margin.theoretical) * 10) / 10).toString().replace('.', ',') + ' pts' : ''))}`
     + `${kpi('Main-d’œuvre', tnEur0(lab), '', `${t.real ? tnPct(lab / t.real * 100) + ' du coût réel' : ''}${t.labour_minutes ? ' · ' + tnH(t.labour_minutes) + ' d’opérations' : ''}`)}</div>`
     + (rep.bom_error ? `<p class="neg">Nomenclatures ou coûts réels partiellement indisponibles (${esc(rep.bom_error)}) : les coûts retombent sur les coûts Odoo.</p>` : '')
-    + `<div class="sdbar tn11bar"><button type="button" id="tn11-group">${tn.grouped ? 'Afficher à plat (tri par colonne)' : 'Grouper par sous-ensemble'}</button><span class="na">${num(found.length)} lignes comparées${miss.length ? ` · <b class="neg">${miss.length} non retrouvée${miss.length > 1 ? 's' : ''} dans Odoo</b>` : ''}${nobom.length ? ` · ${nobom.length} sans nomenclature (coût réel = achats de l’article)` : ''}</span></div>`
-    + table(head, body, 'prodtable mgtable tn11table')
+    + `<div class="sdbar tn11bar"><button type="button" id="tn11-group">${tn.grouped ? 'Afficher à plat' : 'Grouper par sous-ensemble'}</button><label class="na tnsel">Trier par <select class="sdin" id="tn11-sort" style="max-width:230px">${TN_SORTS.map(([k, l]) => `<option value="${k}"${tn.sort.k === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label><button type="button" id="tn11-dir" title="Inverser l’ordre"${tn.sort.k === 'devis' ? ' disabled' : ''}>${tn.sort.dir === 'asc' ? '↑ croissant' : '↓ décroissant'}</button><span class="na">${num(found.length)} lignes comparées${miss.length ? ` · <b class="neg">${miss.length} non retrouvée${miss.length > 1 ? 's' : ''} dans Odoo</b>` : ''}${nobom.length ? ` · ${nobom.length} sans nomenclature (coût réel = achats de l’article)` : ''}</span></div>`
+    + `<div class="table-wrap"><table class="prodtable mgtable tn11table"><thead><tr>${Object.entries(TN_COLS).map(([k, [l]]) => `<th data-tnk="${k}" class="tnsort${tn.sort.k === k ? ' on' : ''}" title="Cliquer pour trier">${l}${tn.sort.k === k ? (tn.sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr></thead><tbody>${body.join('')}</tbody></table></div>`
     + '<small class="na">Chaque ligne marquée « x » du devis est un article Odoo vendu à son prix propre (liste de prix de la fiche article) ; son coût Odoo est le coût de la fiche. <b>Coût réel estimé</b> : si l’article a une nomenclature (BOM), somme de ses composants (récursivement) au coût d’achat réel estimé (commandes et factures, + transport au prorata du prix de vente) et des opérations de main-d’œuvre (temps × coût horaire du poste) ; sinon coût d’achat réel de l’article. ⚑ : un composant est au coût Odoo faute d’achat récent. Les lignes détaillées sous un ensemble dans le PDF (composants non marqués) ne sont pas comptées : elles sont déjà dans la nomenclature.</small>'
     + tnLabourSection(rep)
     + (miss.length ? '<h4 class="sub">Lignes vendues non retrouvées dans Odoo</h4>' + table(['Réf.', 'Désignation', 'Qté', 'Sous-ensemble'], miss.map(r => `<tr><td>${esc(r.ref) || '–'}</td><td class="prod">${esc(r.name)}</td><td>${num(r.qty)}</td><td>${esc(r.section)}</td></tr>`), 'prodtable') + '<small class="na">Ces lignes ne sont pas dans le prix de vente ni dans le coût calculés. Une ligne sans référence ne peut pas être rapprochée d’Odoo automatiquement.</small>' : '');
 }
 document.addEventListener('change', e => { if (e.target.id === 'tn11-file' && e.target.files && e.target.files[0]) tnUpload(e.target.files[0]); });
-document.addEventListener('click', e => { if (e.target.id === 'tn11-group') { tn.grouped = !tn.grouped; drawTn11(); } });
+document.addEventListener('change', e => { if (e.target.id === 'tn11-sort') { const k = e.target.value; tn.sort = {k, dir: ['real', 'sale', 'odoo', 'labour', 'gap'].includes(k) ? 'desc' : k === 'mreal' || k === 'mtheo' ? 'asc' : 'asc'}; drawTn11(); } });
+document.addEventListener('click', e => {
+  if (e.target.id === 'tn11-group') { tn.grouped = !tn.grouped; drawTn11(); return; }
+  if (e.target.id === 'tn11-dir') { tn.sort.dir = tn.sort.dir === 'asc' ? 'desc' : 'asc'; drawTn11(); return; }
+  const th = e.target.closest('th[data-tnk]'); if (th) { const k = th.dataset.tnk; tn.sort = tn.sort.k === k ? (tn.sort.dir === 'asc' ? {k, dir: 'desc'} : {k: 'devis', dir: 'asc'}) : {k, dir: 'asc'}; drawTn11(); }
+});

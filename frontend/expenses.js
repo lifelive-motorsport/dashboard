@@ -410,6 +410,10 @@ function exDrawSplit() {
   const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null, canEdit = !!v.can_edit;
   const rowsAll = exSplitRows(v);
   const id = rowsAll.filter(r => r.x.identified !== false), other = rowsAll.filter(r => r.x.identified === false);
+  // Doublons probables (deux comptes qui désignent sans doute le même véhicule) : fusion en un clic, la plus petite ligne rejoint la plus grosse.
+  const GENW = new Set(['util', 'utilitaire', 'truck', 'semi', 'trailer', 'remorque', 'camion', 'vehicule']), linked = v.links || {}, ident = id.map(r => r.x), pairs = [];
+  ident.forEach(x => { if (linked[x.vehicle]) return; const tk = exVTok(x.vehicle).filter(w => w.length >= 4 && !GENW.has(w)); const y = ident.find(o => o !== x && o.total >= x.total && !linked[o.vehicle] && exVTok(o.vehicle).some(w => tk.includes(w))); if (y && !pairs.some(p => p[0] === y.vehicle && p[1] === x.vehicle)) pairs.push([x.vehicle, y.vehicle]); });
+  const twinBar = canEdit && v.can_save !== false && pairs.length ? `<div class="note nmtwin">${pairs.map(([a, b]) => `<span>Doublon probable : « ${esc(a)} » et « ${esc(b)} » sont peut-être le même véhicule. <button type="button" class="sdfill" data-ex-merge="${esc(a)}" data-into="${esc(b)}">Fusionner dans « ${esc(b)} »</button></span>`).join('<br>')}</div>` : '';
   const BUC = {XC: '#c8102e', MODERN_RALLY: '#2f80ed', HISTORIC_RALLY: '#27ae60', HISTORIC_RACING: '#f2994a', GENERAL: '#9aa0a6'};
   const ip = x => x ? Math.round(x * 100) + ' %' : '–';
   const cell = r => EX_SPLIT.map(([k]) => `<td class="sdind${r.ret.src === 'indicatif' ? ' on' : ''}" title="Proposition indicative">${ip(r.ind[k])}</td><td class="sdinp"><input class="sdin sdpct${r.sv[k] != null ? ' set' : ''}" type="text" inputmode="decimal" autocomplete="off" data-ex-split="${esc(r.x.vehicle)}" data-k="${k}" value="${r.sv[k] != null ? r.sv[k] : ''}"${canEdit ? '' : ' disabled'}></td>`).join('');
@@ -419,7 +423,7 @@ function exDrawSplit() {
   const head = ['Véhicule', 'Coût'].map(h => `<th rowspan="2">${h}</th>`).join('') + EX_SPLIT.map(([k, l]) => `<th colspan="2" class="grp" style="border-bottom:3px solid ${BUC[k]}">${l}</th>`).join('') + '<th rowspan="2">Retenu</th><th rowspan="2"></th>';
   const sub = EX_SPLIT.map(() => '<th class="sdsub">Indic.</th><th class="sdsub">Retenu</th>').join('');
   const sect = t => `<tr class="grp"><td colspan="${EX_SPLIT.length * 2 + 4}"><strong>${t}</strong></td></tr>`;
-  const tbl = `<div class="table-wrap"><table class="prodtable sdtable sdsplit" style="width:830px">${'<colgroup><col style="width:150px"><col style="width:70px">' + EX_SPLIT.map(() => '<col style="width:38px"><col style="width:50px">').join('') + '<col style="width:98px"><col style="width:72px"></colgroup>'}<thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
+  const tbl = twinBar + `<div class="table-wrap"><table class="prodtable sdtable sdsplit" style="width:100%;min-width:830px">${'<colgroup><col><col style="width:78px">' + EX_SPLIT.map(() => '<col style="width:38px"><col style="width:50px">').join('') + '<col style="width:98px"><col style="width:72px"></colgroup>'}<thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
   // Résultat en € avec les % retenus (saisis, sinon indicatifs)
   const amt = r => Object.fromEntries(EX_SPLIT.map(([k]) => [k, r.x.total * r.ret.p[k]])), tot = Object.fromEntries(EX_SPLIT.map(([k]) => [k, rowsAll.reduce((t, r) => t + amt(r)[k], 0)])), grand = rowsAll.reduce((t, r) => t + r.x.total, 0);
   const res = table(['Véhicule', 'Coût'].concat(EX_SPLIT.map(b => b[1]), ['Source']),
@@ -458,6 +462,16 @@ function exFillSplit(veh) {
   r[big] += diff; ex.split = ex.split || JSON.parse(JSON.stringify(v.split || {})); ex.split[veh] = Object.fromEntries(Object.entries(r).filter(([, n]) => n > 0)); ex.splitDirty = true; ex.splitMsg = '';
 }
 document.addEventListener('click', async e => {
+  const mb = e.target.closest('button'); if (mb && mb.dataset.exMerge !== undefined && ex.vsplit) {
+    ex.splitMsg = 'Fusion…'; exDrawSplit();
+    try {
+      const links = {...(ex.vsplit.links || {}), [mb.dataset.exMerge]: mb.dataset.into};
+      const r = await fetch('/api/expenses/links', {method: 'PUT', headers: {'Content-Type': 'application/json', ...exAuth()}, body: JSON.stringify({links, base: ex.vsplit.links_base})});
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+      ex.links = null; await exLoadSplit(); ex.splitMsg = 'Fusionné.';
+    } catch (err) { ex.splitMsg = 'Échec de la fusion : ' + err.message; }
+    exDrawSplit(); return;
+  }
   const rb = e.target.closest('button'); if (rb && rb.dataset.exRestoreSplit !== undefined) { await exRestoreSplit(); return; } if (rb && rb.dataset.exRestoreKey !== undefined) { await exRestoreKey(); return; }
   const f = e.target.closest('button'); if (f && ex.vsplit && f.dataset.exSplitFill !== undefined) { exFillSplit(f.dataset.exSplitFill); exDrawSplit(); return; }
   if (f && ex.vsplit && f.dataset.exSplitGen !== undefined) { const n = f.dataset.exSplitGen, cur = (ex.general || ex.vsplit.general_vehicles || []).slice(), i = cur.findIndex(y => y.toLowerCase() === n.toLowerCase()); if (i >= 0) cur.splice(i, 1); else cur.push(n);

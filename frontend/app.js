@@ -18,13 +18,12 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
   'xc/events': ['CA, coûts directs et marge par événement (course, meeting) pour XC.',
     'Savoir comment un événement est repéré dans Odoo (compte analytique, projet, étiquette sur les factures…). Les comptes « XC Events » (700014, 602014) donnent déjà le total, pas le détail.'],
-  'xc/tn11': ['Contrôle des marges sur le projet TN11 : page à construire ensemble.', 'À définir ensemble : le périmètre (articles, commandes d’achat, ventes), les sources dans Odoo et les indicateurs attendus.'],
   'xc/inventory': ['Valeur du stock XC dans le temps (pièces, véhicules, en-cours), par catégorie et par entrepôt, avec alertes de rupture et de surstock.',
     'Valider les entrepôts à inclure et la méthode de valorisation d’Odoo. L’analyse de septembre a montré que la valeur du stock varie fortement : une courbe mensuelle sera utile.'],
   'cars/events': ['CA, coûts directs et marge par événement pour CARS (ex. Andalucia).',
@@ -422,6 +421,7 @@ const PAGES = {
   'overview/adjustments': () => adjPageBlocks(),
   'xc/inventory': () => stockBlocks().concat(stockVarBlocks()),
   'xc/margins': () => marginsBlocks(),
+  'xc/tn11': () => tn11Blocks(),
   'marketing/expenses': () => marketingBlocks(),
   'others/tags': () => tagsBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
@@ -556,6 +556,7 @@ function render(force) {
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
   if (key === 'xc/inventory') { drawStockVar(); loadStock(!!force).then(drawStock); }
+  if (key === 'xc/tn11') drawTn11();
   if (key === 'xc/margins') { drawMargins(); if (!mg.data || force) loadMargins(!!force); }
   if (/^staff\/(source|people|general|xc|cars|shared|management)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
   if (key === 'expenses/source') { exDrawSource(); exLoadSource().then(exDrawSource); }

@@ -228,3 +228,8 @@ table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-ali
 .mgtable .mgdb{width:78px}.mgtable td.mggap>span:first-child{min-width:54px;margin-right:4px}.mgtable td,.mgtable th{padding-left:3px;padding-right:3px}
 .mgtable td.prod{min-width:96px!important}
 .mgtable .mgdb{width:70px}
+
+/* Contrôle d'un devis TN11 */
+.tn11table td{font-size:13px;white-space:nowrap;vertical-align:middle}.tn11table td.prod{white-space:normal;min-width:180px}.tn11table tr.grp td{background:rgba(128,128,128,.12);padding-top:8px;padding-bottom:8px;white-space:normal}
+.tn11table tr.tn-miss td{background:rgba(255,90,95,.08)}.tnbadge{border:1px solid var(--line);border-radius:6px;padding:0 5px;color:var(--mut);font-size:10px}.tnlab{color:#f5a623;font-weight:600;line-height:1.2;display:inline-block}.tnlab small{font-weight:400;color:var(--mut)}
+.tn11bar{align-items:center}

@@ -2,7 +2,7 @@
 // Assemble des données déjà calculées ailleurs : P&L (marge brute), personnel (coût réel à ce jour et % d'imputation par personne),
 // frais véhicules (% retenus) et frais généraux (clé XC / CARS). Les frais communs (Shared Services, frais généraux, véhicules non liés à une BU)
 // vont à XC ou CARS selon la clé d'imputation des frais généraux, puis aux BU de CARS au prorata de leur chiffre d'affaires.
-const nm = {ready: false, loading: null, d: null, err: null, gen: null, alloc: null, withMgmt: (() => { try { return localStorage.getItem('lm_nm_mgmt') !== '0'; } catch { return true; } })()};
+const nm = {ready: false, loading: null, d: null, err: null, gen: null, alloc: null, withMgmt: (() => { try { return localStorage.getItem('lm_nm_mgmt') !== '0'; } catch { return true; } })(), withShared: (() => { try { return localStorage.getItem('lm_nm_shared') !== '0'; } catch { return true; } })()};
 const NM_BU = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'], NM_CARS = ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'];
 const NM_LABEL = {XC: 'XC', MODERN_RALLY: 'Modern Rally', HISTORIC_RALLY: 'Historic Rally', HISTORIC_RACING: 'Historic Racing', CARS_OTHERS: 'CARS Others', UNASSIGNED: 'Non affecté', UNALLOC: 'Non imputé'};
 
@@ -37,12 +37,13 @@ function nmCompute(d) {
   [...NM_BU, 'UNASSIGNED', 'UNALLOC'].forEach(k => { cols[k] = z(); });
   d.pnl.bus.forEach(b => { const c = cols[b.key] || (cols[b.key] = z()); c.ca += b.ca; c.dc += b.direct_costs; });
   // Personnel : coût réel à ce jour × % d'imputation de chaque personne ; Shared Services = frais communs ; le reste (< 100 %) = non imputé.
-  let sharedStaff = 0, mgmtStaff = 0, mgmtOut = 0, staffTotal = 0;
+  let sharedStaff = 0, mgmtStaff = 0, mgmtOut = 0, sharedOut = 0, staffTotal = 0;
   const BU4 = NM_BU.slice(0, 4);
   sdViewRows(true).forEach(r => { staffTotal += r.annual; NM_BU.forEach(k => { if (r.a[k]) cols[k].staff += r.a[k]; }); cols.UNALLOC.staff += r.a.UNALLOCATED || 0;
     // Part Shared Services / Management : répartition propre à la personne sur les 4 BU si elle est renseignée (le solde est « non imputé »), sinon clé générale des frais communs.
-    const cs = r.p.common_split || {}, used = BU4.reduce((t, k) => t + (+cs[k] || 0), 0), sh = r.a.SHARED || 0, mg = nm.withMgmt ? (r.a.MANAGEMENT || 0) : 0;
+    const cs = r.p.common_split || {}, used = BU4.reduce((t, k) => t + (+cs[k] || 0), 0), sh = nm.withShared ? (r.a.SHARED || 0) : 0, mg = nm.withMgmt ? (r.a.MANAGEMENT || 0) : 0;
     if (!nm.withMgmt) mgmtOut += r.a.MANAGEMENT || 0;
+    if (!nm.withShared) sharedOut += r.a.SHARED || 0;
     if (used > 0) { BU4.forEach(k => { cols[k].shared += sh * (+cs[k] || 0) / 100; cols[k].mgmt += mg * (+cs[k] || 0) / 100; }); cols.UNALLOC.shared += sh * (100 - used) / 100; cols.UNALLOC.mgmt += mg * (100 - used) / 100; }
     else { sharedStaff += sh; mgmtStaff += mg; } });
   // Véhicules : % retenus par véhicule ; la part « frais généraux » est commune.
@@ -56,7 +57,7 @@ function nmCompute(d) {
     const cars = amt * shCARS / shT;
     NM_CARS.forEach(k => { cols[k][row] += carsCa > 0 ? cars * Math.max(0, cols[k].ca) / carsCa : cars / NM_CARS.length; });
   });
-  return {cols, sources: {staff: staffTotal - mgmtOut, mgmtOut, general: commons.general, veh: vt.grand, mkt: commons.mkt}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode};
+  return {cols, sources: {staff: staffTotal - mgmtOut - sharedOut, mgmtOut, sharedOut, general: commons.general, veh: vt.grand, mkt: commons.mkt}, shXC: shT ? shXC / shT : 0, shCARS: shT ? shCARS / shT : 0, mode};
 }
 const nmSum = (cols, keys) => keys.reduce((o, k) => { const c = cols[k] || {}; ['ca', 'dc', 'staff', 'veh', 'shared', 'mgmt', 'general', 'vehgen', 'mkt'].forEach(f => { o[f] = (o[f] || 0) + (c[f] || 0); }); return o; }, {});
 const nmNet = o => (o.ca - o.dc) - o.staff - o.veh - o.shared - o.mgmt - o.general - o.vehgen - o.mkt;
@@ -77,8 +78,9 @@ function nmControl(res) {
   const un = res.cols.UNALLOC, unT = un.staff + un.veh + un.shared + un.mgmt + un.general + un.vehgen + un.mkt;
   const ok = c => `<span class="${c ? 'pos' : 'neg'}">${c ? '✔' : '⚠'}</span>`;
   return '<h4 class="sub">Contrôle : tous les coûts sont repris</h4>' + table(['Source', 'Montant', ''], [
-    `<tr><td>Personnel : coût réel à ce jour (Shared Services${nm.withMgmt ? ' et Management' : ''} compris)</td><td>${eur(res.sources.staff)}</td><td></td></tr>`,
+    `<tr><td>Personnel : coût réel à ce jour (${[nm.withShared ? 'Shared Services' : '', nm.withMgmt ? 'Management' : ''].filter(Boolean).join(' et ') || 'sans Shared Services ni Management'}${nm.withShared || nm.withMgmt ? ' compris' : ''})</td><td>${eur(res.sources.staff)}</td><td></td></tr>`,
     res.sources.mgmtOut ? `<tr><td>Management : coût réel à ce jour, <b>exclu</b> de la marge nette (bouton ci-dessus)</td><td>${eur(res.sources.mgmtOut)}</td><td></td></tr>` : '',
+    res.sources.sharedOut ? `<tr><td>Shared Services : coût réel à ce jour, <b>exclu</b> de la marge nette (bouton ci-dessus)</td><td>${eur(res.sources.sharedOut)}</td><td></td></tr>` : '',
     `<tr><td>Frais généraux (comptes retenus en « frais généraux »)</td><td>${eur(res.sources.general)}</td><td></td></tr>`,
     `<tr><td>Frais véhicules (classe 615 entière)</td><td>${eur(res.sources.veh)}</td><td></td></tr>`,
     `<tr><td>Marketing commun (comptes marketing sans BU)</td><td>${eur(res.sources.mkt)}</td><td></td></tr>`,
@@ -99,10 +101,11 @@ function nmUnassigned(c) {
 const nmSimulating = () => sd.canSave === false || (ex.vsplit || {}).can_save === false || (ex.alloc || {}).can_save === false;
 const nmDirty = () => !!(sd.dirty || ex.splitDirty || ex.keyDirty);
 // Bascule « avec / sans management » + mode simulation (hypothèses modifiées sans être enregistrées) avec retour aux valeurs de référence.
-const nmControls = () => `<div class="sdbar nmbar"><span class="na">Management :</span><button type="button" data-nm-mgmt="1" class="${nm.withMgmt ? 'primary' : ''}">Avec le coût du management</button><button type="button" data-nm-mgmt="0" class="${nm.withMgmt ? '' : 'primary'}">Sans le coût du management</button></div>`
+const nmControls = () => `<div class="sdbar nmbar"><span class="na">Management :</span><button type="button" data-nm-mgmt="1" class="${nm.withMgmt ? 'primary' : ''}">Avec le coût du management</button><button type="button" data-nm-mgmt="0" class="${nm.withMgmt ? '' : 'primary'}">Sans le coût du management</button></div><div class="sdbar nmbar"><span class="na">Shared Services :</span><button type="button" data-nm-shared="1" class="${nm.withShared ? 'primary' : ''}">Avec le coût des Shared Services</button><button type="button" data-nm-shared="0" class="${nm.withShared ? '' : 'primary'}">Sans le coût des Shared Services</button></div>`
   + (nmSimulating() ? `<div class="sdbar sim">${exSimBar('data-nm-restore', 'Vos hypothèses')}</div><small class="na">${nmDirty() ? 'Simulation en cours : ce tableau utilise vos hypothèses modifiées.' : 'Ce tableau utilise les valeurs de référence.'} Modifiez les imputations dans STAFF costs › Imputation du personnel, SERVICE VEHICLES › Imputation des frais véhicules et GENERAL EXPENSES › Imputation des frais généraux : le résultat se recalcule ici. L’export PDF reprend ce que vous voyez.</small>` : '');
 document.addEventListener('click', async e => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.nmShared !== undefined) { nm.withShared = t.dataset.nmShared === '1'; try { localStorage.setItem('lm_nm_shared', nm.withShared ? '1' : '0'); } catch {} nmRedraw(); return; }
   if (t.dataset.nmMgmt !== undefined) { nm.withMgmt = t.dataset.nmMgmt === '1'; try { localStorage.setItem('lm_nm_mgmt', nm.withMgmt ? '1' : '0'); } catch {} nmRedraw(); return; }
   if (t.dataset.nmRestore !== undefined) {
     sd.dirty = false; sd.msg = ''; await sdLoad(); sd.inv = {}; if (!sd.restricted && sd.doc) await nmLoadInvoices();

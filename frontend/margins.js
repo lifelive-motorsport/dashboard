@@ -41,7 +41,6 @@ function drawMargins() {
   const s = d.summary, q = mg.q.trim().toLowerCase(), [fk, fv] = mg.filter === 'all' ? [null, null] : mg.filter.split(':');
   const match = r => !fk || (fk === 'gap' ? r.gap != null && r.gap <= -(+fv) : (r.rate[fk] || 'unknown') === fv);
   const rows = d.rows.filter(r => (!q || (r.ref + ' ' + r.name + ' ' + r.pif).toLowerCase().includes(q)) && match(r));
-  const worst = d.rows.filter(r => r.gap != null && r.gap < 0).sort((x, y) => x.gap - y.gap).slice(0, 12);
   const maxB = Math.max(1, ...s.buckets.map(b => b.count)), bcol = ['#ff5a5f', '#ff8a5c', '#f5a623', '#9aa0a6', '#2ecc71'];
   const hist = s.buckets.map((b, i) => `<div class="row"><span>${esc(b.label)}</span><div class="bars"><div class="bar solo" style="width:${b.count / maxB * 100}%;background:${bcol[i]}"></div></div><span class="num">${num(b.count)}</span></div>`).join('');
   const body = rows.map(r => {
@@ -54,7 +53,7 @@ function drawMargins() {
   });
   const opts = (items, cur) => items.map(([v, l]) => `<option value="${v}"${cur === v ? ' selected' : ''}>${l}</option>`).join('');
   const fopts = [['all', 'Tous les articles'], ['gap:10', 'Écart de 10 pts ou plus en dessous'], ['gap:5', 'Écart de 5 pts ou plus en dessous']]
-    .concat(['real', 'theoretical'].flatMap(b => MG_LEVELS.map(([l, n]) => [b + ':' + l, (b === 'real' ? 'Marge réelle : ' : 'Marge théorique : ') + n])));
+    .concat(['real', 'theoretical'].flatMap(b => MG_LEVELS.filter(([l]) => l !== 'unknown').map(([l, n]) => [b + ':' + l, (b === 'real' ? 'Marge réelle : ' : 'Marge théorique : ') + n])));
   const cmp = s.avg_real != null && s.avg_theoretical != null ? s.avg_real - s.avg_theoretical : null;
   el.innerHTML = (d.real_error ? `<p class="neg">Coût réel indisponible (${esc(d.real_error)}) : seule la marge théorique est calculée.</p>` : '')
     + `<div class="kpis">${kpi('Articles à code PIF', num(s.count), '', `${num(s.compared)} comparables (coût Odoo et achats récents connus)`)}`
@@ -63,8 +62,6 @@ function drawMargins() {
     + `${kpi('Marge réelle en rouge', num(s.real.red), s.real.red ? 'neg' : '', `≤ 15 % · théorique : ${num(s.theoretical.red)}`)}</div>`
     + '<h4 class="sub">Ampleur de l’écart entre marge théorique et marge réelle</h4>'
     + `<div class="card mghist">${hist}</div><small class="na">Écart = marge réelle − marge théorique, en points de marge, sur les ${num(s.compared)} articles dont le coût Odoo et les achats récents sont connus. Un écart négatif signifie que l’article rapporte moins que son coût Odoo ne le laisse croire.</small>`
-    + (worst.length ? '<h4 class="sub">Les plus gros écarts</h4><div class="card mgworst">' + worst.map(r => `<div class="row"><span class="mgname" title="${esc(r.ref + ' ' + r.name)}">${esc(r.name)}<small class="na"> ${esc(r.ref)}</small></span>${mgDumbbell(r.margin.theoretical, r.margin.real, r.rate.real, true)}<span class="num mg-red">${mgPts(r.gap)}<br><small class="na">${mgPct(r.margin.theoretical)} → ${mgPct(r.margin.real)}</small></span></div>`).join('') + '</div>'
-      + '<small class="na">Chaque ligne : rond creux = marge théorique, rond plein = marge réelle estimée ; fond rouge ≤ 15 %, orange 15 à 25 %, vert &gt; 25 %.</small>' : '')
     + '<h4 class="sub">Tous les articles</h4>'
     + `<div class="sdbar mgbar"><input type="search" class="sdin" id="mg-q" placeholder="Rechercher une référence, un article, un code PIF" value="${esc(mg.q)}" style="max-width:340px">`
     + `<select class="sdin" id="mg-filter" style="max-width:300px">${opts(fopts, mg.filter)}</select><button type="button" id="mg-refresh">${mg.loading ? 'Actualisation…' : 'Actualiser'}</button>`

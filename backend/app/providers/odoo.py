@@ -808,7 +808,8 @@ class OdooProvider:
         pif = self._pif_field()
         if not pif:
             return {"unavailable": "Champ « code PIF » introuvable dans Odoo : indiquez son nom technique avec la variable STOCK_PIF_FIELD."}
-        prods = self._call("product.product", "search_read", domain=[(pif, "!=", False)], limit=5000, order="default_code",
+        lang = self._fr_lang()                                              # noms d'articles en français
+        prods = self._call("product.product", "search_read", domain=[(pif, "!=", False)], limit=5000, order="default_code", context={"lang": lang} if lang else {},
                            fields=["default_code", "name", pif, "list_price", "standard_price"])
         products = [{"id": p["id"], "ref": p.get("default_code") or "", "name": p.get("name") or "", "pif": str(p.get(pif) or "").strip(),
                      "sale": float(p.get("list_price") or 0.0), "cost": float(p.get("standard_price") or 0.0)} for p in prods]

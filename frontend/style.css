@@ -246,3 +246,4 @@ table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-ali
 .tn-excl td:first-child,.tn-excl td:nth-child(2){text-decoration:none}
 .tnov{color:#e0a030;cursor:help}
 input.tnx{vertical-align:middle;margin-right:.25em}
+.note.warn{border-left-color:#e0a030;color:var(--fg,inherit)}

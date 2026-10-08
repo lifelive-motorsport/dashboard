@@ -166,6 +166,7 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   const th = ([k, l]) => `<th class="sortable${evSort.k === k ? ' sorted' : ''}" data-sort="${k}" role="button" tabindex="0" aria-sort="${evSort.k === k ? (evSort.dir > 0 ? 'ascending' : 'descending') : 'none'}">${esc(l)}<span class="arrow">${evSort.k === k ? (evSort.dir > 0 ? ' ▲' : ' ▼') : ''}</span></th>`;
   return `<div class="table-wrap"><table class="prodtable"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${sorted.map(e => row(e)).concat([row(total, 'tot')]).join('')}</tbody></table></div>` + note;
 }
+const CARS_MARGIN_WARN = {static: '<div class="note warn"><b>⚠ Marge brute, pas une marge nette.</b> Le résultat et la marge de cette vue sont une marge brute (produits − coûts directs − autres charges), <b>hors</b> coûts de personnel interne, <b>hors</b> coûts liés aux véhicules de service, <b>hors</b> contribution aux frais généraux (dont assurances, marketing, etc.) et <b>hors</b> amortissements (infrastructures, outillage, véhicules de service, etc.). La marge nette par BU se trouve dans Overview › Marge nette.</div>'};
 const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − coûts directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
 const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
@@ -482,11 +483,13 @@ const PAGES = {
     EVENT_NOTE,
   ],
   'cars/events': () => [
+    CARS_MARGIN_WARN,
     B('events', 'Événements CARS', d => eventsTable(d, ['CARS'], true)),
     B('none', 'Autres événements (BU « Others » ou sans BU identifiable)', d => eventsTable(d, ['OTHERS', 'NONE'], true)),
     EVENT_NOTE,
   ],
   'cars/vehicles': () => [
+    CARS_MARGIN_WARN,
     B('vehicles', 'Véhicules CARS', d => eventsTable(d, ['CARS'], true, true)),
     NOTE('Un véhicule = un compte de l’axe analytique CARS ; il est rattaché à une BU d’après l’axe BU renseigné sur ses lignes (Modern Rally, Historic Rally, Historic Racing). Client et catégorie viennent de la fiche du compte analytique. Résultat cash = produits − coûts directs − autres charges (hors dotations aux amortissements) − investissements (dépenses immobilisées sur les comptes INVEST, amorties ensuite) ; survolez le ⓘ à côté du résultat pour le montant investi, la durée d’amortissement et le résultat comptable. Les montants non ventilés analytiquement n’apparaissent pas ici ; les comptes « OLD » de l’axe BU sont ignorés.'),
   ],

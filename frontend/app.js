@@ -100,10 +100,20 @@ const vsPrev = (cur, prev, yr) => prev > 0 ? `<span class="${cur >= prev ? 'pos'
 const margin = o => o.ca ? pct(o.margin / o.ca) : '–';
 const grp = (d, k) => d.pnl.groups.find(g => g.key === k) || {ca: 0, direct_costs: 0, margin: 0};
 const busOf = d => d.pnl.bus.filter(b => b.ca || b.direct_costs);
+const CARS_KEYS = ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'];
+// BU avec CARS en entité propre (total du groupe) suivie de ses sous-BU en retrait ; les autres BU (XC, non affecté) restent au niveau principal
+function busTree(d) {
+  const bs = busOf(d), cars = grp(d, 'CARS'), out = [];
+  bs.filter(b => !CARS_KEYS.includes(b.key)).forEach(b => { if (b.key !== 'OTHER' && b.key !== 'NON_AFFECTE' && !/non affect/i.test(b.label)) out.push(b); });
+  const cb = bs.filter(b => CARS_KEYS.includes(b.key));
+  if (cb.length) { out.push({...cars, key: 'CARS', label: 'CARS', group: true}); cb.forEach(b => out.push({...b, indent: true})); }
+  bs.filter(b => !CARS_KEYS.includes(b.key) && !out.includes(b)).forEach(b => out.push(b));
+  return out;
+}
 
 function bars(items, key, opts = {}) {
   const max = Math.max(...items.map(b => Math.abs(b[key])), 1);
-  return `<div class="card">` + items.map(b => `<div class="row"><span>${esc(b.label)}</span>
+  return `<div class="card">` + items.map(b => `<div class="row${b.group ? ' grp-row' : ''}"><span${b.indent ? ' style="padding-left:1.1em" class="na"' : b.group ? ' style="font-weight:600"' : ''}>${b.indent ? '↳ ' : ''}${esc(b.label)}</span>
     <div class="bars"><div class="bar solo ${key === 'ca' ? 'ca' : 'm' + (b[key] < 0 ? ' n' : '')}" style="width:${Math.abs(b[key]) / max * 100}%"></div></div>
     <span class="num ${key === 'margin' ? cls(b[key]) : ''}">${eur(b[key])}${opts.sub ? `<br><small class="na">${opts.sub(b)}</small>` : ''}</span></div>`).join('') + `</div>`;
 }
@@ -392,7 +402,7 @@ const PAGES = {
         + (pv ? `<small class="na">Variation du CA total par rapport à la même période en ${yr} (${fmtDate(pv.period.from)} → ${fmtDate(pv.period.to)}) : ${eur(pv.total.ca)}${pv.old_plan_ca ? ` (dont ${eur(pv.old_plan_ca)} sur l’ancien plan comptable, comptes « OLD »)` : ''}. Pas de comparaison XC / CARS : la structure des comptes de ${yr} ne permet pas la répartition par BU. Part du CA : par rapport au CA total, « Non affecté » compris.</small>` : '');
     }),
     FINANCE,
-    B('bu', 'CA par BU', d => bars(busOf(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
+    B('bu', 'CA par BU', d => bars(busTree(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
   ],
   'overview/clients': () => [
     B('kpi', 'Clients', d => { const c = d.top_clients || {}, list = c.total || [], ca = d.pnl.total.ca, top = list.reduce((x, y) => x + y.ca, 0);
@@ -405,7 +415,7 @@ const PAGES = {
   'overview/mb': () => [
     B('kpi', 'Marge brute', d => { const t = d.pnl.total; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Coûts directs', eur(t.direct_costs))}</div>`; }),
     FINANCE,
-    B('bu', 'Marge brute par BU', d => bars(busOf(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
+    B('bu', 'Marge brute par BU', d => bars(busTree(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
   ],
   'overview/nm': () => [NM_BLOCK('all', 'Marge nette par BU')],

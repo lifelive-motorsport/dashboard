@@ -22,44 +22,34 @@ def margin_pct(sale: float, cost: float | None) -> float | None:
     return round((sale - cost) / sale * 100, 2)
 
 
-def worst_case(lines: list[dict]) -> dict | None:
-    """Prix d'achat le plus défavorable pour 1 unité : pour chaque fournisseur, le prix de son palier de plus petite quantité ; on garde le plus cher."""
-    best: dict[str, dict] = {}
-    for ln in lines:
-        if ln["price"] <= 0:                                           # prix fournisseur non renseigné (0,00)
-            continue
-        p = ln.get("partner") or ""
-        cur = best.get(p)
-        if cur is None or ln["min_qty"] < cur["min_qty"]:
-            best[p] = ln
-    if not best:
-        return None
-    top = max(best.values(), key=lambda x: x["price"])
-    return {"price": round(top["price"], 4), "partner": top.get("partner") or "", "min_qty": top["min_qty"]}
-
-
-def build_rows(products: list[dict], suppliers: dict[int, list[dict]], real: dict[int, dict]) -> list[dict]:
-    """products : {id, ref, name, pif, sale, cost, tmpl} ; suppliers : tmpl -> lignes {partner, min_qty, price} ; real : id article -> {total, qty, source, lines}."""
+def build_rows(products: list[dict], real: dict[int, dict]) -> list[dict]:
+    """products : {id, ref, name, pif, sale, cost} ; real : id article -> {total, qty, source, lines}.
+    `gap` = marge réelle − marge théorique, en points (négatif : l'article rapporte moins que ce que son coût Odoo laisse croire)."""
     rows = []
     for p in products:
-        lines = suppliers.get(p["tmpl"], [])
-        w = worst_case(lines)
         r = real.get(p["id"])
         est = round(r["total"] / r["qty"], 4) if r and r["qty"] > 0 and r["total"] > 0 else None
-        m_theo, m_worst, m_est = margin_pct(p["sale"], p["cost"]), margin_pct(p["sale"], w["price"] if w else None), margin_pct(p["sale"], est)
+        m_theo, m_real = margin_pct(p["sale"], p["cost"]), margin_pct(p["sale"], est)
         rows.append({"id": p["id"], "ref": p["ref"], "name": p["name"], "pif": p["pif"], "sale": round(p["sale"], 4), "cost": round(p["cost"], 4),
-                     "worst": w, "tiers": sorted(lines, key=lambda x: (x.get("partner") or "", x["min_qty"]))[:12],
                      "real": ({"unit": est, "qty": round(r["qty"], 2), "source": r["source"], "lines": r.get("lines", 0)} if est is not None else None),
-                     "margin": {"theoretical": m_theo, "worst": m_worst, "real": m_est},
-                     "rate": {"theoretical": rate(m_theo), "worst": rate(m_worst), "real": rate(m_est)}})
+                     "margin": {"theoretical": m_theo, "real": m_real}, "rate": {"theoretical": rate(m_theo), "real": rate(m_real)},
+                     "gap": round(m_real - m_theo, 2) if m_theo is not None and m_real is not None else None})
     return sorted(rows, key=lambda x: (x["ref"] or "", x["name"]))
+
+
+GAP_BUCKETS = ((-1e9, -20, "plus de 20 pts en dessous"), (-20, -10, "10 à 20 pts en dessous"), (-10, -5, "5 à 10 pts en dessous"), (-5, 5, "écart de moins de 5 pts"), (5, 1e9, "plus de 5 pts au-dessus"))
 
 
 def summary(rows: list[dict]) -> dict:
     out = {"count": len(rows)}
-    for k in ("theoretical", "worst", "real"):
+    for k in ("theoretical", "real"):
         c = {"green": 0, "orange": 0, "red": 0, "unknown": 0}
         for r in rows:
             c[r["rate"][k] or "unknown"] += 1
         out[k] = c
+    both = [r for r in rows if r["gap"] is not None]
+    out["compared"] = len(both)
+    out["avg_theoretical"] = round(sum(r["margin"]["theoretical"] for r in both) / len(both), 2) if both else None
+    out["avg_real"] = round(sum(r["margin"]["real"] for r in both) / len(both), 2) if both else None
+    out["buckets"] = [{"label": lab, "count": sum(1 for r in both if lo <= r["gap"] < hi)} for lo, hi, lab in GAP_BUCKETS]
     return out

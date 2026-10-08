@@ -271,14 +271,19 @@ def test_staff_common_split_is_validated(monkeypatch):
 def test_margin_control_demo_and_rules():
     from app import margins
     assert margins.rate(26) == "green" and margins.rate(25) == "orange" and margins.rate(15.01) == "orange" and margins.rate(15) == "red" and margins.rate(None) is None
-    w = margins.worst_case([{"partner": "A", "min_qty": 1, "price": 35.21}, {"partner": "A", "min_qty": 5, "price": 34.4}, {"partner": "B", "min_qty": 1, "price": 26.9}])
-    assert w["price"] == 35.21 and w["partner"] == "A"
     j = c.get("/api/xc/margins").json()
     r1 = next(r for r in j["rows"] if r["ref"] == "611363")
-    assert r1["worst"]["price"] == 35.21 and r1["real"]["unit"] == 32.0 and r1["margin"]["theoretical"] == 42.86 and r1["rate"]["worst"] == "green"
+    assert r1["real"]["unit"] == 32.0 and r1["margin"]["theoretical"] == 42.86 and r1["margin"]["real"] == 45.55 and r1["gap"] == 2.69 and "worst" not in r1
+    r2 = next(r for r in j["rows"] if r["ref"] == "611001")
+    assert r2["gap"] == -10.0 and r2["rate"]["theoretical"] == "orange" and r2["rate"]["real"] == "red"
     r4 = next(r for r in j["rows"] if r["ref"] == "611003")
-    assert r4["worst"] is None and r4["real"] is None and r4["rate"]["real"] is None
-    assert j["summary"]["count"] == 4
+    assert r4["real"] is None and r4["gap"] is None and r4["rate"]["real"] is None
+    assert j["summary"]["count"] == 4 and sum(b["count"] for b in j["summary"]["buckets"]) == j["summary"]["compared"]
+
+
+def test_margins_ignore_zero_costs():
+    from app import margins
+    assert margins.margin_pct(446.0, 0.0) is None and margins.margin_pct(100.0, 60.0) == 40.0
 
 
 def test_stockvar_roundtrip_and_validation(monkeypatch):
@@ -291,10 +296,3 @@ def test_stockvar_roundtrip_and_validation(monkeypatch):
     assert got["items"][0]["amount"] == -12500.5 and got["can_edit"] is True
     assert c.put("/api/stockvar", json={"items": [item, item]}).status_code == 422
     assert c.put("/api/stockvar", json={"items": [{**item, "date": "pas une date"}]}).status_code == 422
-
-
-def test_margins_ignore_zero_prices():
-    from app import margins
-    assert margins.margin_pct(446.0, 0.0) is None and margins.margin_pct(100.0, 60.0) == 40.0
-    assert margins.worst_case([{"partner": "C-METAL", "min_qty": 1, "price": 0.0}]) is None
-    assert margins.worst_case([{"partner": "C-METAL", "min_qty": 1, "price": 0.0}, {"partner": "ACM", "min_qty": 1, "price": 9.62}])["partner"] == "ACM"

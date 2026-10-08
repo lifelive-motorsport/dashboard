@@ -209,3 +209,14 @@ table.prodtable.sdsplit td:nth-child(2){white-space:nowrap;text-align:right}
 table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-align:center}table.sdsplit thead th{padding-left:2px;padding-right:2px}
 .mgtable td.mg-green,.mg-green{color:#2ecc71;font-weight:600}.mgtable td.mg-orange,.mg-orange{color:#f5a623;font-weight:600}.mgtable td.mg-red,.mg-red{color:#ff5a5f;font-weight:600}.mgtable td.mg-none{color:var(--mut)}
 .mgtable td{vertical-align:middle;white-space:nowrap}.mgtable td.prod{white-space:normal;min-width:170px}.mgbar{margin-top:14px}
+/* Contrôle des marges : écart entre marge théorique et marge réelle */
+.mgdb{position:relative;display:inline-block;width:150px;height:16px;vertical-align:middle}.mgdb.big{width:min(340px,42vw);height:20px}
+.mgdb .mgz{position:absolute;inset:5px 0;border-radius:3px;overflow:hidden}.mgdb.big .mgz{inset:7px 0}
+.mgz i{position:absolute;top:0;bottom:0;display:block}.mgz i.r{left:0;background:rgba(255,90,95,.28)}.mgz i.o{background:rgba(245,166,35,.28)}.mgz i.g{background:rgba(46,204,113,.28)}
+.mgl{position:absolute;top:50%;height:3px;margin-top:-1.5px;display:block}.mgl.loss{background:#ff5a5f}.mgl.gain{background:#2ecc71}
+.mgp{position:absolute;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;box-sizing:border-box;display:block}.mgdb.big .mgp{width:13px;height:13px;margin:-6.5px 0 0 -6.5px}
+.mgp.theo{background:var(--bg);border:2px solid var(--fg)}.mgp.real{border:2px solid var(--bg)}
+.mg-bg-green{background:#2ecc71}.mg-bg-orange{background:#f5a623}.mg-bg-red{background:#ff5a5f}.mg-bg-none{background:var(--mut)}
+.mghist .row,.mgworst .row{align-items:center}.mgworst .row{display:flex;gap:12px;padding:4px 0}.mgworst .mgname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mgworst .num{text-align:right;min-width:120px}
+.mghist .row{display:grid;grid-template-columns:190px 1fr 36px;gap:10px;align-items:center;padding:3px 0}.mghist .row span:first-child{white-space:nowrap}.mghist .bars{height:14px}
+.mgtable .mgdb{width:104px}.mgtable td,.mgtable th{padding-left:4px;padding-right:4px}.mgtable td.prod{min-width:130px!important}.mgtable th:nth-child(n+4){white-space:normal}

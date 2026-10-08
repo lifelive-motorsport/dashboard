@@ -101,7 +101,7 @@ const exMatchUsage = (usage, veh) => { if (exNorm(veh) === '(non classe)') retur
   const eq = all.filter(u => exNorm(u.vehicle) === exNorm(veh)); if (eq.length) return eq[0];
   const c = all.filter(u => exSameVeh(u.vehicle, veh)); if (c.length <= 1) return c[0];
   // Plusieurs ressources possibles (« TRUCK » : 3 camions) : on écarte celles que les autres véhicules Odoo identifient sans ambiguïté (« GOLD TRU. », « RALLY TRU. »).
-  const peers = [...new Set([...((ex.veh || {}).vehicles || []), ...((ex.vfuel || {}).vehicles || [])].map(v => v.vehicle))].filter(n => n && exNorm(n) !== exNorm(veh));
+  const peers = [...new Set([...((ex.veh || {}).vehicles || []), ...((ex.vfuel || {}).vehicles || []), ...((ex.vsplit || {}).vehicles || [])].map(v => v.vehicle))].filter(n => n && exNorm(n) !== exNorm(veh));
   const taken = new Set(); peers.forEach(n => { const m = all.filter(u => exSameVeh(u.vehicle, n)); if (m.length === 1) taken.add(m[0].vehicle); });
   let left = c.filter(u => !taken.has(u.vehicle));
   // Les ressources « (TO HIRE) … to rent » sont des véhicules à louer, pas des véhicules de service : dernier départage.

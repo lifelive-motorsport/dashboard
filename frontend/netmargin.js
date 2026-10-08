@@ -126,6 +126,6 @@ function nmHtml(d, scope) {
   if (c.UNASSIGNED.ca || c.UNASSIGNED.dc) spec.push({label: 'Non affecté', keys: ['UNASSIGNED']});
   const un = nmSum(c, ['UNALLOC']); if (Math.abs(un.staff + un.veh + un.shared + un.mgmt + un.general + un.vehgen + un.mkt) >= 0.5) spec.push({label: 'Non imputé', keys: ['UNALLOC']});      // masqué quand tout est imputé
   spec.push({label: 'Total', keys: Object.keys(c)});
-  return ctl + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Détail des BU de CARS</h4>' + nmTable(res, carsCols) + nmControl(res) + nmNote(res);
+  return ctl + nmKpis(tot, '') + nmTable(res, spec) + nmUnassigned(c) + '<h4 class="sub">Marge nette par BU</h4>' + nmTable(res, [{label: 'XC', keys: ['XC']}].concat(carsCols)) + nmControl(res) + nmNote(res);
 }
 const NM_BLOCK = (scope, title) => B('nm-' + scope, title, d => { nm.d = d; nmEnsure(); return `<div class="nm-host" data-scope="${scope}">${nmHtml(d, scope)}</div>`; }, true);

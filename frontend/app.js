@@ -7,6 +7,12 @@ const cls = n => n < 0 ? 'neg' : 'pos';
 const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } },
                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 
+// Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
+let role = 'full', superUser = false;
+const XC_PAGES = new Set(['xc/webshop_xc', 'xc/webshop_gs', 'xc/events', 'xc/inventory', 'xc/margins', 'xc/tn11']);
+const allowedPage = k => (k !== 'others/users' || superUser) && (role !== 'xc' || XC_PAGES.has(k));
+const homePage = () => role === 'xc' ? 'xc/webshop_xc' : 'overview/ca';
+
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
   ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
@@ -16,9 +22,9 @@ const MENU = [
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
   ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
-  ['others', 'Settings', [['tags','Tags Odoo']]],
+  ['others', 'Settings', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -435,6 +441,7 @@ const PAGES = {
   'xc/tn11': () => tn11Blocks(),
   'marketing/expenses': () => marketingBlocks(),
   'others/tags': () => tagsBlocks(),
+  'others/users': () => usersBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
   'expenses/general': () => expensesGeneralBlocks(),
   'expenses/rules': () => expensesRulesBlocks(),
@@ -520,7 +527,7 @@ function soon(key) {
 // ---- Rendu -----------------------------------------------------------------------------------
 function renderNav(key) {
   const cur = key.split('/')[0];
-  $('nav').innerHTML = MENU.map(([g, label, items]) => `<div class="grp ${g === cur ? 'open active' : ''}" data-g="${g}">
+  $('nav').innerHTML = MENU.map(([g, label, all]) => [g, label, all.filter(([i]) => allowedPage(g + '/' + i))]).filter(([, , items]) => items.length).map(([g, label, items]) => `<div class="grp ${g === cur ? 'open active' : ''}" data-g="${g}">
     <button type="button">${esc(label)}</button><ul>${items.map(([i, l]) => {
       const k = g + '/' + i, live = LIVE.has(k);
       return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`).join('');
@@ -558,7 +565,7 @@ async function fillBlock(b, force) {
 }
 
 function render(force) {
-  let key = route(); if (!item(key)) key = 'overview/ca';
+  let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
   const {grp: g, it} = item(key);
   renderNav(key);
   $('page-title').innerHTML = `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
@@ -581,6 +588,7 @@ function render(force) {
   if (key === 'vehicles/byvehicle') { exDrawVehicles(); exLoadVehicles().then(exDrawVehicles); }
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
+  if (key === 'others/users') { drawUsers(); loadUsers().then(drawUsers); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;
 }
@@ -589,7 +597,7 @@ function needLogin() {
   $('app').hidden = true; $('login').hidden = false;
   google.accounts.id.initialize({client_id: cfg.google_client_id, hd: undefined,
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
-      try { await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); } catch {}      // cookie de session du dashboard (durée longue)
+      try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
   google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
 }
@@ -607,7 +615,7 @@ function exportPdf() {
 
 $('home').onclick = e => {                    // le logo ramène à l'accueil (Overview › CA)
   e.preventDefault(); document.body.classList.remove('nav-open');
-  if (route() === 'overview/ca') window.scrollTo({top: 0}); else location.hash = '#/overview/ca';
+  if (route() === homePage()) window.scrollTo({top: 0}); else location.hash = '#/' + homePage();
 };
 
 let statusTimer;
@@ -656,9 +664,10 @@ document.addEventListener('visibilitychange', tick);
   if (cfg.auth) {
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
     let ok = false;
-    try { ok = (await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}})).ok; } catch {}      // cookie de session valide, ou jeton Google encore valable
+    try { const sr = await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}}); ok = sr.ok; if (ok) { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {}      // cookie de session valide, ou jeton Google encore valable
     if (!ok) { token = null; sessionStorage.removeItem('idt'); return needLogin(); }
   }
+  else { try { const sr = await fetch('/api/session'); if (sr.ok) { const sj = await sr.json(); role = sj.role || 'full'; superUser = !!sj.super; } } catch {} }
   await Promise.all([loadAdj(), loadStockVar()]);
   render();
 })();

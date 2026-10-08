@@ -15,6 +15,7 @@ const adjAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 
 const adjClone = x => JSON.parse(JSON.stringify(x));
 
 async function loadAdj() {
+  if (typeof role !== 'undefined' && role === 'xc') { adj = {...adj, loaded: true}; return; }          // catégorie « XC » : pas d'ajustements ni de variations de stock
   try {
     const r = await fetch('/api/adjustments', {headers: adjAuth()});
     if (!r.ok) throw new Error(r.status);

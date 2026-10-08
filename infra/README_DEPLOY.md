@@ -129,3 +129,21 @@ gcloud run services update dashboard --region=europe-west1 --update-env-vars REF
 ```
 
 Les autres administrateurs peuvent alors modifier les pourcentages pour simuler la marge nette, sans rien enregistrer (les modifications restent dans leur navigateur), et revenir aux valeurs de référence avec « Restaurer les valeurs par défaut ».
+
+## Utilisateurs et rôles (Settings › Utilisateurs)
+
+Le **Super User** crée les utilisateurs et choisit leur rôle dans l'application (Settings › Utilisateurs) : aucune adresse n'est à écrire dans le code. Les comptes sont enregistrés dans Firestore (document `dashboard/users`).
+
+Rôles : **Standard** (consulte tout sauf le personnel), **Administrateur** (saisit les ajustements, voit le personnel), **XC** (uniquement XC Webshop, Goldspeed EAX Webshop, Par événement, Inventory et les deux contrôles de marges ; le serveur refuse tout le reste). Une adresse enregistrée peut se connecter même hors du domaine @lifelive-motorsport.com.
+
+Seule variable à définir : `SUPER_USERS` (adresse du Super User, pas de retrait possible depuis l'écran).
+
+```
+gcloud run services update dashboard --region=europe-west1 --update-env-vars=SUPER_USERS=prenom.nom@lifelive-motorsport.com
+```
+
+Après avoir créé les comptes dans l'écran, on peut retirer les adresses devenues inutiles des variables `ALLOWED_EMAILS`, `ADMIN_EMAILS` et `XC_ONLY_EMAILS` (un rôle choisi dans l'écran l'emporte sur ces variables) :
+
+```
+gcloud run services update dashboard --region=europe-west1 --update-env-vars="^#^ALLOWED_EMAILS=#ADMIN_EMAILS="
+```

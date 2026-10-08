@@ -33,6 +33,8 @@ VEHICLE_PLAN = os.getenv("VEHICLE_PLAN", "CARS")        # axe analytique dont ch
 
 # Ajustements de marge brute : édition réservée à ces adresses ; stockage « firestore » (production) ou « memory » (démo/essais)
 ADMIN_EMAILS = _list("ADMIN_EMAILS")
+SUPER_USERS = _list("SUPER_USERS")                # Super User : gère les utilisateurs et leurs rôles (Settings › Utilisateurs) ; vide = REFERENCE_EDITORS, puis ADMIN_EMAILS
+XC_ONLY_EMAILS = _list("XC_ONLY_EMAILS")          # catégorie « XC » : ces adresses n'accèdent qu'aux pages XC Webshop, Goldspeed, Par événement, Inventory et aux deux contrôles de marges (rien d'autre, ni côté écran ni côté API)
 REFERENCE_EDITORS = _list("REFERENCE_EDITORS")        # qui peut ENREGISTRER les hypothèses d'imputation (référence) ; vide = tous les administrateurs. Les autres administrateurs simulent sans enregistrer.
 ADJUSTMENTS_STORE = os.getenv("ADJUSTMENTS_STORE", "memory" if PROVIDER == "demo" else "firestore")
 

@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar, tn11
-from .auth import COOKIE, require_user, set_session_cookie, verify_google
+from . import users
+from .auth import COOKIE, is_xc_only, require_user, role, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
 
@@ -80,20 +81,58 @@ def open_session(request: Request, response: Response, authorization: str | None
     """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant)."""
     email = verify_google(authorization)
     if not settings.SESSION_SECRET:
-        return {"email": email, "session": False}            # non configuré : on reste sur le jeton Google
+        return {"email": email, "session": False, "role": role(email), "super": users.is_super(email)}            # non configuré : on reste sur le jeton Google
     set_session_cookie(response, request, email)
-    return {"email": email, "session": True}
+    return {"email": email, "session": True, "role": role(email), "super": users.is_super(email)}
 
 
 @app.get("/api/session")
 def current_session(user: str = Depends(require_user)):
-    return {"email": user, "session": True}
+    return {"email": user, "session": True, "role": role(user), "super": users.is_super(user)}
 
 
 @app.delete("/api/session")
 def close_session(response: Response):
     response.delete_cookie(COOKIE, path="/")
     return {"session": False}
+
+
+def super_user(user: str = Depends(require_user)) -> str:
+    if not users.is_super(user):
+        raise HTTPException(403, "Réservé au Super User")
+    return user
+
+
+@app.get("/api/users")
+def get_users(user: str = Depends(super_user)):
+    """Utilisateurs enregistrés (modifiables) et utilisateurs « fixes » venus de la configuration du serveur (lecture seule)."""
+    try:
+        doc = users.store().get()
+    except Exception:
+        log.exception("Lecture des utilisateurs impossible")
+        raise HTTPException(503, "Utilisateurs indisponibles (stockage non configuré ou inaccessible)")
+    fixed = [{"email": e, "role": "super", "source": "SUPER_USERS"} for e in users.supers()]
+    fixed += [{"email": e, "role": "admin", "source": "ADMIN_EMAILS"} for e in settings.ADMIN_EMAILS if e not in users.supers()]
+    fixed += [{"email": e, "role": "xc", "source": "XC_ONLY_EMAILS"} for e in settings.XC_ONLY_EMAILS]
+    return {**doc, "fixed": fixed, "domain": settings.ALLOWED_DOMAIN}
+
+
+@app.put("/api/users")
+def put_users(payload: users.Payload, user: str = Depends(super_user)):
+    seen, rows = set(), []
+    for u in payload.users:
+        if u.email in seen:
+            raise HTTPException(422, f"Adresse en double : {u.email}")
+        seen.add(u.email)
+        if u.email not in users.supers():                      # un Super User ne se gère pas depuis l'écran
+            rows.append(u.model_dump())
+    try:
+        doc = users.store().put(rows, user)
+    except Exception:
+        log.exception("Enregistrement des utilisateurs impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    users.invalidate()
+    return {**doc, "fixed": get_users(user)["fixed"], "domain": settings.ALLOWED_DOMAIN}
 
 
 @app.get("/api/tags")
@@ -625,6 +664,25 @@ def _prev_pnl(p, d_from: date, d_to: date) -> dict | None:
 @app.get("/api/dashboard")
 def dashboard(date_from: date | None = Query(None, alias="from"), date_to: date | None = Query(None, alias="to"),
               refresh: bool = False, _user: str = Depends(require_user)):
+    data = _dashboard(date_from, date_to, refresh)
+    return _xc_view(data) if is_xc_only(_user) else data
+
+
+def _xc_view(d: dict) -> dict:
+    """Catégorie « XC » : uniquement les données des pages XC (événements hors CARS, webshops, trafic des webshops) ; le reste est neutralisé côté serveur."""
+    ev = d.get("events")
+    if isinstance(ev, dict) and "events" in ev:
+        ev = {**ev, "events": [e for e in ev["events"] if e.get("group") != "CARS"]}
+    ana = d.get("analytics")
+    if isinstance(ana, dict):
+        ana = {k: v for k, v in ana.items() if k != "site"}          # le site vitrine relève du marketing
+    na = {"unavailable": "Réservé"}
+    return {"source": d["source"], "period": d["period"], "generated_at": d["generated_at"], "pnl": aggregate({}), "pnl_prev": None,
+            "balance_sheet": {"cash": 0, "receivables": 0, "payables": 0, "year": int(d["period"]["to"][:4])}, "top_clients": na, "top_suppliers": na,
+            "events": ev, "vehicles": na, "webshops": d.get("webshops"), "marketing": na, "analytics": ana}
+
+
+def _dashboard(date_from, date_to, refresh):
     today = date.today()
     d_from, d_to = date_from or date(today.year, 1, 1), date_to or today
     key = (d_from, d_to)

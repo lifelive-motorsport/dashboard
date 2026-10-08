@@ -81,7 +81,7 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     cl = TestClient(app)
     assert cl.get("/api/session").status_code == 401                                   # ni cookie ni jeton
     r = cl.post("/api/session", headers={"Authorization": "Bearer ok"})
-    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True} and "lm_session" in r.headers["set-cookie"]
+    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False} and "lm_session" in r.headers["set-cookie"]
     assert "HttpOnly" in r.headers["set-cookie"] and "SameSite=strict" in r.headers["set-cookie"]
     assert cl.get("/api/session").json()["email"] == "md@lifelive-motorsport.com"      # le cookie suffit, plus de jeton Google
     good = a.make_session("md@lifelive-motorsport.com")
@@ -319,3 +319,38 @@ def test_freight_rate_prorata_of_sale_price():
     real = {1: {"qty": 10.0}, 2: {"qty": 20.0}}
     assert margins.freight_rate(100.0, prods, real) == 0.05                       # 100 € de transport pour 2 000 € de ventes valorisées
     assert margins.freight_rate(0.0, prods, real) == 0.0 and margins.freight_rate(100.0, prods, {}) == 0.0
+
+
+def test_xc_only_category(monkeypatch):
+    """La catégorie « XC » ne peut appeler que les routes des pages XC ; le tableau de bord est neutralisé côté serveur."""
+    from app import settings
+    monkeypatch.setattr(settings, "XC_ONLY_EMAILS", ["anonymous"])
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    assert c.get("/api/session").json()["role"] == "xc"
+    for path in ("/api/adjustments", "/api/staff", "/api/stockvar", "/api/tags", "/api/expenses/allocation?year=2026", "/api/pnl/unassigned?year=2026"):
+        assert c.get(path).status_code == 403, path
+    d = c.get("/api/dashboard").json()
+    assert d["pnl"]["total"]["ca"] == 0 and d["top_clients"] == {"unavailable": "Réservé"}
+    assert all(e["group"] != "CARS" for e in d["events"]["events"])
+    assert "site" not in d["analytics"]
+    assert c.get("/api/stock").status_code != 403 and c.get("/api/xc/margins").status_code != 403
+
+
+def test_users_admin(monkeypatch):
+    """Le Super User crée des utilisateurs et leurs rôles ; un rôle enregistré l'emporte sur la configuration."""
+    from app import settings, users
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    r = c.put("/api/users", json={"users": [{"email": "Ext@Example.com", "role": "xc"}, {"email": "b@x.com", "role": "admin"}]})
+    assert r.status_code == 200 and {u["email"] for u in r.json()["users"]} == {"ext@example.com", "b@x.com"}
+    assert c.put("/api/users", json={"users": [{"email": "a@x.com", "role": "xc"}, {"email": "a@x.com", "role": "admin"}]}).status_code == 422
+    assert c.put("/api/users", json={"users": [{"email": "pas-un-mail", "role": "xc"}]}).status_code == 422
+    assert users.is_registered("ext@example.com") and users.role_of("ext@example.com") == "xc" and users.is_super("anyone")        # AUTH désactivée (démo) : tout le monde peut gérer les utilisateurs
+    monkeypatch.setattr(settings, "AUTH_ENABLED", True)
+    assert users.role_of("ext@example.com") == "xc" and users.role_of("b@x.com") == "admin" and users.role_of("z@lifelive-motorsport.com") == "standard"
+    monkeypatch.setattr(settings, "SUPER_USERS", ["z@lifelive-motorsport.com"])
+    assert users.role_of("z@lifelive-motorsport.com") == "super"
+    users.store().put([], "t"); users.invalidate()

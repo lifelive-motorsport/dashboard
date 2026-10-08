@@ -6,7 +6,7 @@ import time
 
 from fastapi import Header, HTTPException, Request, Response
 
-from . import settings
+from . import settings, users
 
 COOKIE = "lm_session"
 RENEW_AFTER = 24 * 3600          # session glissante : le cookie est reposé s'il a plus d'un jour
@@ -15,7 +15,7 @@ RENEW_AFTER = 24 * 3600          # session glissante : le cookie est reposé s'i
 def is_allowed(email: str) -> bool:
     """Adresse autorisée : liste blanche ou domaine Workspace (revérifié à chaque requête, donc un retrait est immédiat)."""
     email = (email or "").lower()
-    return email in settings.ALLOWED_EMAILS or email.endswith("@" + settings.ALLOWED_DOMAIN)
+    return email in settings.ALLOWED_EMAILS or email.endswith("@" + settings.ALLOWED_DOMAIN) or users.is_registered(email)
 
 
 def verify_google(authorization: str | None) -> str:
@@ -31,7 +31,7 @@ def verify_google(authorization: str | None) -> str:
     email = (info.get("email") or "").lower()
     if not info.get("email_verified"):
         raise HTTPException(403, "Email non vérifié")
-    if email in settings.ALLOWED_EMAILS or (info.get("hd", "").lower() == settings.ALLOWED_DOMAIN):
+    if email in settings.ALLOWED_EMAILS or (info.get("hd", "").lower() == settings.ALLOWED_DOMAIN) or users.is_registered(email):
         return email
     raise HTTPException(403, "Accès non autorisé")
 
@@ -77,8 +77,18 @@ def set_session_cookie(response: Response, request: Request, email: str) -> None
                         samesite="strict", path="/")
 
 
-def require_user(request: Request, response: Response, authorization: str | None = Header(default=None)) -> str:
-    """Utilisateur authentifié : cookie de session du dashboard, sinon jeton Google (Authorization: Bearer)."""
+XC_PATHS = ("/api/session", "/api/dashboard", "/api/stock", "/api/xc/margins", "/api/xc/tn11/check")     # seules routes ouvertes à la catégorie « XC »
+
+
+def is_xc_only(email: str) -> bool:
+    return users.role_of(email) == "xc"
+
+
+def role(email: str) -> str:
+    return "xc" if is_xc_only(email) else "full"
+
+
+def _identify(request: Request, response: Response, authorization: str | None) -> str:
     if not settings.AUTH_ENABLED:
         return "anonymous"
     s = read_session(request.cookies.get(COOKIE, ""))
@@ -87,3 +97,12 @@ def require_user(request: Request, response: Response, authorization: str | None
             set_session_cookie(response, request, s[0])          # session glissante : tant qu'on s'en sert, elle se prolonge
         return s[0]
     return verify_google(authorization)
+
+
+def require_user(request: Request, response: Response, authorization: str | None = Header(default=None)) -> str:
+    """Utilisateur authentifié : cookie de session du dashboard, sinon jeton Google (Authorization: Bearer).
+    La catégorie « XC » (XC_ONLY_EMAILS) est refusée partout sauf sur XC_PATHS."""
+    user = _identify(request, response, authorization)
+    if is_xc_only(user) and request.url.path not in XC_PATHS:
+        raise HTTPException(403, "Accès limité aux pages XC (webshops, événements, inventory, contrôles de marges)")
+    return user

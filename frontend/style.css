@@ -238,3 +238,7 @@ table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-ali
 .tn11table th.tnsort{cursor:pointer;user-select:none;white-space:nowrap}.tn11table th.tnsort:hover,.tn11table th.tnsort.on{color:var(--fg)}.tnsel{display:inline-flex;align-items:center;gap:6px}
 
 @media print{thead{display:table-header-group}.tn11table tr.grp{break-after:avoid}}
+.tnopen{border:0;background:none;cursor:pointer;color:inherit;padding:0 .2em}
+.tn-detail>td{background:rgba(127,127,127,.07);padding:.4em .6em}
+.tn-detail table{width:100%}
+.tn-warn td{background:rgba(220,60,60,.10)}

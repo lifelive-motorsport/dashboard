@@ -77,3 +77,16 @@ def test_tn11_endpoint_rejects_non_pdf_and_reports_demo(monkeypatch):
     assert j["client"] == "POST - FIA" and j["pdf_total"] == 1234.5 and any(x["found"] for x in j["rows"]) and "labour_like" in j
     monkeypatch.setattr("app.main.dkv.extract_text", lambda *a, **k: "rien d'utile")
     assert c.post("/api/xc/tn11/check", content=b"%PDF-1.4 faux").status_code == 422
+
+
+def test_parts_outlier_and_hours_labour(monkeypatch):
+    from app import tn11
+    info = {1: {"ref": "A1", "name": "Bras", "cost": 105.0, "type": "consu", "categ": ""},
+            2: {"ref": "C1", "name": "Pièce", "cost": 67.0, "type": "consu", "categ": ""},
+            3: {"ref": "810005", "name": "Hourly Rate XC Pre-Assembly", "cost": 37.5, "type": "consu", "categ": ""}}
+    boms = {1: {"qty": 1.0, "operations": [], "lines": [{"product": 2, "qty": 1.0, "uom": "Units"}, {"product": 3, "qty": 0.3, "uom": "Hours"}]}}
+    real = {2: 5000.0, 3: 37.5}
+    r = tn11.line_costs(1, 1, boms, info, real.get)
+    assert any(p["warn"] and p["ref"] == "C1" for p in r["parts"])
+    assert abs(r["real"] - (67 + 0.3 * 37.5)) < 0.01
+    assert r["labour"] and r["labour"][0]["reason"] == "quantité en heures"

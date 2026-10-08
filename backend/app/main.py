@@ -155,8 +155,8 @@ def _tn11_report(text: str) -> dict:
     except Exception:
         log.exception("Données Odoo du devis TN11 indisponibles")
         raise HTTPException(502, "Odoo est momentanément injoignable")
-    rep = tn11.build_report(parsed, data["products"], data["boms"], data["info"], data["unit_real"].get, rate)
-    return {**rep, "bom_error": data.get("bom_error"), "labour_like": [x.strip() for x in settings.TN11_LABOUR_LIKE.split(",") if x.strip()], "as_of": date.today().isoformat(),
+    rep = tn11.build_report(parsed, data["products"], data["boms"], data["info"], data["unit_real"].get, rate, data.get("unit_info"))
+    return {**rep, "bom_error": data.get("bom_error"), "labour_like": [x.strip() for x in settings.TN11_LABOUR_LIKE.split(",") if x.strip()], "outlier_factor": settings.TN11_OUTLIER_FACTOR, "as_of": date.today().isoformat(),
             "lines_total": len(parsed["lines"])}
 
 

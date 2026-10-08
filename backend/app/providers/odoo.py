@@ -827,7 +827,7 @@ class OdooProvider:
                     by_tmpl.setdefault(b["product_tmpl_id"][0], b)                                      # première nomenclature (séquence) de chaque modèle d'article
                 line_ids = sorted({l for b in by_tmpl.values() for l in b["bom_line_ids"]})
                 op_ids = sorted({o for b in by_tmpl.values() for o in b["operation_ids"]})
-                lines = {l["id"]: l for n in range(0, len(line_ids), 400) for l in self._call("mrp.bom.line", "read", ids=line_ids[n:n + 400], fields=["product_id", "product_qty"])}
+                lines = {l["id"]: l for n in range(0, len(line_ids), 400) for l in self._call("mrp.bom.line", "read", ids=line_ids[n:n + 400], fields=["product_id", "product_qty", "product_uom_id"])}
                 ops = {o["id"]: o for n in range(0, len(op_ids), 400) for o in self._call("mrp.routing.workcenter", "read", ids=op_ids[n:n + 400], fields=["name", "workcenter_id", "time_cycle_manual", "time_cycle"])} if op_ids else {}
                 wc_ids = sorted({o["workcenter_id"][0] for o in ops.values() if o.get("workcenter_id")})
                 wcs = {w["id"]: w for w in self._call("mrp.workcenter", "read", ids=wc_ids, fields=["name", "costs_hour"])} if wc_ids else {}
@@ -840,7 +840,7 @@ class OdooProvider:
                     if not b:
                         continue
                     boms[pid] = {"qty": float(b.get("product_qty") or 1.0),
-                                 "lines": [{"product": lines[l]["product_id"][0], "qty": float(lines[l].get("product_qty") or 0.0)} for l in b["bom_line_ids"] if l in lines and lines[l].get("product_id")],
+                                 "lines": [{"product": lines[l]["product_id"][0], "qty": float(lines[l].get("product_qty") or 0.0), "uom": (lines[l].get("product_uom_id") or [0, ""])[1]} for l in b["bom_line_ids"] if l in lines and lines[l].get("product_id")],
                                  "operations": [{"name": ops[o]["name"], "workcenter": (ops[o].get("workcenter_id") or [0, ""])[1], "minutes": float(ops[o].get("time_cycle_manual") or ops[o].get("time_cycle") or 0.0),
                                                  "cost_hour": float(wcs.get(ops[o]["workcenter_id"][0], {}).get("costs_hour") or 0.0) if ops[o].get("workcenter_id") else 0.0} for o in b["operation_ids"] if o in ops]}
                     todo.update(l["product"] for l in boms[pid]["lines"])
@@ -849,14 +849,16 @@ class OdooProvider:
             bom_error = self._why(e)
         since = (date.today().replace(day=1) - timedelta(days=31 * max(1, settings.MARGIN_LOOKBACK_MONTHS))).isoformat()
         unit: dict[int, float] = {}
+        unit_info: dict[int, dict] = {}
         try:
             for pid, r in self._real_costs(sorted(info), since).items():
                 if r["qty"] > 0 and r["total"] > 0:
                     unit[pid] = r["total"] / r["qty"] + freight_rate * info[pid]["sale"]
+                    unit_info[pid] = {"qty": round(r["qty"], 2), "source": r["source"], "flags": sorted(r.get("flags", []))}
         except Exception as e:
             log.exception("Coût réel des composants indisponible")
             bom_error = bom_error or ("coût réel : " + self._why(e))
-        return {"products": products, "boms": boms, "info": info, "unit_real": unit, "bom_error": bom_error}
+        return {"products": products, "boms": boms, "info": info, "unit_real": unit, "unit_info": unit_info, "bom_error": bom_error}
 
     def _freight_pool(self, since: str) -> float:
         """Frais de transport de la période : solde des comptes MARGIN_FREIGHT_ACCOUNTS (par défaut 602010 FRAIS XC Manufacturer), en euros."""

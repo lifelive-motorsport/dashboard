@@ -650,3 +650,4 @@ document.addEventListener('visibilitychange', tick);
   render();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+

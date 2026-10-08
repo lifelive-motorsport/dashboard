@@ -419,7 +419,7 @@ function exDrawSplit() {
   const head = ['Véhicule', 'Coût'].map(h => `<th rowspan="2">${h}</th>`).join('') + EX_SPLIT.map(([k, l]) => `<th colspan="2" class="grp" style="border-bottom:3px solid ${BUC[k]}">${l}</th>`).join('') + '<th rowspan="2">Retenu</th><th rowspan="2"></th>';
   const sub = EX_SPLIT.map(() => '<th class="sdsub">Indic.</th><th class="sdsub">Retenu</th>').join('');
   const sect = t => `<tr class="grp"><td colspan="${EX_SPLIT.length * 2 + 4}"><strong>${t}</strong></td></tr>`;
-  const tbl = `<div class="table-wrap"><table class="prodtable sdtable sdsplit"><thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
+  const tbl = `<div class="table-wrap"><table class="prodtable sdtable sdsplit" style="width:830px">${'<colgroup><col style="width:150px"><col style="width:70px">' + EX_SPLIT.map(() => '<col style="width:38px"><col style="width:50px">').join('') + '<col style="width:98px"><col style="width:72px"></colgroup>'}<thead><tr>${head}</tr><tr>${sub}</tr></thead><tbody>${sect('Véhicules identifiés')}${id.map(row).join('')}${other.length ? sect('Frais non liés à un véhicule identifié') + other.map(row).join('') : ''}</tbody></table></div>`;
   // Résultat en € avec les % retenus (saisis, sinon indicatifs)
   const amt = r => Object.fromEntries(EX_SPLIT.map(([k]) => [k, r.x.total * r.ret.p[k]])), tot = Object.fromEntries(EX_SPLIT.map(([k]) => [k, rowsAll.reduce((t, r) => t + amt(r)[k], 0)])), grand = rowsAll.reduce((t, r) => t + r.x.total, 0);
   const res = table(['Véhicule', 'Coût'].concat(EX_SPLIT.map(b => b[1]), ['Source']),

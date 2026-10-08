@@ -198,3 +198,12 @@ pre.exatt{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:12px;bac
 .nmhyp div{padding-bottom:10px;font-size:13px}.nmhyp b{display:block;margin:8px 0 2px;color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}.nmhyp ul{margin:0;padding-left:18px}.nmhyp li{margin:3px 0}
 
 table.tsort thead th{cursor:pointer;user-select:none}table.tsort thead th:hover{color:var(--fg)}table.tsort thead th[data-tsort=asc]::after{content:' ▲';font-size:10px}table.tsort thead th[data-tsort=desc]::after{content:' ▼';font-size:10px}
+
+/* Imputation véhicules : largeurs fixes (colgroup) pour tenir sans défilement horizontal */
+.sdsplit{table-layout:fixed;min-width:0}.sdsplit td,.sdsplit th{overflow:hidden;text-overflow:ellipsis}
+.sdsplit td.sdind{width:auto!important;padding-right:2px}.sdsplit td.sdinp{width:auto!important}.sdsplit td.sdname{max-width:none!important}.sdsplit td.sdtot{min-width:0!important}.sdsplit td.sdact{width:auto!important;white-space:nowrap;overflow:visible}
+.sdsplit input.sdpct{width:44px!important;padding:3px 4px}.sdsplit .sdmini{width:86px}
+/* neutralise les min-width généraux de .prodtable (2e colonne : 180 px ; 1re : 150 px) pour le tableau d'imputation */
+table.prodtable.sdsplit th,table.prodtable.sdsplit td,table.prodtable.sdsplit td:first-child,table.prodtable.sdsplit th:nth-child(2),table.prodtable.sdsplit td:nth-child(2){min-width:0!important}
+table.prodtable.sdsplit td:nth-child(2){white-space:nowrap;text-align:right}
+table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-align:center}table.sdsplit thead th{padding-left:2px;padding-right:2px}

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, dkv, expenses, ga, gcal, settings, staff
+from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar
 from .auth import COOKIE, require_user, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -107,6 +107,28 @@ def tags(_user: str = Depends(require_user)):
 
 
 _stock_cache: dict[str, tuple[float, dict]] = {}
+
+
+_margins_cache: dict = {}
+
+
+@app.get("/api/xc/margins")
+def xc_margins(refresh: bool = False, _user: str = Depends(require_user)):
+    """Contrôle des marges XC (articles à code PIF) ; mise en cache 15 min."""
+    hit = _margins_cache.get("m")
+    if hit and time.time() - hit[0] < (30 if refresh else 900):
+        return hit[1]
+    try:
+        data = {**provider().margin_products(), "as_of": date.today().isoformat(), "source": provider().name}
+    except (NotImplementedError, LookupError) as e:
+        return {"unavailable": str(e)}
+    except Exception:
+        log.exception("Contrôle des marges indisponible")
+        if hit:
+            return hit[1]
+        raise HTTPException(502, "Contrôle des marges momentanément indisponible")
+    _margins_cache["m"] = (time.time(), data)
+    return data
 
 
 @app.get("/api/stock")
@@ -520,6 +542,31 @@ def put_adjustments(payload: adjustments.Payload, user: str = Depends(require_us
         log.exception("Enregistrement des ajustements impossible")
         raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
     return {**doc, "can_edit": True}
+
+
+@app.get("/api/stockvar")
+def get_stockvar(user: str = Depends(require_user)):
+    """Variations de stock saisies à la main (lisibles par tous ; modifiables par les propriétaires des hypothèses)."""
+    try:
+        doc = stockvar.store().get()
+    except Exception:
+        log.exception("Lecture des variations de stock impossible")
+        return {"items": [], "updated_at": None, "updated_by": None, "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user),
+                "error": "Variations de stock indisponibles (stockage non configuré ou inaccessible)."}
+    return {**doc, "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
+
+
+@app.put("/api/stockvar")
+def put_stockvar(payload: stockvar.Payload, user: str = Depends(reference)):
+    ids = [i.id for i in payload.items]
+    if len(set(ids)) != len(ids):
+        raise HTTPException(422, "Identifiants en double")
+    try:
+        doc = stockvar.store().put([i.model_dump() for i in payload.items], user)
+    except Exception:
+        log.exception("Enregistrement des variations de stock impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    return {**doc, "can_edit": True, "can_save": True}
 
 
 def _prev_pnl(p, d_from: date, d_to: date) -> dict | None:

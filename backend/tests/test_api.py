@@ -266,3 +266,28 @@ def test_staff_common_split_is_validated(monkeypatch):
         assert c.put("/api/staff", json={"data": {"people": [{**person, "common_split": {"SHARED": 10}}]}, "base": None}).status_code == 422
     finally:
         app.dependency_overrides.clear()
+
+
+def test_margin_control_demo_and_rules():
+    from app import margins
+    assert margins.rate(26) == "green" and margins.rate(25) == "orange" and margins.rate(15.01) == "orange" and margins.rate(15) == "red" and margins.rate(None) is None
+    w = margins.worst_case([{"partner": "A", "min_qty": 1, "price": 35.21}, {"partner": "A", "min_qty": 5, "price": 34.4}, {"partner": "B", "min_qty": 1, "price": 26.9}])
+    assert w["price"] == 35.21 and w["partner"] == "A"
+    j = c.get("/api/xc/margins").json()
+    r1 = next(r for r in j["rows"] if r["ref"] == "611363")
+    assert r1["worst"]["price"] == 35.21 and r1["real"]["unit"] == 32.0 and r1["margin"]["theoretical"] == 42.86 and r1["rate"]["worst"] == "green"
+    r4 = next(r for r in j["rows"] if r["ref"] == "611003")
+    assert r4["worst"] is None and r4["real"] is None and r4["rate"]["real"] is None
+    assert j["summary"]["count"] == 4
+
+
+def test_stockvar_roundtrip_and_validation(monkeypatch):
+    from app import stockvar
+    monkeypatch.setattr(stockvar, "_store", stockvar.MemoryStore())
+    item = {"id": "s1", "label": "Inventaire de fin d'année", "amount": -12500.5, "date": "2026-06-30", "enabled": True, "note": "dépréciation"}
+    r = c.put("/api/stockvar", json={"items": [item]})
+    assert r.status_code == 200
+    got = c.get("/api/stockvar").json()
+    assert got["items"][0]["amount"] == -12500.5 and got["can_edit"] is True
+    assert c.put("/api/stockvar", json={"items": [item, item]}).status_code == 422
+    assert c.put("/api/stockvar", json={"items": [{**item, "date": "pas une date"}]}).status_code == 422

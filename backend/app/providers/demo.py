@@ -167,6 +167,18 @@ class DemoProvider:
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
         return [{"number": f"FACTU/{year}/0{i}", "ref": f"F{i}", "date": f"{year}-0{i}-15", "untaxed": 4500.0, "fees": 4000.0 if i % 2 else 4500.0, "total": 5445.0, "paid": i < 4, "partner": "Société exemple SRL", "refund": False} for i in range(1, 6)]
 
+    def margin_products(self) -> dict:
+        from ..margins import build_rows, summary
+        prods = [{"id": 1, "ref": "611363", "name": "3D connector airbox MT07", "pif": "N", "sale": 58.77, "cost": 33.58, "tmpl": 1},
+                 {"id": 2, "ref": "611001", "name": "Support moteur", "pif": "A", "sale": 120.0, "cost": 98.0, "tmpl": 2},
+                 {"id": 3, "ref": "611002", "name": "Durite silicone", "pif": "B", "sale": 40.0, "cost": 36.0, "tmpl": 3},
+                 {"id": 4, "ref": "611003", "name": "Pièce sans fournisseur", "pif": "C", "sale": 15.0, "cost": 6.0, "tmpl": 4}]
+        sup = {1: [{"partner": "RapidCenter bv", "min_qty": 1.0, "price": 35.21}, {"partner": "RapidCenter bv", "min_qty": 5.0, "price": 34.4}, {"partner": "YOUNGTIMERSCLASSIC", "min_qty": 1.0, "price": 26.9}],
+               2: [{"partner": "Fournisseur A", "min_qty": 1.0, "price": 101.0}], 3: [{"partner": "Fournisseur B", "min_qty": 1.0, "price": 36.5}]}
+        real = {1: {"total": 640.0, "qty": 20.0, "source": "factures", "lines": 3}, 2: {"total": 1000.0, "qty": 10.0, "source": "commandes", "lines": 1}, 3: {"total": 380.0, "qty": 10.0, "source": "factures", "lines": 2}}
+        rows = build_rows(prods, sup, real)
+        return {"rows": rows, "summary": summary(rows), "pif_field": "x_pif", "lookback_months": 24, "foreign_currency_lines": 0, "since": "2024-10-01"}
+
     def stock_report(self) -> dict:
         from ..stock import build_report
         rnd = random.Random(5)

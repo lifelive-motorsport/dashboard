@@ -732,6 +732,69 @@ class OdooProvider:
                               "uom": (p.get("uom_id") or [0, ""])[1]})
         return build_report(items, pif)
 
+    # ---- Contrôle des marges XC --------------------------------------------------------------------------------------
+    def _real_costs(self, ids: list[int], since: str) -> dict[int, dict]:
+        """Prix unitaire moyen pondéré payé par article : factures d'achat comptabilisées (avoirs déduits) depuis `since`, à défaut commandes d'achat confirmées."""
+        real: dict[int, dict] = {}
+        for k in range(0, len(ids), 400):
+            chunk = ids[k:k + 400]
+            dom = [("parent_state", "=", "posted"), ("move_type", "in", ["in_invoice", "in_refund"]), ("product_id", "in", chunk), ("date", ">=", since)]
+            tot = {r["product_id"][0]: float(r["balance:sum"] or 0.0)
+                   for r in self._call("account.move.line", "formatted_read_group", domain=dom, groupby=["product_id"], aggregates=["balance:sum"]) if r.get("product_id")}
+            cnt: dict[int, dict] = {}
+            for r in self._call("account.move.line", "formatted_read_group", domain=dom, groupby=["product_id", "move_type"], aggregates=["quantity:sum", "__count"]):
+                if r.get("product_id"):
+                    c = cnt.setdefault(r["product_id"][0], {"qty": 0.0, "lines": 0})
+                    c["qty"] += (-1.0 if r.get("move_type") == "in_refund" else 1.0) * float(r["quantity:sum"] or 0.0)
+                    c["lines"] += int(r.get("__count") or 0)
+            for pid, t in tot.items():
+                if cnt.get(pid, {}).get("qty", 0) > 0 and t > 0:
+                    real[pid] = {"total": t, "qty": cnt[pid]["qty"], "source": "factures", "lines": cnt[pid]["lines"]}
+            rest = [i for i in chunk if i not in real]
+            if rest:
+                pdom = [("state", "in", ["purchase", "done"]), ("product_id", "in", rest), ("date_order", ">=", since)]
+                for r in self._call("purchase.order.line", "formatted_read_group", domain=pdom, groupby=["product_id"], aggregates=["product_qty:sum", "price_subtotal:sum", "__count"]):
+                    if r.get("product_id") and (r["product_qty:sum"] or 0) > 0 and (r["price_subtotal:sum"] or 0) > 0:
+                        real[r["product_id"][0]] = {"total": float(r["price_subtotal:sum"]), "qty": float(r["product_qty:sum"]), "source": "commandes", "lines": int(r.get("__count") or 0)}
+        return real
+
+    def margin_products(self) -> dict:
+        """Articles dont le code PIF est renseigné : prix de vente, coût, prix d'achat par fournisseur et palier, coût réel d'après les factures d'achat
+        (à défaut les commandes d'achat) des MARGIN_LOOKBACK_MONTHS derniers mois. Lecture seule."""
+        from ..margins import build_rows, summary
+        pif = self._pif_field()
+        if not pif:
+            return {"unavailable": "Champ « code PIF » introuvable dans Odoo : indiquez son nom technique avec la variable STOCK_PIF_FIELD."}
+        prods = self._call("product.product", "search_read", domain=[(pif, "!=", False)], limit=5000, order="default_code",
+                           fields=["default_code", "name", pif, "list_price", "standard_price", "product_tmpl_id"])
+        products = [{"id": p["id"], "ref": p.get("default_code") or "", "name": p.get("name") or "", "pif": str(p.get(pif) or "").strip(),
+                     "sale": float(p.get("list_price") or 0.0), "cost": float(p.get("standard_price") or 0.0), "tmpl": p["product_tmpl_id"][0]} for p in prods]
+        ids, tmpls = [p["id"] for p in products], sorted({p["tmpl"] for p in products})
+        today = date.today()
+        # Prix des fournisseurs (product.supplierinfo) : seuls les tarifs valables aujourd'hui, en euros
+        suppliers: dict[int, list[dict]] = {}
+        skipped = 0
+        for k in range(0, len(tmpls), 500):
+            for s in self._call("product.supplierinfo", "search_read", domain=[("product_tmpl_id", "in", tmpls[k:k + 500])],
+                                fields=["product_tmpl_id", "partner_id", "min_qty", "price", "currency_id", "date_start", "date_end"]):
+                if (s.get("date_start") and s["date_start"] > today.isoformat()) or (s.get("date_end") and s["date_end"] < today.isoformat()):
+                    continue
+                cur = (s.get("currency_id") or [0, "EUR"])[1]
+                if cur != "EUR":
+                    skipped += 1
+                    continue
+                suppliers.setdefault(s["product_tmpl_id"][0], []).append({"partner": (s.get("partner_id") or [0, ""])[1], "min_qty": float(s.get("min_qty") or 0.0), "price": float(s.get("price") or 0.0)})
+        # Coût réel estimé : factures d'achat comptabilisées (avoirs déduits), à défaut commandes d'achat confirmées
+        since = (today.replace(day=1) - timedelta(days=31 * max(1, settings.MARGIN_LOOKBACK_MONTHS))).isoformat()
+        real, real_error = {}, None
+        try:
+            real = self._real_costs(ids, since)
+        except Exception as e:
+            log.exception("Coût réel des articles indisponible")
+            real_error = self._why(e)
+        rows = build_rows(products, suppliers, real)
+        return {"rows": rows, "summary": summary(rows), "pif_field": pif, "lookback_months": settings.MARGIN_LOOKBACK_MONTHS, "foreign_currency_lines": skipped, "since": since, "real_error": real_error}
+
     # ---- Événements : comptes analytiques d'un plan « Événements » -------------------------------------------------
     @staticmethod
     def _plain(text: str) -> str:

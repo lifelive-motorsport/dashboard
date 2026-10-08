@@ -836,3 +836,31 @@ def test_excluded_accounts_entries_are_listed_apart():
         return [{"date": "2026-07-31", "balance": 21000.0, "account_id": [1, "611010 Loyer Batiment"], "move_id": [9, "DIV/2026/07/0001"], "name": "Loyer 01-07/26"}]
     p._call = call
     assert [(o["code"], o["amount"], o["move"]) for o in p.expenses_excluded(2026)] == [("611010", 21000.0, "DIV/2026/07/0001")]
+
+
+def test_margin_products_from_odoo_data(monkeypatch):
+    from app import settings
+    monkeypatch.setattr(settings, "STOCK_PIF_FIELD", "x_pif")
+    today = date.today().isoformat()
+    p = OdooProvider.__new__(OdooProvider)
+
+    def call(model, method, **kw):
+        if model == "product.product":
+            return [{"id": 7, "default_code": "611363", "name": "3D connector", "x_pif": "N", "list_price": 58.77, "standard_price": 33.58, "product_tmpl_id": [70, "3D connector"]}]
+        if model == "product.supplierinfo":
+            return [{"product_tmpl_id": [70, "x"], "partner_id": [1, "RapidCenter"], "min_qty": 1.0, "price": 35.21, "currency_id": [1, "EUR"], "date_start": False, "date_end": False},
+                    {"product_tmpl_id": [70, "x"], "partner_id": [1, "RapidCenter"], "min_qty": 40.0, "price": 26.78, "currency_id": [1, "EUR"], "date_start": False, "date_end": False},
+                    {"product_tmpl_id": [70, "x"], "partner_id": [2, "Young"], "min_qty": 1.0, "price": 26.9, "currency_id": [1, "EUR"], "date_start": False, "date_end": False},
+                    {"product_tmpl_id": [70, "x"], "partner_id": [3, "Périmé"], "min_qty": 1.0, "price": 99.0, "currency_id": [1, "EUR"], "date_start": False, "date_end": "2020-01-01"},
+                    {"product_tmpl_id": [70, "x"], "partner_id": [4, "Dollar"], "min_qty": 1.0, "price": 77.0, "currency_id": [2, "USD"], "date_start": False, "date_end": False}]
+        if model == "account.move.line" and kw.get("groupby") == ["product_id"]:
+            return [{"product_id": [7, "x"], "balance:sum": 700.0}]
+        if model == "account.move.line":
+            return [{"product_id": [7, "x"], "move_type": "in_invoice", "quantity:sum": 22.0, "__count": 3}, {"product_id": [7, "x"], "move_type": "in_refund", "quantity:sum": 2.0, "__count": 1}]
+        return []
+    p._call = call
+    j = p.margin_products()
+    r = j["rows"][0]
+    assert r["worst"] == {"price": 35.21, "partner": "RapidCenter", "min_qty": 1.0}           # fournisseur le plus cher à 1 unité ; tarif périmé et devise étrangère écartés
+    assert r["real"]["unit"] == 35.0 and r["real"]["source"] == "factures" and r["real"]["qty"] == 20.0     # 700 € pour 22 − 2 unités
+    assert r["margin"]["theoretical"] == 42.86 and r["rate"]["worst"] == "green" and j["foreign_currency_lines"] == 1 and j["real_error"] is None

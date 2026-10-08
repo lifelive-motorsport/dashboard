@@ -49,6 +49,7 @@ SESSION_DAYS = int(os.getenv("SESSION_DAYS", "14"))
 
 # Stock : champ « code PIF » des articles (détecté si vide) et filtre facultatif sur le nom des emplacements internes
 STOCK_PIF_FIELD = os.getenv("STOCK_PIF_FIELD", "")
+MARGIN_LOOKBACK_MONTHS = int(os.getenv("MARGIN_LOOKBACK_MONTHS", "24"))          # contrôle des marges XC : période des achats pris en compte pour le coût réel estimé
 STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")
 
 # Liens vers Odoo (événements, véhicules) : adresse publique d'Odoo (par défaut ODOO_URL) et modèle de lien vers un compte analytique

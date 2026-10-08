@@ -10,7 +10,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
   ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
-  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory'], ['margins','Contrôle des marges']]],
+  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory'], ['margins','Contrôle des marges s/ produits'], ['tn11','Contrôle des marges s/ TN11']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['management','Management']]],
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
@@ -24,6 +24,7 @@ const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','o
 const PLAN = {
   'xc/events': ['CA, coûts directs et marge par événement (course, meeting) pour XC.',
     'Savoir comment un événement est repéré dans Odoo (compte analytique, projet, étiquette sur les factures…). Les comptes « XC Events » (700014, 602014) donnent déjà le total, pas le détail.'],
+  'xc/tn11': ['Contrôle des marges sur le projet TN11 : page à construire ensemble.', 'À définir ensemble : le périmètre (articles, commandes d’achat, ventes), les sources dans Odoo et les indicateurs attendus.'],
   'xc/inventory': ['Valeur du stock XC dans le temps (pièces, véhicules, en-cours), par catégorie et par entrepôt, avec alertes de rupture et de surstock.',
     'Valider les entrepôts à inclure et la méthode de valorisation d’Odoo. L’analyse de septembre a montré que la valeur du stock varie fortement : une courbe mensuelle sera utile.'],
   'cars/events': ['CA, coûts directs et marge par événement pour CARS (ex. Andalucia).',

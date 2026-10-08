@@ -220,3 +220,11 @@ table.sdsplit th.grp{white-space:normal;font-size:11px;line-height:1.15;text-ali
 .mghist .row,.mgworst .row{align-items:center}.mgworst .row{display:flex;gap:12px;padding:4px 0}.mgworst .mgname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mgworst .num{text-align:right;min-width:120px}
 .mghist .row{display:grid;grid-template-columns:190px 1fr 36px;gap:10px;align-items:center;padding:3px 0}.mghist .row span:first-child{white-space:nowrap}.mghist .bars{height:14px}
 .mgtable .mgdb{width:104px}.mgtable td,.mgtable th{padding-left:4px;padding-right:4px}.mgtable td.prod{min-width:130px!important}.mgtable th:nth-child(n+4){white-space:normal}
+
+.mgtable{font-size:13px}.mgtable td.prod{min-width:140px!important;max-width:260px;white-space:normal}.mgtable td{padding-top:6px;padding-bottom:6px}.mgtable td small{font-size:11px}
+.mgtable td.mggap{white-space:nowrap}.mgtable td.mggap>span:first-child{display:inline-block;min-width:62px;text-align:right;margin-right:6px}.mgtable .mgdb{width:96px}
+.mgtable th:nth-child(n+3){white-space:normal}
+.mgtable th:first-child,.mgtable td:first-child{min-width:0!important;width:64px}.mgtable td.prod{min-width:110px!important;max-width:220px}
+.mgtable .mgdb{width:78px}.mgtable td.mggap>span:first-child{min-width:54px;margin-right:4px}.mgtable td,.mgtable th{padding-left:3px;padding-right:3px}
+.mgtable td.prod{min-width:96px!important}
+.mgtable .mgdb{width:70px}

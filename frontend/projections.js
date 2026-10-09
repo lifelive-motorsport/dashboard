@@ -1,7 +1,7 @@
 // Overview › « Projections annualisées » (Chiffre d’affaires, Marge brute, Marge nette). Chargé avant app.js.
 // Chiffre d’affaires : CA réalisé de chaque mois écoulé (XC, CARS, total) ; pour les mois à venir, on encode le CA espéré (XC et CARS séparément). Une case laissée vide compte pour la moyenne des mois écoulés.
 // Marge brute : CA de l’année × taux de marge brute réalisé à date. Marge nette : marge brute projetée − charges imputées annualisées de façon linéaire (elles courent au fil du temps).
-const pj = {ready: false, loading: null, err: null, year: null, months: [], exp: {XC: {}, CARS: {}}, saved: null, can_save: false, dirty: false, msg: null, cur: null, days: null};
+const pj = {prev: [], ready: false, loading: null, err: null, year: null, months: [], exp: {XC: {}, CARS: {}}, saved: null, can_save: false, dirty: false, msg: null, cur: null, days: null};
 const PJ_MONTHS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 const pjClone = o => JSON.parse(JSON.stringify(o));
 const pjAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
@@ -23,7 +23,7 @@ async function pjEnsure() {
       const [r, cur] = await Promise.all([fetch('/api/projection?year=' + y, {headers: pjAuth()}), getRange(`${y}-01-01`, to)]);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
-      pj.year = y; pj.months = j.months || []; pj.can_save = !!j.can_save; pj.updated = j.updated_at ? {at: j.updated_at, by: j.updated_by} : null;
+      pj.year = y; pj.months = j.months || []; pj.prev = j.prev_months || []; pj.can_save = !!j.can_save; pj.updated = j.updated_at ? {at: j.updated_at, by: j.updated_by} : null;
       pj.saved = {XC: {...(j.expected.XC || {})}, CARS: {...(j.expected.CARS || {})}}; pj.exp = pjClone(pj.saved); pj.dirty = false;
       pj.cur = viewData(cur); pj.err = null; pj.ready = true;
     } catch (e) { pj.err = e.message; }
@@ -48,20 +48,23 @@ function pjCalc(sc) {
 const pjAll = () => { const c = {XC: pjCalc('XC'), CARS: pjCalc('CARS'), OTHER: pjCalc('OTHER')}; c.TOTAL = {total: c.XC.total + c.CARS.total + c.OTHER.total, real: c.XC.real + c.CARS.real + c.OTHER.real}; return c; };
 
 // ---- Affichage : tableau Chiffre d’affaires ------------------------------------------------------
+const pjVs = (cur, prev) => prev > 0 ? `<span class="${cur >= prev ? 'pos' : 'neg'}">${cur >= prev ? '▲ +' : '▼ '}${((cur / prev - 1) * 100).toFixed(1).replace('.', ',')} %</span>` : '–';
 function pjCaHtml() {
   const c = pjAll(), {y} = pj.days;
+  const prevOf = m => { const p = pj.prev.find(x => x.month === m); return p ? p.ca : null; }, prevTot = pj.prev.reduce((t, x) => t + x.ca, 0);
   const monthTot = m => c.XC.rows[m - 1].val + c.CARS.rows[m - 1].val + c.OTHER.rows[m - 1].val;
   const cell = (sc, r) => r.done ? `<td data-v="${r.real}">${eur(r.real)}</td>`
     : `<td><input class="sdin pj-in" type="number" step="1000" min="0" inputmode="numeric" data-sc="${sc}" data-m="${r.m}" value="${r.has ? r.enc : ''}" placeholder="${Math.round(c[sc].avg)}" aria-label="CA espéré ${sc} ${PJ_MONTHS[r.m - 1]}"> €${r.partial && r.real != null ? `<br><small class="na">déjà ${eur(r.real)}</small>` : ''}</td>`;
   const rows = [];
   for (let m = 1; m <= 12; m++) {
     const x = c.XC.rows[m - 1], z = c.CARS.rows[m - 1];
-    rows.push(`<tr class="${x.done ? '' : 'pjfut'}"><td>${PJ_MONTHS[m - 1]}${x.partial ? ' <small class="na">en cours</small>' : x.done ? '' : ' <small class="na">à venir</small>'}</td>${cell('XC', x)}${cell('CARS', z)}<td id="pjx-TOTAL-${m}" class="${x.done ? '' : 'na'}">${eur(monthTot(m))}</td></tr>`);
+    rows.push(`<tr class="${x.done ? '' : 'pjfut'}"><td>${PJ_MONTHS[m - 1]}${x.partial ? ' <small class="na">en cours</small>' : x.done ? '' : ' <small class="na">à venir</small>'}</td>${cell('XC', x)}${cell('CARS', z)}<td id="pjx-TOTAL-${m}" class="${x.done ? '' : 'na'}">${eur(monthTot(m))}</td><td class="na">${prevOf(m) == null ? '–' : eur(prevOf(m))}</td></tr>`);
   }
-  rows.push(`<tr class="pjavg"><td>Total ${y}</td><td id="pjt-XC">${eur(c.XC.total)}</td><td id="pjt-CARS">${eur(c.CARS.total)}</td><td id="pjt-TOTAL">${eur(c.TOTAL.total)}</td></tr>`);
+  rows.push(`<tr class="pjavg"><td>Total ${y}</td><td id="pjt-XC">${eur(c.XC.total)}</td><td id="pjt-CARS">${eur(c.CARS.total)}</td><td id="pjt-TOTAL">${eur(c.TOTAL.total)}</td><td>${pj.prev.length ? eur(prevTot) : '–'}</td></tr>`);
+  rows.push(`<tr class="pjvs"><td colspan="3" class="na">Évolution du total ${y} par rapport à ${y - 1}</td><td id="pjvs">${pjVs(c.TOTAL.total, prevTot)}</td><td></td></tr>`);
   return `<p class="na">Au ${fmtDate(pj.days.to)} : ${pj.days.elapsed} jours écoulés sur ${pj.days.len}. Les mois écoulés montrent le CA réalisé. Pour les mois à venir, encodez le CA espéré de XC et de CARS : le total de l’année se met à jour.</p>`
-    + `<div class="table-wrap"><table class="prodtable pjtable"><thead><tr><th>Mois</th><th>CA XC</th><th>CA CARS</th><th>Total</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>` + pjBar()
-    + `<small class="na">Une case laissée vide compte pour la <b>moyenne des mois écoulés</b> (XC ${eur(c.XC.avg)}, CARS ${eur(c.CARS.avg)}), affichée en grisé dans la case. Le mois en cours : encodez le CA du mois complet (le CA déjà réalisé est rappelé sous la case). Le total comprend aussi les comptes non affectés (${eur(c.OTHER.real)} réalisés à date, projetés à leur moyenne). CA = comptes 700 de l’année ${y}. Pour comparaison, projection linéaire (réalisé × ${num(Math.round(pj.days.k * 100) / 100)}) : ${eur(c.TOTAL.real * pj.days.k)}.</small>`;
+    + `<div class="table-wrap"><table class="prodtable pjtable"><thead><tr><th>Mois</th><th>CA XC</th><th>CA CARS</th><th>Total</th><th>Total ${y - 1}</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>` + pjBar()
+    + `<small class="na">Une case laissée vide compte pour la <b>moyenne des mois écoulés</b> (XC ${eur(c.XC.avg)}, CARS ${eur(c.CARS.avg)}), affichée en grisé dans la case. Le mois en cours : encodez le CA du mois complet (le CA déjà réalisé est rappelé sous la case). Le total comprend aussi les comptes non affectés (${eur(c.OTHER.real)} réalisés à date, projetés à leur moyenne). CA = comptes 700 de l’année ${y}. Colonne « Total ${y - 1} » : CA total de chaque mois de ${y - 1}, ancien plan comptable compris ; il n’est pas réparti entre XC et CARS (le plan comptable de l’époque ne le permettait pas). Pour comparaison, projection linéaire (réalisé × ${num(Math.round(pj.days.k * 100) / 100)}) : ${eur(c.TOTAL.real * pj.days.k)}.</small>`;
 }
 function pjBar() {
   const upd = pj.updated ? ` · enregistré le ${new Date(pj.updated.at).toLocaleDateString('fr-BE')} par ${esc(pj.updated.by || '')}` : '';
@@ -95,6 +98,7 @@ const pjRedraw = () => document.querySelectorAll('.pj-host').forEach(h => { h.in
 function pjUpdateCells() {
   const c = pjAll(), set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = eur(v); };
   for (let m = 1; m <= 12; m++) set('pjx-TOTAL-' + m, c.XC.rows[m - 1].val + c.CARS.rows[m - 1].val + c.OTHER.rows[m - 1].val);
+  { const e = document.getElementById('pjvs'); if (e) e.innerHTML = pjVs(c.TOTAL.total, pj.prev.reduce((t, x) => t + x.ca, 0)); }
   set('pjt-XC', c.XC.total); set('pjt-CARS', c.CARS.total); set('pjt-TOTAL', c.TOTAL.total);
   const bar = document.querySelector('.pj-host[data-kind="ca"] .sdbar'); if (bar) bar.outerHTML = pjBar();
 }

@@ -92,3 +92,15 @@ def monthly(provider, aggregate, year: int, today) -> list[dict]:
         row["OTHER"] = {"ca": round(agg["total"]["ca"] - row["XC"]["ca"] - row["CARS"]["ca"], 2), "margin": round(agg["total"]["margin"] - row["XC"]["margin"] - row["CARS"]["margin"], 2)}
         out.append(row)
     return out
+
+
+def previous_year(provider, aggregate, year: int) -> list[dict]:
+    """CA total (sans distinction XC / CARS : le plan comptable de l'époque ne le permettait pas) de chaque mois de l'année précédente, ancien plan comptable compris."""
+    import calendar
+    from datetime import date
+    out = []
+    for m in range(1, 13):
+        first, end = date(year, m, 1), date(year, m, calendar.monthrange(year, m)[1])
+        ca = aggregate(provider.pnl_balances(first, end))["total"]["ca"] + float(provider.old_plan_revenue(first, end))
+        out.append({"month": m, "ca": round(ca, 2)})
+    return out

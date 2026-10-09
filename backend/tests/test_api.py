@@ -383,6 +383,7 @@ def test_projection_monthly_and_expected():
     c = TestClient(app)
     j = c.get("/api/projection?year=2026").json()
     assert j["months"] and set(j["months"][0]) >= {"month", "XC", "CARS", "OTHER", "partial"} and j["expected"] == {"XC": {}, "CARS": {}}
+    assert len(j["prev_months"]) == 12 and all(set(x) == {"month", "ca"} for x in j["prev_months"])
     r = c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"11": 150000, "12": 90000.5}, "CARS": {"11": 80000}}})
     assert r.status_code == 200 and c.get("/api/projection?year=2026").json()["expected"] == {"XC": {"11": 150000.0, "12": 90000.5}, "CARS": {"11": 80000.0}}
     assert c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"13": 5}}}).status_code == 422

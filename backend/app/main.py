@@ -651,12 +651,17 @@ def get_projection(year: int = Query(..., ge=2000, le=2100), refresh: bool = Fal
     hit = _proj_cache.get(year)
     if not hit or refresh or time.time() - hit[0] > 900:
         try:
-            hit = (time.time(), projection.monthly(provider(), aggregate, year, date.today()))
+            try:
+                prev = projection.previous_year(provider(), aggregate, year - 1)
+            except Exception:
+                log.exception("CA mensuel de l'année précédente indisponible")
+                prev = []
+            hit = (time.time(), projection.monthly(provider(), aggregate, year, date.today()), prev)
         except Exception:
             log.exception("CA mensuel indisponible")
             raise HTTPException(502, "CA mensuel indisponible pour le moment")
         _proj_cache[year] = hit
-    return {"year": year, "months": hit[1], "expected": doc["years"].get(str(year), {"XC": {}, "CARS": {}}), "updated_at": doc.get("updated_at"), "updated_by": doc.get("updated_by"),
+    return {"year": year, "months": hit[1], "prev_months": hit[2], "expected": doc["years"].get(str(year), {"XC": {}, "CARS": {}}), "updated_at": doc.get("updated_at"), "updated_by": doc.get("updated_by"),
             "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
 
 

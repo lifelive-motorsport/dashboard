@@ -332,9 +332,9 @@ function modeTable(rows, head, countLabel, note, err) {
     .concat([`<tr class="tot"><td>Total</td><td>${num(tot)}</td><td>100,0 %</td><td>${eur(amt)}</td></tr>`]), 'prodtable') + `<small class="na">${note}</small>`;
 }
 // Courbes multiples sur UN SEUL axe (points = [{label, ...valeurs}], series = [{key, label, cls}]) ; légende + infobulle par point.
-function multiLineChart(points, series, tip, note) {
+function multiLineChart(points, series, tip, note, H = 250) {
   if (!points.some(p => series.some(s => p[s.key] > 0))) return '<p class="na">Aucune donnée sur la période.</p>';
-  const W = 640, H = 250, L = 46, R = 14, T = 14, B = 34, hi = Math.max(...points.flatMap(p => series.map(s => p[s.key] || 0))) * 1.12 || 1;
+  const W = 640, L = 46, R = 14, T = 14, B = 34, hi = Math.max(...points.flatMap(p => series.map(s => p[s.key] || 0))) * 1.12 || 1;
   const x = i => L + (W - L - R) * (points.length > 1 ? i / (points.length - 1) : .5), y = v => T + (H - T - B) * (1 - v / hi);
   const ticks = [0, 1, 2, 3].map(k => hi * k / 3), every = Math.ceil(points.length / 8);
   const path = s => points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[s.key] || 0).toFixed(1)}`).join('');
@@ -365,10 +365,11 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
       const w = shop(d); if (!w) return miss(d);
       const pk = w.pickings; if (!pk || pk.unavailable) return `<p class="na">Commandes préparées indisponibles pour le moment.</p>${(w.errors || {}).pickings ? `<small class="neg">Motif renvoyé par Odoo : ${esc(w.errors.pickings)}</small>` : ''}`;
       const sc = pk[pickScope] || pk.web, tabs = `<div class="tabs">${[['web', 'Commandes du webshop'], ['all', 'Tous les bons de livraison (hors Goldspeed)']].map(([k, l]) => `<button data-pickscope="${k}" class="${k === pickScope ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-      return tabs + `<div class="kpis">${kpi('Commandes préparées', num(sc.orders))}${kpi('Produits expédiés', num(sc.units))}${kpi('Produits par commande', sc.per_order == null ? '–' : num(sc.per_order))}</div>`
-        + multiLineChart(sc.points, [{key: 'orders', label: 'Commandes préparées', cls: 's1'}, {key: 'units', label: 'Produits expédiés', cls: 's2'}],
-          p => `Semaine du ${p.label} : ${p.orders} commande${p.orders > 1 ? 's' : ''}, ${num(p.units)} produit${p.units > 1 ? 's' : ''}${p.per_order == null ? '' : ' (' + num(p.per_order) + ' par commande)'}`,
-          `Les ${sc.weeks} dernières semaines. Une commande est comptée comme préparée quand son bon de livraison est validé (date de validation, semaines commençant le lundi, semaine en cours comprise). Les livraisons du webshop Goldspeed sont exclues : elles sont faites sur les courses par le Race Team. Produits = quantités expédiées. Survolez une semaine pour le détail : moins de commandes mais plus de produits par commande explique souvent une semaine plus calme.`);
+      const pts = sc.points || [], lastFull = pts.length > 1 ? pts[pts.length - 2] : null, per = n => sc.weeks ? num(Math.round(n / sc.weeks * 10) / 10) + ' par semaine' : '';
+      const tipFn = p => `Semaine du ${p.label} : ${p.orders} commande${p.orders > 1 ? 's' : ''}, ${num(p.units)} produit${p.units > 1 ? 's' : ''}${p.per_order == null ? '' : ' (' + num(p.per_order) + ' par commande)'}`;
+      return `<div class="pickwrap">${tabs}<div class="kpis">${kpi('Commandes préparées · ' + sc.weeks + ' semaines', num(sc.orders), '', per(sc.orders) + (lastFull ? ' · dernière semaine complète : ' + num(lastFull.orders) : ''))}${kpi('Produits expédiés · ' + sc.weeks + ' semaines', num(sc.units), '', per(sc.units))}${kpi('Produits par commande', sc.per_order == null ? '–' : num(sc.per_order), '', 'moyenne sur ' + sc.weeks + ' semaines')}</div>`
+        + `<div><h4 class="sub">Commandes préparées par semaine</h4>${multiLineChart(pts, [{key: 'orders', label: 'Commandes préparées', cls: 's1'}], tipFn, '', 190)}</div>`
+        + `<div><h4 class="sub">Produits expédiés par semaine</h4>${multiLineChart(pts, [{key: 'units', label: 'Produits expédiés', cls: 's2'}], tipFn, `Les ${sc.weeks} dernières semaines. Une commande est comptée comme préparée quand son bon de livraison est validé (date de validation, semaines commençant le lundi, semaine en cours comprise : elle est incomplète). Les livraisons du webshop Goldspeed sont exclues : elles sont faites sur les courses par le Race Team. Produits = quantités expédiées. Survolez une semaine pour le détail : moins de commandes mais plus de produits par commande explique souvent une semaine plus calme.`, 190)}</div></div>`;
     }, true),
     B('products', 'Top 15 des produits vendus', d => {
       const w = shop(d); if (!w) return miss(d);

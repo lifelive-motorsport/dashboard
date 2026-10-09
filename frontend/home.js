@@ -35,8 +35,8 @@ async function homeRedraw() {
     const x = grp(d, 'XC'), c = grp(d, 'CARS'), pv = d.pnl_prev, sc = buScope(d);
     tiles.push(homeTile('Chiffre d’affaires' + (sc.scoped ? ' · ' + sc.label : ''), eur(sc.ca), '', !sc.scoped && pv && pv.total.ca > 0 ? vsPrev(sc.ca, pv.total.ca, pv.period.from.slice(0, 4)) : sc.scoped && d.pnl.total.ca > 0 ? pct(sc.ca / d.pnl.total.ca) + ' du CA total' : '', sc.scoped ? '' : homeGauge(x.ca, c.ca, 'XC', 'CARS'), '#/overview/ca'));
     pjEnsure();
-    if (pj.ready) { const t = pjAll().TOTAL.total, prev = pj.prev.reduce((s, m) => s + m.ca, 0);
-      tiles.push(homeTile('Projection du CA ' + pj.year + (buSel !== 'all' ? ' · total' : ''), eur(t), '', prev > 0 ? pjVs(t, prev) + ' vs ' + (pj.year - 1) : 'selon le CA espéré encodé', '', '#/overview/ca')); }
+    if (pj.ready && buSel === 'all') { const t = pjAll().TOTAL.total, prev = pj.prev.reduce((s, m) => s + m.ca, 0);
+      tiles.push(homeTile('Projection du CA ' + pj.year + '', eur(t), '', prev > 0 ? pjVs(t, prev) + ' vs ' + (pj.year - 1) : 'selon le CA espéré encodé', '', '#/overview/ca')); }
   }
   if (d && allowedPage('overview/mb')) { const x = grp(d, 'XC'), c = grp(d, 'CARS'), t = buScope(d);
     tiles.push(homeTile('Marge brute' + (t.scoped ? ' · ' + t.label : ''), eur(t.margin), cls(t.margin), t.ca ? pct(t.margin / t.ca) + ' du CA' : '', t.scoped ? '' : homeGauge(x.margin, c.margin, 'XC', 'CARS'), '#/overview/mb')); }
@@ -46,17 +46,44 @@ async function homeRedraw() {
       tiles.push(homeTile('Marge nette' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), eur(net), cls(net), o.ca ? pct(net / o.ca) + ' du CA' : '', buSel !== 'all' ? '' : homeGauge(nmNet(nmSum(cols, ['XC'])), nmNet(nmSum(cols, NM_CARS)), 'XC', 'CARS'), '#/overview/nm')); }
     else tiles.push(homeTile('Marge nette', '…', '', nm.err ? esc(nm.err) : 'calcul en cours', '', '#/overview/nm'));
   }
-  if (d && !d.webshops.unavailable) [['xc/webshop_xc', w => !/goldspeed/i.test(w.name)], ['xc/webshop_gs', w => /goldspeed/i.test(w.name)]].forEach(([k, pick]) => {
-    if (!allowedPage(k)) return; const w = d.webshops.find(pick);
-    if (w) tiles.push(homeTile(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`, '', '#/' + k)); });
-  if (d && d.events && d.events.events) [['xc/events', ['XC'], 'Événements XC'], ['cars/events', ['CARS'], 'Événements CARS']].forEach(([k, groups, title]) => {
-    if (!allowedPage(k)) return; const ev = d.events.events.filter(e => groups.includes(e.group));
-    if (ev.length) { const ca = ev.reduce((s, e) => s + e.ca, 0), res = ev.reduce((s, e) => s + e.result, 0);
-      tiles.push(homeTile(title, `${ev.length}`, '', `CA ${eur(ca)} · résultat cash <span class="${cls(res)}">${eur(res)}</span>`, '', '#/' + k)); } });
-  if (allowedPage('xc/inventory')) {
-    const s = stockState.data;
-    if (s && s.total) tiles.push(homeTile('Valeur du stock XC', eur(s.total.value), '', s.as_of ? 'au ' + fmtDate(s.as_of) : '', '', '#/xc/inventory'));
-    else { if (!stockState.loading && !stockState.error) loadStock(false).then(homeRedraw); tiles.push(homeTile('Valeur du stock XC', '…', '', stockState.error || 'chargement', '', '#/xc/inventory')); }
+  // Effectifs (ETP) : données du personnel, réservées aux administrateurs
+  if (allowedPage('staff/people')) { const t = homeEtpTile(); if (t) tiles.push(t); }
+  // Événements : ceux de la sélection (toutes les BU accessibles, XC, CARS ou une BU CARS)
+  if (d && d.events && d.events.events) {
+    const keys = BU_KEYS[buSel], groups = ['XC', 'CARS'].filter(g => allowedPage(g === 'XC' ? 'xc/events' : 'cars/events')), ok = e => groups.includes(e.group) && (!keys || (e.bus || []).some(b => keys.includes(b.bu)) || (buSel === 'xc' && e.group === 'XC') || (buSel === 'cars' && e.group === 'CARS'));
+    const ev = d.events.events.filter(ok);
+    if (ev.length) { const ca = ev.reduce((s2, e) => s2 + e.ca, 0), res = ev.reduce((s2, e) => s2 + e.result, 0);
+      tiles.push(homeTile('Événements' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), `${ev.length}`, '', `CA ${eur(ca)} · résultat cash <span class="${cls(res)}">${eur(res)}</span>`, '', '#/' + (buSel === 'xc' || (buSel === 'all' && !allowedPage('cars/events')) ? 'xc/events' : 'cars/events'))); } }
+  // Webshops et stock : propres à XC, affichés uniquement quand XC est sélectionné
+  if (buSel === 'xc') {
+    if (d && !d.webshops.unavailable) [['xc/webshop_xc', w => !/goldspeed/i.test(w.name)], ['xc/webshop_gs', w => /goldspeed/i.test(w.name)]].forEach(([k, pick]) => {
+      if (!allowedPage(k)) return; const w = d.webshops.find(pick);
+      if (w) tiles.push(homeTile(w.name, eur(w.revenue), '', `${w.orders} commandes · panier moyen ${eur(w.avg_basket)}`, '', '#/' + k)); });
+    if (allowedPage('xc/inventory')) {
+      const st = stockState.data;
+      if (st && st.total) tiles.push(homeTile('Valeur du stock XC', eur(st.total.value), '', st.as_of ? 'au ' + fmtDate(st.as_of) : '', '', '#/xc/inventory'));
+      else { if (!stockState.loading && !stockState.error) loadStock(false).then(homeRedraw); tiles.push(homeTile('Valeur du stock XC', '…', '', stockState.error || 'chargement', '', '#/xc/inventory')); }
+    }
   }
   el.innerHTML = tiles.length ? `<div class="home-grid">${tiles.join('')}</div>` : '<p class="na">Aucun indicateur disponible pour vos accès. Utilisez le menu pour accéder à vos sections.</p>';
+}
+
+// ETP par BU : temps de travail (%) de chaque personne active × sa part d'imputation. Données du personnel : réservées aux administrateurs.
+function homeEtp() {
+  if (typeof sd === 'undefined' || !sd.loaded || sd.restricted || !sd.doc) return null;
+  const r = {XC: 0, MODERN_RALLY: 0, HISTORIC_RACING: 0, HISTORIC_RALLY: 0, SHARED: 0, MANAGEMENT: 0, UNALLOC: 0, total: 0};
+  sd.doc.people.filter(p => p.active).forEach(p => { const f = (+p.fte || 100) / 100, al = p.alloc || {}, used = Object.values(al).reduce((t, v) => t + (+v || 0), 0);
+    r.total += f; ['XC', 'MODERN_RALLY', 'HISTORIC_RACING', 'HISTORIC_RALLY', 'SHARED', 'MANAGEMENT'].forEach(k => { r[k] += f * (+al[k] || 0) / 100; }); r.UNALLOC += f * Math.max(0, 100 - used) / 100; });
+  return r;
+}
+let homeEtpTried = false;
+const homeEtpFmt = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
+function homeEtpTile() {
+  if (typeof sd !== 'undefined' && !sd.loaded && !homeEtpTried) { homeEtpTried = true; sdLoad().then(homeRedraw); }
+  const e = homeEtp(); if (!e) return null;
+  const ROWS = [['XC', 'XC Cross', 'var(--bu-xc)'], ['MODERN_RALLY', 'Modern Rally', 'var(--bu-mr-ui)'], ['HISTORIC_RACING', 'Historic Racing', 'var(--bu-hrc)'], ['HISTORIC_RALLY', 'Historic Rally', 'var(--bu-hrl)'], ['SHARED', 'Shared Services', 'var(--bu-groupe-symbole)'], ['MANAGEMENT', 'Management', 'var(--mut)'], ['UNALLOC', 'Non imputé', 'var(--border)']];
+  const keys = BU_KEYS[buSel], rows = keys ? ROWS.filter(r => keys.includes(r[0])) : ROWS.filter(r => e[r[0]] > 0.005), tot = keys ? rows.reduce((t, r) => t + e[r[0]], 0) : e.total;
+  const bar = rows.length > 1 ? `<div class="stack">${rows.map(r => `<div style="width:${e[r[0]] / (tot || 1) * 100}%;background:${r[2]}"></div>`).join('')}</div>` : '';
+  const list = `<div class="etp-list">${rows.map(r => `<div><span class="etp-dot" style="background:${r[2]}"></span>${esc(r[1])}<b>${homeEtpFmt(e[r[0]])}</b></div>`).join('')}</div>`;
+  return homeTile('Effectifs (ETP)' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), homeEtpFmt(tot), '', 'équivalents temps plein, imputés par BU', bar + list, '#/staff/people');
 }

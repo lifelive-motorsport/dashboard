@@ -1,4 +1,4 @@
-// Co-Driver › Accueil : message de bienvenue, profil, indicateurs visuels selon les accès de l'utilisateur, dernières mises à jour. Chargé avant app.js.
+// Logbook › Accueil : message de bienvenue, profil, indicateurs visuels selon les accès de l'utilisateur, dernières mises à jour. Chargé avant app.js.
 let me = {name: '', first: '', profile: '', email: ''};
 const homeHello = () => { const h = new Date().getHours(); return h >= 5 && h < 18 ? 'Bonjour' : 'Bonsoir'; };
 function homeBlocks() {

@@ -1,8 +1,8 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
-  {date: 'Octobre 2026', title: 'Co-Driver : page d’accueil et nouveau menu', tag: 'Application', items: [
+  {date: 'Octobre 2026', title: 'Logbook : page d’accueil, nouvelle identité et nouveau menu', tag: 'Application', items: [
     'Nouvelle page d’accueil personnalisée, avec vos indicateurs clés selon vos accès.',
-    'L’application devient « Co-Driver » et le menu regroupe les anciens tableaux de bord sous « Dashboards financiers ».']},
+    'L’application devient « Logbook », avec sa charte graphique (couleurs, polices, logo), et le menu regroupe les anciens tableaux de bord sous « Dashboards financiers ».']},
   {date: 'Octobre 2026', title: 'Utilisateurs, catégories et droits d’accès', tag: 'Settings', items: [
     'Settings › Utilisateurs : le Super User crée les utilisateurs et choisit leur rôle (Standard, Administrateur ou catégorie).',
     'Catégories sur mesure : on nomme une catégorie et on coche les sections et sous-sections accessibles ; le serveur n’ouvre rien d’autre.']},

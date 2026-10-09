@@ -17,7 +17,7 @@ from .bu import aggregate
 from .providers.demo import DemoProvider
 
 log = logging.getLogger("dashboard")
-app = FastAPI(title="Lifelive Motorsport — Co-Driver")
+app = FastAPI(title="Lifelive Motorsport — Logbook")
 _provider = None
 _cache: dict[tuple, tuple[float, dict]] = {}
 

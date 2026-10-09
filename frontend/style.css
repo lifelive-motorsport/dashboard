@@ -17,9 +17,10 @@ th,.num,td[data-v]{font-variant-numeric:tabular-nums}
 
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 var(--font-ui);padding-top:env(safe-area-inset-top)}
 header{position:sticky;top:0;z-index:20;display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
-h1{font-size:13px;margin:0;letter-spacing:.14em;text-transform:uppercase}h1 a{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none}h1 span{color:var(--mut);font-weight:700}
+h1{font-size:13px;margin:0;letter-spacing:.14em;text-transform:uppercase}h1 a{display:flex;align-items:center;gap:12px;color:inherit;text-decoration:none}
 .controls{margin-left:auto;display:flex;gap:6px}
 .logo{height:20px;width:auto;display:block}.logo-on-light{display:none}
+h1 .app-icon{width:34px;height:34px;border-radius:8px;flex:none}h1 .brand{display:flex;flex-direction:column;gap:4px}h1 .brand-name{font-family:var(--font-title);font-style:italic;font-weight:700;font-size:26px;line-height:1;letter-spacing:.02em;text-transform:uppercase;color:var(--fg)}h1 .brand .logo{height:8px;width:auto;opacity:.85}
 @media (prefers-color-scheme:light){.logo-on-dark{display:none}.logo-on-light{display:block}}
 select,button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit}
 button{cursor:pointer}

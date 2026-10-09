@@ -15,7 +15,7 @@ function tx(s) {
   let out = EN[k];
   if (out === undefined) for (const [re, fn] of EN_PATTERNS) { const m = re.exec(k); if (m) { out = fn(m); break; } }
   if (out === undefined && /\d/.test(k)) { const vals = []; const tpl = k.replace(I18N_NUM, v => { vals.push(v); return '{}'; }), e = EN_T[tpl]; if (e !== undefined) { let i = 0; out = e.replace(/\{(\d*)\}/g, (_, n) => vals[n ? n - 1 : i++] ?? ''); } }
-  if (out === undefined && k.includes(' · ')) { const parts = k.split(' · '), tr = parts.map(p => { const o = EN[p.trim()]; return o === undefined ? p : o; }); if (tr.some((p, i) => p !== parts[i])) out = tr.join(' · '); }
+  if (out === undefined && /( · | ·$)/.test(k)) { const parts = k.replace(/ ·$/, '').split(' · '), tr = parts.map(p => tx(p.trim())); if (tr.some((p, i) => p !== parts[i].trim())) out = tr.join(' · ') + (k.endsWith(' ·') ? ' ·' : ''); }
   return out === undefined ? s : s.replace(k, out);
 }
 const t = tx;

@@ -1,11 +1,11 @@
-// GENERAL EXPENSES › Données source (choix des comptes) et Général (résultat). Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, lineChart) à l'appel.
+// Frais généraux › Données source (choix des comptes) et Général (résultat). Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, lineChart) à l'appel.
 const EX_YEAR = new Date().getFullYear();
 let ex = {genK: {}, monthK: {}, monthSelK: {}, alloc: null, allocErr: null, keyMode: null, keyPct: 50, keyDirty: false, src: null, gen: null, err: null, genErr: null, sel: {}, part: {}, dirty: false, msg: ''};
 const exAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const exKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service'], ['partners', 'Selon le fournisseur']];
 const exPartKinds = [['', 'Laisser de côté'], ['general', 'Frais généraux'], ['vehicle', 'Véhicules de service']];
-const exMonth = m => { try { return new Date(m + '-15').toLocaleDateString('fr-BE', {month: 'short'}).replace('.', ''); } catch { return m; } };
-const exEur2 = n => new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
+const exMonth = m => { try { return new Date(m + '-15').toLocaleDateString(LOCALE(), {month: 'short'}).replace('.', ''); } catch { return m; } };
+const exEur2 = n => new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
 
 async function exGet(url) {
   const r = await fetch(url, {headers: exAuth()});
@@ -218,20 +218,20 @@ function exDrawSource() {
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const rows = s.accounts.map(a => `<tr><td>${esc(a.code)}</td><td class="prod">${esc(a.name)}${!s.saved && a.suggested ? ' <small class="na">(proposé)</small>' : ''}</td><td>${eur(a.total)}</td><td>${num(a.months)}</td><td>${eur((a.closed_total ?? a.total) / (s.months_elapsed || 1))}</td><td>${sel(a)}</td></tr>`);
   const bar = `<div class="sdbar">${canEdit ? `<button type="button" class="primary" data-ex-save${ex.dirty ? '' : ' disabled'}>Enregistrer</button> <button type="button" data-ex-reload>Annuler les modifications</button>` : ''}
-    <span class="na">${esc(ex.msg || (s.saved ? 'Dernier enregistrement : ' + new Date(s.updated_at).toLocaleString('fr-BE') + (s.updated_by ? ' par ' + s.updated_by : '') + '.' : 'Proposition de départ (comptes 611, 612, 614 et 64x), pas encore enregistrée.'))}</span></div>`;
+    <span class="na">${esc(ex.msg || (s.saved ? 'Dernier enregistrement : ' + new Date(s.updated_at).toLocaleString(LOCALE()) + (s.updated_by ? ' par ' + s.updated_by : '') + '.' : 'Proposition de départ (comptes 611, 612, 614 et 64x), pas encore enregistrée.'))}</span></div>`;
   const psel = (code, p) => `<select class="sdin" data-ex-part="${code}" data-pid="${esc(p.id)}"${canEdit ? '' : ' disabled'}>${exPartKinds.map(([v, l]) => `<option value="${v}"${((ex.part[code] || {})[p.id] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const byPartner = s.accounts.filter(a => ex.sel[a.code] === 'partners').map(a => {
     const list = a.partners || [], hasData = list.length > 0;
     return `<h4 class="sub">Fournisseurs du compte ${esc(a.code)} ${esc(a.name)}</h4>` + (hasData ? table(['Fournisseur', 'Depuis le 1er janvier', 'Rubrique'], list.map(p => `<tr><td class="prod">${esc(p.name)}</td><td>${eur(p.total)}</td><td>${psel(a.code, p)}</td></tr>`), 'prodtable sdtable')
-      + '<small class="na">Seuls les fournisseurs rangés en « Frais généraux » ou « Véhicules de service » sont repris ; les autres (par exemple les honoraires d’indépendants, déjà dans STAFF costs) restent de côté.</small>' : '<p class="na">Aucune écriture sur ce compte.</p>');
+      + '<small class="na">Seuls les fournisseurs rangés en « Frais généraux » ou « Véhicules de service » sont repris ; les autres (par exemple les honoraires d’indépendants, déjà dans Coûts du personnel) restent de côté.</small>' : '<p class="na">Aucune écriture sur ce compte.</p>');
   }).join('');
   el.innerHTML = bar
     + `<div class="kpis">${kpi('Frais généraux', eur(sums.general), '', 'comptes retenus, depuis le 1er janvier')}${kpi('Véhicules de service', eur(sums.vehicle), '', 'menu dédié Service Vehicles')}${kpi('Laissé de côté', eur(sums.aside), '', 'comptes non retenus')}</div>`
     + `<h4 class="sub">Comptes de charges ${EX_YEAR}</h4>` + (rows.length ? table(['Compte', 'Libellé', 'Depuis le 1er janvier', 'Mois avec écritures', 'Moyenne / mois (lissée)', 'Rubrique'], rows, 'prodtable sdtable') : '<p class="na">Aucun compte de charges candidat.</p>')
     + byPartner
     + `<h4 class="sub">Traité ailleurs (non repris ici)</h4>` + table(['Famille', 'Depuis le 1er janvier', 'Où'], [
-        ['Achats, sous-traitance et frais directs par BU (comptes 60x)', el2.bu, 'Overview, XC Detail et CARS Detail'],
-        ['Personnel (comptes 62x, rémunération et cotisations des administrateurs 618)', el2.staff, 'STAFF costs'],
+        ['Achats, sous-traitance et frais directs par BU (comptes 60x)', el2.bu, 'Vue d’ensemble, Détail XC et Détail CARS'],
+        ['Personnel (comptes 62x, rémunération et cotisations des administrateurs 618)', el2.staff, 'Coûts du personnel'],
         ['Marketing (comptes ' + (s.marketing_accounts || []).join(', ') + ')', el2.marketing, 'Marketing › Dépenses marketing'],
         ['Loyer exclu (compte ' + (s.excluded_accounts || []).join(', ') + ')', el2.excluded, 'mentionné sous le graphique de la page Général']].filter(r => r[1] != null).map(r => `<tr><td class="prod">${esc(r[0])}</td><td>${eur(r[1])}</td><td>${esc(r[2])}</td></tr>`), 'prodtable')
     + '<small class="na">Choisissez, pour chaque compte de charges, s’il compte dans les frais généraux, dans les véhicules de service (menu Service Vehicles) ou s’il est laissé de côté. Les comptes « old » sont ignorés. Un compte qui mélange des natures différentes (par exemple un compte 640 qui contient aussi des taxes de véhicules) se range en entier dans une seule rubrique ; dites-le-moi si un compte doit être scindé.</small>';
@@ -275,7 +275,7 @@ function exDrawRules() {
   const shares = {revenue: a.shares.revenue, pct: {XC: pctXc / 100, CARS: 1 - pctXc / 100}};
   const amt = (m, g) => a.total * shares[m][g];
   const bar = `<div class="sdbar exkey"><button type="button" data-ex-key="revenue" class="${mode === 'revenue' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur le CA, au prorata</button><button type="button" data-ex-key="pct" class="${mode === 'pct' ? 'primary' : ''}"${canEdit ? '' : ' disabled'}>Clé sur base d’un % encodé</button>
-    ${canEdit && a.can_save === false ? exSimBar('data-ex-restore-key') : canEdit ? `<button type="button" class="primary" data-ex-key-save${ex.keyDirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<span class="na">${esc(ex.msg || (a.updated_at ? 'Dernier enregistrement : ' + new Date(a.updated_at).toLocaleString('fr-BE') + (a.updated_by ? ' par ' + a.updated_by : '') + '.' : 'Clé par défaut : prorata du CA.'))}</span></div>`;
+    ${canEdit && a.can_save === false ? exSimBar('data-ex-restore-key') : canEdit ? `<button type="button" class="primary" data-ex-key-save${ex.keyDirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<span class="na">${esc(ex.msg || (a.updated_at ? 'Dernier enregistrement : ' + new Date(a.updated_at).toLocaleString(LOCALE()) + (a.updated_by ? ' par ' + a.updated_by : '') + '.' : 'Clé par défaut : prorata du CA.'))}</span></div>`;
   const cell = (m, g) => `<td class="${mode === m ? 'exactive' : ''}">${pct(shares[m][g])}</td><td class="${mode === m ? 'exactive' : ''}">${eur(amt(m, g))}</td>`;
   el.innerHTML = bar
     + (mode === 'pct' ? `<div class="sdgrid exkeyin"><label class="sdfield"><span>Part XC (%)</span><input class="sdin" type="number" step="1" min="0" max="100" data-ex-xcpct value="${esc(pctXc)}"${canEdit ? '' : ' disabled'}></label><label class="sdfield"><span>Part CARS (%)</span><input class="sdin" type="number" value="${esc(100 - pctXc)}" disabled></label></div>` : '')
@@ -365,7 +365,7 @@ document.addEventListener('click', async e => {
 });
 window.addEventListener('beforeunload', e => { if (ex.dirty || ((ex.keyDirty || ex.splitDirty) && !exSim()) || ex.platesDirty || ex.linksDirty) { e.preventDefault(); e.returnValue = ''; } });
 
-// ---- SERVICE VEHICLES › Imputation des frais véhicules : % indicatif (agendas) et % retenu (saisi) par véhicule, BU et frais généraux ----
+// ---- Véhicules de service › Imputation des frais véhicules : % indicatif (agendas) et % retenu (saisi) par véhicule, BU et frais généraux ----
 const EX_SPLIT = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['GENERAL', 'Frais généraux']];
 function splitBlocks() {
   return [{static: '<section class="block" data-bid="veh-split"><div class="block-head"><h3>Imputation des frais véhicules aux BU et aux frais généraux</h3></div><div class="block-body" id="exp-split"><p class="na">Chargement…</p></div></section>'}];

@@ -1,4 +1,4 @@
-// XC Detail › Inventory : valorisation du stock au coût moyen (top des références à code PIF, répartition par code PIF, points d'attention).
+// Détail XC › Stock : valorisation du stock au coût moyen (top des références à code PIF, répartition par code PIF, points d'attention).
 // Chargé avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, NOTE…) au moment de l'appel.
 let stockState = {data: null, error: null, loading: false};
 

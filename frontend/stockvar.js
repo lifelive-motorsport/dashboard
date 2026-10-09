@@ -34,7 +34,7 @@ function applyStockVar(d) {
 // Chiffres affichés : ajustements de MB si activés, puis variations de stock si activées.
 const viewData = d => applyStockVar(typeof adjOn !== 'undefined' && adjOn ? adjustedData(d) : d);
 
-// Interrupteur « sans / avec variation de stock » (pages de marge d'Overview et de XC Detail, et page Marge nette).
+// Interrupteur « sans / avec variation de stock » (pages de marge d'Vue d’ensemble et de Détail XC, et page Marge nette).
 function stockToggleHtml() {
   const n = (sv.items || []).filter(a => a.enabled).length;
   return `<div class="adjbar stockbar ${stockOn ? 'on' : ''}"><div class="seg" role="group" aria-label="Variation de stock"><button type="button" data-stockon="0" class="${stockOn ? '' : 'sel'}">Sans variation de stock</button><button type="button" data-stockon="1" class="${stockOn ? 'sel' : ''}">Avec variation de stock</button></div>`
@@ -46,7 +46,7 @@ document.addEventListener('click', e => {
   if (typeof render === 'function') render();
 });
 
-// ---- Volet « Variations de stock » de la page Inventory ---------------------------------------------------------------
+// ---- Volet « Variations de stock » de la page Stock ---------------------------------------------------------------
 function stockVarBlocks() {
   return [{static: '<section class="block" data-bid="stockvar"><div class="block-head"><h3>Variations de stock</h3></div><div class="block-body" id="stockvar-view"><p class="na">Chargement…</p></div></section>'}];
 }
@@ -62,12 +62,12 @@ function drawStockVar() {
     <div class="adjbody"><label>Effet sur la marge brute de XC (€ ; + = le stock augmente, − = il diminue)<input type="number" step="0.01" data-sv="amount" data-i="${i}" value="${a.amount}"${dis}></label>
       <label>Date d’effet<input type="date" data-sv="date" data-i="${i}" value="${esc(a.date || '')}"${dis}></label></div>
     <input class="note" type="text" maxlength="300" placeholder="Note (justification, visible par tous)" data-sv="note" data-i="${i}" value="${esc(a.note || '')}"${dis}></div>`).join('');
-  el.innerHTML = `<p class="na">Saisissez ici les variations de stock à prendre en compte (positives ou négatives). Elles modifient la marge brute et la marge nette de <b>XC</b> uniquement lorsque l’option « Avec variation de stock » est activée dans les pages de marge d’Overview et de XC Detail. Elles ne sont jamais écrites dans Odoo.</p>`
+  el.innerHTML = `<p class="na">Saisissez ici les variations de stock à prendre en compte (positives ou négatives). Elles modifient la marge brute et la marge nette de <b>XC</b> uniquement lorsque l’option « Avec variation de stock » est activée dans les pages de marge d’Vue d’ensemble et de Détail XC. Elles ne sont jamais écrites dans Odoo.</p>`
     + `<div class="kpis">${kpi('Variations actives en ' + year, (tot > 0 ? '+' : '') + eur(tot), tot < 0 ? 'neg' : tot > 0 ? 'pos' : '', 'effet cumulé sur la marge brute XC')}${kpi('Éléments', num(items.length), '', `${items.filter(a => a.enabled).length} actif${items.filter(a => a.enabled).length > 1 ? 's' : ''}`)}</div>`
     + (items.length ? cards : '<p class="na">Aucune variation de stock saisie.</p>')
     + (edit ? `<div class="adjbtns"><button type="button" data-svadd>+ Ajouter une variation de stock</button><button type="button" class="primary" data-svsave${svDirty ? '' : ' disabled'}>Enregistrer</button><button type="button" data-svcancel${svDirty ? '' : ' disabled'}>Annuler les modifications</button></div>`
       : `<p class="na">${sv.can_edit ? 'Saisie réservée au propriétaire des hypothèses.' : 'Lecture seule : la saisie est réservée aux administrateurs.'}</p>`)
-    + `<small class="na">${esc(svMsg || (sv.updated_at ? 'Dernier enregistrement : ' + new Date(sv.updated_at).toLocaleString('fr-BE') + (sv.updated_by ? ' par ' + sv.updated_by : '') + '.' : 'Rien d’enregistré pour le moment.'))}</small>`;
+    + `<small class="na">${esc(svMsg || (sv.updated_at ? 'Dernier enregistrement : ' + new Date(sv.updated_at).toLocaleString(LOCALE()) + (sv.updated_by ? ' par ' + sv.updated_by : '') + '.' : 'Rien d’enregistré pour le moment.'))}</small>`;
 }
 document.addEventListener('change', e => {
   const el = e.target; if (!el.dataset || el.dataset.sv === undefined) return;

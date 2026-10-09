@@ -1,4 +1,4 @@
-// STAFF costs › Données source (salariés, indépendants) et Imputation du personnel. Données sensibles : visibles et modifiables par les administrateurs seulement.
+// Coûts du personnel › Données source (salariés, indépendants) et Imputation du personnel. Données sensibles : visibles et modifiables par les administrateurs seulement.
 // Chargé après staffcalc.js et avant app.js ; utilise ses fonctions (esc, eur, num, pct, kpi, table, token…) au moment de l'appel.
 const SD_YEAR = new Date().getFullYear();
 let sd = {view: (() => { try { return localStorage.getItem('lm_staff_view') === 'real' ? 'real' : 'annual'; } catch { return 'annual'; } })(), loaded: false, restricted: false, error: null, doc: null, base: null, canEdit: false, upload: false, dirty: false, msg: '',
@@ -14,7 +14,7 @@ const sdByName = (x, y) => { const a = sdSurname(x.name), b = sdSurname(y.name);
 const sdPeople = k => (sd.doc ? sd.doc.people.filter(p => p.kind === k).sort(sdByName) : []);
 const sdPerson = id => sd.doc && sd.doc.people.find(p => p.id === id);
 const sdNum = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
-const sdEur2 = n => new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
+const sdEur2 = n => new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n || 0);
 const sdMonthsElapsed = () => new Date().getMonth() + 1;
 const sdPlural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
@@ -57,7 +57,7 @@ function sdGate() {
   return '';
 }
 const sdBar = () => sd.canSave === false ? `<div class="sdbar sim"><span class="chip bad">Simulation</span><span class="na">Vos modifications ne sont pas enregistrées : elles disparaissent à la fermeture de la page. Les valeurs de référence sont celles de leur propriétaire (les fiches de paie et les imports ne sont pas modifiables).</span><button type="button" data-sd-reload>Restaurer les valeurs par défaut</button></div>` : `<div class="sdbar"><button type="button" class="primary" data-sd-save${sd.dirty ? '' : ' disabled'}>Enregistrer</button>
-  <button type="button" data-sd-reload>Annuler les modifications</button>${sd.canEdit ? ' <label class="btn" title="Archive ZIP préparée pour le premier remplissage (staff.json + fiches PDF)">Importer (ZIP)<input type="file" accept=".zip,application/zip" data-sd-import hidden></label>' : ''}<span class="na">${esc(sd.msg || (sd.base ? 'Dernier enregistrement : ' + new Date(sd.base).toLocaleString('fr-BE') + (sd.updatedBy ? ' par ' + sd.updatedBy : '') + '.' : 'Rien d’enregistré pour le moment.'))}</span></div>`;
+  <button type="button" data-sd-reload>Annuler les modifications</button>${sd.canEdit ? ' <label class="btn" title="Archive ZIP préparée pour le premier remplissage (staff.json + fiches PDF)">Importer (ZIP)<input type="file" accept=".zip,application/zip" data-sd-import hidden></label>' : ''}<span class="na">${esc(sd.msg || (sd.base ? 'Dernier enregistrement : ' + new Date(sd.base).toLocaleString(LOCALE()) + (sd.updatedBy ? ' par ' + sd.updatedBy : '') + '.' : 'Rien d’enregistré pour le moment.'))}</span></div>`;
 
 const sdIn = (field, val, o = {}) => `<input class="sdin" ${o.type === 'text' ? 'type="text"' : 'type="number" step="' + (o.step || '0.01') + '"'} data-f="${field}"${o.pid ? ` data-pid="${o.pid}"` : ''}${o.i != null ? ` data-i="${o.i}"` : ''}${o.sub ? ` data-sub="${o.sub}"` : ''} value="${esc(val ?? '')}"${sd.canEdit ? '' : ' disabled'}${o.ph ? ` placeholder="${esc(o.ph)}"` : ''}>`;
 const sdField = (label, html, hint = '') => `<label class="sdfield"><span>${esc(label)}</span>${html}${hint ? `<small class="na">${esc(hint)}</small>` : ''}</label>`;
@@ -213,7 +213,7 @@ function sdServiceMonths(inv) {
   return Array.from({length: n}, (_, i) => { const k = m - (n - 1) + i; return `${y}-${String(k).padStart(2, '0')}`; });
 }
 const sdActiveMonths = (p, inv) => p.active_months > 0 ? +p.active_months : (sdServiceMonths(inv).length || sdMonthsElapsed());
-const sdMonthName = m => { try { return new Date(m + '-15').toLocaleDateString('fr-BE', {month: 'long', year: 'numeric'}); } catch { return m; } };
+const sdMonthName = m => { try { return new Date(m + '-15').toLocaleDateString(LOCALE(), {month: 'long', year: 'numeric'}); } catch { return m; } };
 // Période d'occupation : salarié = du … au … (ou en cours) ; travail ponctuel d'une personne sortie = nombre de jours prestés ; indépendant = mois de prestation.
 function sdOccupation(p) {
   if (p.kind === 'independant') {

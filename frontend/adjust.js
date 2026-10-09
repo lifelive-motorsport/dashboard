@@ -131,7 +131,7 @@ function drawAdjEditor() {
   });
   if (edit) h += `<div class="adjbtns"><button type="button" data-adjadd>+ Ajouter un ajustement</button><button type="button" class="primary" data-adjsave${adjDirty ? '' : ' disabled'}>Enregistrer</button>
       <button type="button" data-adjcancel${adjDirty ? '' : ' disabled'}>Annuler les modifications</button></div>`;
-  h += `<p class="na" id="adj-msg">${esc(adjMsg || (adj.updated_at ? `Dernier enregistrement : ${new Date(adj.updated_at).toLocaleString('fr-BE')}${adj.updated_by ? ' par ' + adj.updated_by : ''}.` : ''))}</p>`;
+  h += `<p class="na" id="adj-msg">${esc(adjMsg || (adj.updated_at ? `Dernier enregistrement : ${new Date(adj.updated_at).toLocaleString(LOCALE())}${adj.updated_by ? ' par ' + adj.updated_by : ''}.` : ''))}</p>`;
   el.innerHTML = h;
 }
 

@@ -300,3 +300,7 @@ main a.home-tile:not(.olink):not(.btn),main a.home-tile:visited:not(.olink):not(
 #nav .chap{margin:14px 0 4px}#nav .chap-h{display:flex;align-items:baseline;gap:10px;padding:6px 10px;margin-bottom:4px;border-bottom:2px solid var(--text);font-family:var(--font-display);font-weight:700;font-size:20px;letter-spacing:.04em;text-transform:uppercase}
 #nav .chap-h span{font:500 12px var(--font-mono);color:var(--text-muted);letter-spacing:0}
 #nav a.navmod{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin:2px 0;border-radius:8px;color:var(--fg);text-decoration:none;font-size:14px}#nav a.navmod:hover{background:var(--card)}#nav a.navmod.on{background:var(--accent);color:var(--accent-ink)}#nav a.navmod.soon{color:var(--mut)}#nav a.navmod.on.soon{color:var(--accent-ink)}
+.lang{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-right:8px}
+.lang button{background:transparent;color:var(--text-muted);border:0;padding:8px 10px;font:600 12px var(--font-ui);cursor:pointer;letter-spacing:.04em}
+.lang button[aria-pressed="true"]{background:var(--action-bg);color:var(--action-text)}
+@media print{.lang{display:none}}

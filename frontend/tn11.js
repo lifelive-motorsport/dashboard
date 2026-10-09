@@ -1,4 +1,4 @@
-// XC Detail › Contrôle des marges s/ TN11 : on dépose le PDF d'un devis ; chaque ligne vendue (marquée « x ») est comparée à Odoo :
+// Détail XC › Contrôle des marges s/ TN11 : on dépose le PDF d'un devis ; chaque ligne vendue (marquée « x ») est comparée à Odoo :
 // prix de vente propre de l'article, coût Odoo (théorique), coût réel estimé (nomenclature Odoo + achats réels + transport) et main-d'œuvre rendue visible.
 // Chargé avant app.js ; utilise ses fonctions (esc, num, kpi, table, fmtDate…) au moment de l'appel.
 let tn = {excl: new Set(), open: new Set(), openTop: new Set(), rep: null, loading: false, error: null, name: '', grouped: true, sort: {k: 'devis', dir: 'asc'}};
@@ -31,8 +31,8 @@ const tnSortRows = rows => tn.sort.k === 'devis' ? rows : rows.slice().sort((x, 
 function tn11Blocks() {
   return [{static: '<section class="block" data-bid="tn11"><div class="block-head"><h3>Contrôle d’un devis TN11</h3></div><div class="block-body" id="tn11-view"><p class="na">Chargement…</p></div></section>'}];
 }
-const tnEur = n => n == null ? '–' : new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
-const tnEur0 = n => n == null ? '–' : new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(n);
+const tnEur = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
+const tnEur0 = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(n);
 const tnPct = v => v == null ? '–' : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' %';
 const tnH = min => { if (!min) return '–'; const h = Math.floor(min / 60), m = Math.round(min % 60); return (h ? h + ' h ' : '') + (m ? String(m).padStart(2, '0') + ' min' : ''); };
 const tnM = (v, rate) => `<td class="mg-${rate || 'none'}" data-v="${v == null ? '' : v}">${tnPct(v)}</td>`;

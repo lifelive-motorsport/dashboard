@@ -1,4 +1,4 @@
-// XC Detail › Contrôle des marges : articles à code PIF renseigné ; marge théorique (prix de vente − coût Odoo) contre marge réelle estimée (coût d'après les achats réels),
+// Détail XC › Contrôle des marges : articles à code PIF renseigné ; marge théorique (prix de vente − coût Odoo) contre marge réelle estimée (coût d'après les achats réels),
 // avec une illustration de l'écart. Chargé avant app.js ; utilise ses fonctions (esc, num, kpi, table…) au moment de l'appel.
 let mg = {data: null, error: null, loading: false, q: '', filter: 'all', at: null};
 const MG_LEVELS = [['red', 'rouge'], ['orange', 'orange'], ['green', 'vert'], ['unknown', 'non calculable']];
@@ -8,14 +8,14 @@ async function loadMargins(force) {
   try {
     const r = await fetch('/api/xc/margins' + (force ? '?refresh=true' : ''), {headers: (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {}});
     if (!r.ok) throw new Error(r.status === 401 ? 'Connexion requise' : r.status === 502 ? 'Odoo est momentanément injoignable' : 'Erreur ' + r.status);
-    mg.data = await r.json(); mg.at = new Date().toLocaleTimeString('fr-BE', {hour: '2-digit', minute: '2-digit'});
+    mg.data = await r.json(); mg.at = new Date().toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit'});
   } catch (e) { mg.error = e.message; }
   mg.loading = false; drawMargins();
 }
 function marginsBlocks() {
   return [{static: '<section class="block" data-bid="margins"><div class="block-head"><h3>Contrôle des marges s/ produits : articles à code PIF</h3><span class="per-wrap"><small class="per-dates" id="mg-date">à date</small></span></div><div class="block-body" id="margins-view"><p class="na">Chargement…</p></div></section>'}];
 }
-const mgEur = n => n == null ? '–' : new Intl.NumberFormat('fr-BE', {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
+const mgEur = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
 const mgPct = v => v == null ? '–' : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' %';
 const mgPts = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' pts';
 

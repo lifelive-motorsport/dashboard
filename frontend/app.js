@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const eur = n => new Intl.NumberFormat('fr-BE', {style:'currency', currency:'EUR', maximumFractionDigits:0}).format(n);
-const num = n => new Intl.NumberFormat('fr-BE', {maximumFractionDigits: 2}).format(n);
-const pct = n => (n*100).toFixed(1).replace('.', ',') + ' %';
+const eur = n => new Intl.NumberFormat(LOCALE(), {style:'currency', currency:'EUR', maximumFractionDigits:0}).format(n);
+const num = n => new Intl.NumberFormat(LOCALE(), {maximumFractionDigits: 2}).format(n);
+const decFmt = v => LANG === 'en' ? v : v.replace('.', ',');
+const pct = n => LANG === 'en' ? (n*100).toFixed(1) + '%' : (n*100).toFixed(1).replace('.', ',') + ' %';
 const cls = n => n < 0 ? 'neg' : 'pos';
 const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } },
                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
@@ -17,12 +18,12 @@ const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', pro
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
   ['home', 'Accueil', [['welcome','Accueil']]],
-  ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
-  ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory'], ['margins','Contrôle des marges s/ produits'], ['tn11','Contrôle des marges s/ TN11']]],
-  ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
-  ['staff', 'STAFF costs', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['management','Management']]],
-  ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
-  ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
+  ['overview', 'Vue d’ensemble', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
+  ['xc', 'Détail XC', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Stock'], ['margins','Contrôle des marges s/ produits'], ['tn11','Contrôle des marges s/ TN11']]],
+  ['cars', 'Détail CARS', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
+  ['staff', 'Coûts du personnel', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['management','Management']]],
+  ['expenses', 'Frais généraux', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
+  ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['events','Événements'], ['resources','Ressources']]],
   ['consigner', 'Consigner', [['timesheets','Pointages'], ['rides','Roulages'], ['consumables','Consommables']]],
@@ -100,7 +101,7 @@ const anyData = () => { for (const h of cache.values()) return h.data; return nu
 const latestData = () => [...cache.values()].map(h => h.data).sort((x, y) => (y.generated_at > x.generated_at) - (y.generated_at < x.generated_at))[0] || null;
 function renderFooter() {
   const d = latestData(); if (!d) return;
-  const f = $('foot'); f.textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString('fr-BE')}`;
+  const f = $('foot'); f.textContent = `Source : ${d.source}${d.source === 'demo' ? ' (DONNÉES FICTIVES)' : ''} — mis à jour ${new Date(d.generated_at).toLocaleString(LOCALE())}`;
   if (cfg && cfg.auth) { const a = document.createElement('a'); a.href = '#'; a.id = 'logout'; a.textContent = 'Se déconnecter'; f.append(' — ', a); }
 }
 document.addEventListener('click', async e => {
@@ -112,7 +113,7 @@ document.addEventListener('click', async e => {
 // ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
 const kpi = (l, v, c='', sub='', ls='') => `<div class="card"><div class="v ${c}">${v}</div><div class="l">${esc(l)}${ls ? ` <small class="na">${ls}</small>` : ''}</div>${sub ? `<div class="l">${sub}</div>` : ''}</div>`;
 // Variation par rapport à la même période un an plus tôt (cur, prev : montants ; label : année comparée)
-const vsPrev = (cur, prev, yr) => prev > 0 ? `<span class="${cur >= prev ? 'pos' : 'neg'}">${cur >= prev ? '▲ +' : '▼ '}${((cur / prev - 1) * 100).toFixed(1).replace('.', ',')} %</span> vs ${yr}` : `<span class="na">vs ${yr} : n/d</span>`;
+const vsPrev = (cur, prev, yr) => prev > 0 ? `<span class="${cur >= prev ? 'pos' : 'neg'}">${cur >= prev ? '▲ +' : '▼ '}${decFmt(((cur / prev - 1) * 100).toFixed(1))} %</span> vs ${yr}` : `<span class="na">vs ${yr} : n/d</span>`;
 const margin = o => o.ca ? pct(o.margin / o.ca) : '–';
 const grp = (d, k) => d.pnl.groups.find(g => g.key === k) || {ca: 0, direct_costs: 0, margin: 0};
 const busOf = d => d.pnl.bus.filter(b => b.ca || b.direct_costs);
@@ -183,7 +184,7 @@ function eventsTable(d, groups, showBu = false, veh = false) {
   const th = ([k, l]) => `<th class="sortable${evSort.k === k ? ' sorted' : ''}" data-sort="${k}" role="button" tabindex="0" aria-sort="${evSort.k === k ? (evSort.dir > 0 ? 'ascending' : 'descending') : 'none'}">${esc(l)}<span class="arrow">${evSort.k === k ? (evSort.dir > 0 ? ' ▲' : ' ▼') : ''}</span></th>`;
   return `<div class="table-wrap"><table class="prodtable"><thead><tr>${cols.map(th).join('')}</tr></thead><tbody>${sorted.map(e => row(e)).concat([row(total, 'tot')]).join('')}</tbody></table></div>` + note;
 }
-const CARS_MARGIN_WARN = {static: '<div class="note warn"><b>⚠ Marge brute, pas une marge nette.</b> Le résultat et la marge de cette vue sont une marge brute (produits − coûts directs − autres charges), <b>hors</b> coûts de personnel interne, <b>hors</b> coûts liés aux véhicules de service, <b>hors</b> contribution aux frais généraux (dont assurances, marketing, etc.) et <b>hors</b> amortissements (infrastructures, outillage, véhicules de service, etc.). La marge nette par BU se trouve dans Overview › Marge nette.</div>'};
+const CARS_MARGIN_WARN = {static: '<div class="note warn"><b>⚠ Marge brute, pas une marge nette.</b> Le résultat et la marge de cette vue sont une marge brute (produits − coûts directs − autres charges), <b>hors</b> coûts de personnel interne, <b>hors</b> coûts liés aux véhicules de service, <b>hors</b> contribution aux frais généraux (dont assurances, marketing, etc.) et <b>hors</b> amortissements (infrastructures, outillage, véhicules de service, etc.). La marge nette par BU se trouve dans Vue d’ensemble › Marge nette.</div>'};
 const EVENT_NOTE = NOTE('Résultat cash = produits (comptes 7xx) − coûts directs (602, 603, 604) − autres charges (autres comptes 6xx hors dotations aux amortissements : déplacements, hôtels, carburant, véhicules…) − investissements. *Investis = dépenses de l’événement immobilisées (comptes INVEST 24x) puis amorties sur plusieurs mois ; la dotation d’amortissement (630) n’est pas comptée, pour éviter le double comptage. Survolez le ⓘ pour le montant investi, la durée d’amortissement et le résultat comptable. Montants d’après la ventilation analytique des factures sur l’axe MEETING. Un événement est rattaché d’après l’axe analytique BU renseigné sur ses lignes : XC, CARS (Modern Rally, Historic Rally, Historic Racing — la colonne BU donne la répartition si plusieurs) ou Others ; « mixte » signale un événement dont un autre groupe pèse au moins 10 % ; les comptes « OLD » de l’axe sont ignorés. Les montants non ventilés analytiquement n’apparaissent pas ici.');
 
 const CLIENT_TABS = {total:'Total', XC:'XC', CARS:'CARS', MODERN_RALLY:'Modern Rally', HISTORIC_RALLY:'Historic Rally', HISTORIC_RACING:'Historic Racing', CARS_OTHERS:'CARS Others'};
@@ -506,7 +507,7 @@ const PAGES = {
   'staff/cars': () => staffViewBlocks('cars'),
   'staff/shared': () => staffViewBlocks('shared'),
   'staff/management': () => staffViewBlocks('management'),
-  'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
+  'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans Détail XC.')]),
   'overview/xcvscars': () => [BU_BAR(), ...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
     B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d), tot = x.ca + c.ca || 1;
@@ -665,7 +666,7 @@ function needLogin() {
 // ---- Export PDF : impression navigateur avec feuille de style dédiée ------------------------------
 function exportPdf() {
   const {grp: g, it} = item(current.key) || {grp: ['', ''], it: ['', '']};
-  const stamp = new Date().toLocaleString('fr-BE');
+  const stamp = new Date().toLocaleString(LOCALE());
   $('print-title').textContent = `${g[1]} › ${it[1]}`;
   $('print-meta').textContent = `Rapport généré le ${stamp}`;
   const old = document.title; document.title = `Lifelive – ${g[1]} – ${it[1]} – ${ymd(new Date())}`;
@@ -673,7 +674,7 @@ function exportPdf() {
   window.addEventListener('afterprint', restore); window.print();
 }
 
-$('home').onclick = e => {                    // le logo ramène à l'accueil (Overview › CA)
+$('home').onclick = e => {                    // le logo ramène à l'accueil (Vue d’ensemble › CA)
   e.preventDefault(); document.body.classList.remove('nav-open');
   if (route() === homePage()) window.scrollTo({top: 0}); else location.hash = '#/' + homePage();
 };
@@ -692,9 +693,9 @@ async function refresh() {
     await Promise.all(periodsUsed.map(p => getData(p, true)));   // une seule demande par période
     render();
     const fresh = periodsUsed.some(p => !before.has((cached(p) || {}).generated_at));
-    const at = new Date().toLocaleTimeString('fr-BE');
+    const at = new Date().toLocaleTimeString(LOCALE());
     if (fresh) flash(`Données actualisées à ${at}.`);
-    else { const last = new Date(Math.max(...periodsUsed.map(p => +new Date((cached(p) || {}).generated_at || 0)))).toLocaleTimeString('fr-BE');
+    else { const last = new Date(Math.max(...periodsUsed.map(p => +new Date((cached(p) || {}).generated_at || 0)))).toLocaleTimeString(LOCALE());
            flash(`Déjà à jour : Odoo a été lu à ${last} (nouvelle lecture possible après 30 secondes).`); }
   } catch (e) { if (e.message !== 'Connexion requise') flash(e.message, 'err'); }
   finally { btn.disabled = false; btn.classList.remove('spin'); }

@@ -1,4 +1,4 @@
-// Overview › « Projections annualisées » (Chiffre d’affaires, Marge brute, Marge nette). Chargé avant app.js.
+// Vue d’ensemble › « Projections annualisées » (Chiffre d’affaires, Marge brute, Marge nette). Chargé avant app.js.
 // Chiffre d’affaires : CA réalisé de chaque mois écoulé (XC, CARS, total) ; pour les mois à venir, on encode le CA espéré (XC et CARS séparément). Une case laissée vide compte pour la moyenne des mois écoulés.
 // Marge brute : CA de l’année × taux de marge brute réalisé à date. Marge nette : marge brute projetée − charges imputées annualisées de façon linéaire (elles courent au fil du temps).
 const pj = {prev: [], ready: false, loading: null, err: null, year: null, months: [], exp: {XC: {}, CARS: {}}, saved: null, can_save: false, dirty: false, msg: null, cur: null, days: null};
@@ -67,7 +67,7 @@ function pjCaHtml() {
     + `<small class="na">Une case laissée vide compte pour la <b>moyenne des mois écoulés</b> (XC ${eur(c.XC.avg)}, CARS ${eur(c.CARS.avg)}), affichée en grisé dans la case. Le mois en cours : encodez le CA du mois complet (le CA déjà réalisé est rappelé sous la case). Le total comprend aussi les comptes non affectés (${eur(c.OTHER.real)} réalisés à date, projetés à leur moyenne). CA = comptes 700 de l’année ${y}. Colonne « Total ${y - 1} » : CA total de chaque mois de ${y - 1}, ancien plan comptable compris ; il n’est pas réparti entre XC et CARS (le plan comptable de l’époque ne le permettait pas). Pour comparaison, projection linéaire (réalisé × ${num(Math.round(pj.days.k * 100) / 100)}) : ${eur(c.TOTAL.real * pj.days.k)}.</small>`;
 }
 function pjBar() {
-  const upd = pj.updated ? ` · enregistré le ${new Date(pj.updated.at).toLocaleDateString('fr-BE')} par ${esc(pj.updated.by || '')}` : '';
+  const upd = pj.updated ? ` · enregistré le ${new Date(pj.updated.at).toLocaleDateString(LOCALE())} par ${esc(pj.updated.by || '')}` : '';
   return `<div class="sdbar">${pj.can_save ? `<button type="button" class="primary" id="pj-save"${pj.dirty ? '' : ' disabled'}>Enregistrer</button>` : ''}<button type="button" id="pj-reset"${pj.dirty ? '' : ' disabled'}>${pj.can_save ? 'Annuler mes modifications' : 'Restaurer les valeurs par défaut'}</button><button type="button" id="pj-zero">Vider toutes les cases</button>`
     + `<span class="${pj.msg && !pj.msg.ok ? 'neg' : 'na'}">${pj.msg ? esc(pj.msg.t) : pj.dirty ? (pj.can_save ? 'Modifications non enregistrées' : 'Simulation : vos valeurs ne sont pas enregistrées') : (pj.can_save ? 'Chiffres de référence' : 'Chiffres de référence (lecture seule : vous pouvez simuler)') + upd}</span></div>`;
 }
@@ -78,7 +78,7 @@ function pjHtml(kind) {
   const c = pjAll(), k = pj.days.k, yr = pj.days.y;
   const caP = {Total: c.TOTAL.total, XC: c.XC.total, CARS: c.CARS.total}, caR = {Total: pj.cur.pnl.total.ca, XC: grp(pj.cur, 'XC').ca, CARS: grp(pj.cur, 'CARS').ca};
   const mbR = {Total: pj.cur.pnl.total.margin, XC: grp(pj.cur, 'XC').margin, CARS: grp(pj.cur, 'CARS').margin};
-  const intro = `<p class="na">Au ${fmtDate(pj.days.to)} : ${pj.days.elapsed} jours écoulés sur ${pj.days.len}. La projection part du <b>CA espéré</b> encodé dans Overview › Chiffre d’affaires pour les mois à venir (XC et CARS séparément) ; un mois sans chiffre compte pour la moyenne des mois écoulés.</p>`;
+  const intro = `<p class="na">Au ${fmtDate(pj.days.to)} : ${pj.days.elapsed} jours écoulés sur ${pj.days.len}. La projection part du <b>CA espéré</b> encodé dans Vue d’ensemble › Chiffre d’affaires pour les mois à venir (XC et CARS séparément) ; un mois sans chiffre compte pour la moyenne des mois écoulés.</p>`;
   const link = '<p style="margin:8px 0"><small class="na"><a href="#/overview/ca">Encoder le CA espéré des mois à venir</a></small></p>';
   if (kind === 'mb') {
     const rows = ['Total', 'XC', 'CARS'].map(sc => { const rate = caR[sc] ? mbR[sc] / caR[sc] : null, proj = rate == null ? null : caP[sc] * rate;

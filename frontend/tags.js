@@ -12,12 +12,12 @@ async function loadTags() {
 
 const TAGS_DOC = [
   {tag: 'regroup_client=Nom du groupe', where: 'Contacts › fiche du client (contact ou société) › Étiquettes', kind: 'client',
-   use: 'Regroupe plusieurs clients sous un même nom dans tous les hit-parades clients : Overview › Clients, XC et CARS (général, par BU) et les meilleurs clients du webshop XC.',
+   use: 'Regroupe plusieurs clients sous un même nom dans tous les hit-parades clients : Vue d’ensemble › Clients, XC et CARS (général, par BU) et les meilleurs clients du webshop XC.',
    rules: ['Les contacts d’une même société sont déjà fusionnés automatiquement : l’étiquette sert à regrouper des sociétés différentes (ex. regroup_client=Koramic / C.Dumolin).',
            'Le texte après le « = » est le nom affiché. Un seul regroupement par contact : s’il y en a plusieurs, le premier par ordre alphabétique est retenu.',
            'Les majuscules du préfixe « regroup_client » sont sans importance ; pas d’espace avant le nom.']},
   {tag: 'regroup_fournisseur=Nom du groupe', where: 'Contacts › fiche du fournisseur (contact ou société) › Étiquettes', kind: 'fournisseur',
-   use: 'Même principe pour les fournisseurs : hit-parades fournisseurs (Overview › Fournisseurs et pages de BU) et principaux fournisseurs de Marketing › Dépenses marketing.',
+   use: 'Même principe pour les fournisseurs : hit-parades fournisseurs (Vue d’ensemble › Fournisseurs et pages de BU) et principaux fournisseurs de Marketing › Dépenses marketing.',
    rules: ['Les contacts d’une même société sont fusionnés automatiquement ; l’étiquette regroupe des sociétés différentes (ex. regroup_fournisseur=Pirelli).']},
   {tag: 'invest marketing', where: 'Contacts › fiche du fournisseur › Étiquettes', kind: 'invest',
    use: 'Désigne les fournisseurs dont les factures portées sur le compte INVEST (240050) sont des investissements marketing. Leurs lignes sont reprises dans la remarque de Marketing › Dépenses marketing (montant, imputations, durée d’amortissement).',
@@ -32,7 +32,7 @@ const TAGS_CONV = [
   ['Comptes de ventes et d’achats', 'Ventes 700xxx ; coûts directs 602, 603, 604 ; la BU est donnée par les 3 derniers chiffres (010 à 019 = XC, 020 Modern Rally, 030 Historic Rally, 040 Historic Racing, 050/059 CARS Others). Un libellé qui commence par « old » est ignoré (sauf pour le CA de l’an dernier, où l’ancien plan comptable compte).'],
   ['Comptes marketing', '602019, 602059 et 612050 = dépenses marketing. Les investissements marketing sont sur le compte INVEST 240050 (amortis via les comptes 630xxx).'],
   ['Fiche produit › Site web', 'Rattache un produit à un webshop : pages vues et visites par webshop, top produits.'],
-  ['Fiche produit › code PIF', 'Utilisé par la valorisation du stock XC (XC Detail › Inventory).'],
+  ['Fiche produit › code PIF', 'Utilisé par la valorisation du stock XC (Détail XC › Stock).'],
   ['Nom du site web Odoo', 'Un site dont le nom contient « Goldspeed » est traité comme le webshop Goldspeed : ses livraisons sont exclues des commandes préparées par le magasinier.'],
 ];
 

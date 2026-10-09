@@ -19,7 +19,7 @@ function buSetSel(sel) {
   if (typeof buSyncTabs === 'function') buSyncTabs(); if (typeof render === 'function') render();
 }
 // Logo : la dernière ligne (entrée en cours) prend la couleur de la BU active
-// BU « de contexte » d'une page : XC Detail -> XC, CARS Detail -> CARS ; Accueil et Overview suivent le filtre BU ; le reste de l'application reste neutre
+// BU « de contexte » d'une page : Détail XC -> XC, Détail CARS -> CARS ; Accueil et Vue d’ensemble suivent le filtre BU ; le reste de l'application reste neutre
 function pageBu(key) {
   const g = key.split('/')[0];
   if (g === 'xc' || key === 'staff/xc') return 'xc';

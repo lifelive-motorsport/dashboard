@@ -1,11 +1,11 @@
 // Logbook › Accueil : message de bienvenue, profil, indicateurs visuels selon les accès de l'utilisateur, dernières mises à jour. Chargé avant app.js.
 let me = {name: '', first: '', profile: '', email: ''};
-const homeHello = () => { const h = new Date().getHours(); return h >= 5 && h < 18 ? 'Bonjour' : 'Bonsoir'; };
+const homeHello = () => { const h = new Date().getHours(), day = h >= 5 && h < 18; return LANG === 'en' ? (h >= 5 && h < 12 ? 'Good morning' : day ? 'Good afternoon' : 'Good evening') : day ? 'Bonjour' : 'Bonsoir'; };
 function homeBlocks() {
-  const dt = new Date().toLocaleDateString('fr-BE', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+  const dt = new Date().toLocaleDateString(LOCALE(), {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
   const first = me.first || '';
   return [
-    {static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''} !</div><div class="who">${esc(me.name || me.email || '')}${me.profile ? ` <span class="badge-profile">${esc(me.profile)}</span>` : ''}</div><small class="na">${esc(dt.charAt(0).toUpperCase() + dt.slice(1))}</small></section>`},
+    {static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''}${LANG === 'en' ? '!' : ' !'}</div><div class="who">${esc(me.name || me.email || '')}${me.profile ? ` <span class="badge-profile">${esc(me.profile)}</span>` : ''}</div><small class="na">${esc(dt.charAt(0).toUpperCase() + dt.slice(1))}</small></section>`},
     BU_BAR(),
     {static: '<section class="block" data-bid="home-kpis"><div class="block-head"><h3>Vos indicateurs</h3><span class="per-wrap"><small class="per-dates">année en cours</small></span></div><div class="block-body" id="home-kpis"><p class="na">Chargement…</p></div></section>'},
     {static: '<section class="block" data-bid="home-news"><div class="block-head"><h3>Dernières mises à jour</h3></div><div class="block-body" id="home-news"></div></section>'},

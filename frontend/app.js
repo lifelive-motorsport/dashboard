@@ -24,12 +24,19 @@ const MENU = [
   ['expenses', 'GENERAL EXPENSES', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
   ['vehicles', 'SERVICE VEHICLES', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
-  ['others', 'Settings', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
+  ['planifier', 'Planifier', [['events','Événements'], ['resources','Ressources']]],
+  ['consigner', 'Consigner', [['timesheets','Pointages'], ['rides','Roulages'], ['consumables','Consommables']]],
+  ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
 const LIVE = new Set(['home/welcome','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
+  'planifier/events': ['Courses, essais et roulages clients : création et mise à jour des événements dans les agendas Google partagés, avec la couleur de la BU.', 'Valider les agendas à utiliser et donner au compte de service un droit d’écriture sur ces agendas.'],
+  'planifier/resources': ['Allocation du personnel, des voitures, des camions et du matériel à chaque événement, avec les conflits de réservation.', 'Lister les ressources (agendas de ressources Google, fiches Odoo) et les règles d’allocation.'],
+  'consigner/timesheets': ['Fiches de pointage de l’atelier : heures par job, par voiture et par technicien, saisies depuis un téléphone.', 'Décider si les heures se saisissent dans Odoo (feuilles de temps, clé API en écriture) ou dans Logbook.'],
+  'consigner/rides': ['Suivi des meetings : rapports de roulage, réglages, remarques du pilote, séance par séance (données propres à Logbook).', 'Définir le modèle d’un rapport de roulage (champs, réglages, pièces jointes) avec les mécaniciens et ingénieurs.'],
+  'consigner/consumables': ['Stocks de pneus et de carburant, mouvements par événement et par voiture.', 'Choisir les emplacements et articles de stock Odoo à suivre et qui encode les mouvements.'],
   'xc/events': ['CA, coûts directs et marge par événement (course, meeting) pour XC.',
     'Savoir comment un événement est repéré dans Odoo (compte analytique, projet, étiquette sur les factures…). Les comptes « XC Events » (700014, 602014) donnent déjà le total, pas le détail.'],
   'xc/inventory': ['Valeur du stock XC dans le temps (pièces, véhicules, en-cours), par catégorie et par entrepôt, avec alertes de rupture et de surstock.',
@@ -568,19 +575,21 @@ function soon(key) {
 }
 
 // ---- Rendu -----------------------------------------------------------------------------------
-const FIN_GROUPS = ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing'];
-let navFinOpen = true;
+let navClosed = new Set();           // modules repliés à la main
 function renderNav(key) {
-  const cur = key.split('/')[0];
-  const grpHtml = ([g, label, items]) => `<div class="grp ${g === cur ? 'open active' : ''}" data-g="${g}">
-    <button type="button">${esc(label)}</button><ul>${items.map(([i, l]) => {
-      const k = g + '/' + i, live = LIVE.has(k);
-      return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`;
-  const vis = MENU.filter(m => m[0] !== 'home').map(([g, label, all]) => [g, label, all.filter(([i]) => allowedPage(g + '/' + i))]).filter(([, , items]) => items.length);
-  const fin = vis.filter(m => FIN_GROUPS.includes(m[0])), rest = vis.filter(m => !FIN_GROUPS.includes(m[0]));
+  const mo = moduleOf(key), curG = key.split('/')[0];
+  const grpHtml = g => { const m = MENU.find(x => x[0] === g), items = m ? m[2].filter(([i]) => allowedPage(g + '/' + i)) : []; if (!items.length) return '';
+    return `<div class="grp ${g === curG ? 'open active' : ''}" data-g="${g}"><button type="button">${esc(m[1])}</button><ul>${items.map(([i, l]) => { const k = g + '/' + i, live = LIVE.has(k);
+      return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`; };
+  const link = (k, label, soon) => `<a class="navmod ${k === key ? 'on' : ''} ${soon ? 'soon' : ''}" href="#/${k}">${esc(label)}${soon ? '<small>bientôt</small>' : ''}</a>`;
+  const modHtml = m => {
+    const pages = modulePages(m).filter(p => allowedPage(p[0])); if (!pages.length) return '';
+    if (m.groups) { const open = !navClosed.has(m.id) || (mo && mo.module.id === m.id);
+      return `<div class="sec ${open ? 'open' : ''}" data-mod="${m.id}"><button type="button" class="sec-h">${esc(m.label)}</button><div class="sec-body">${m.groups.map(grpHtml).join('')}</div></div>`; }
+    return pages.map(p => link(p[0], pages.length === 1 ? m.label : p[1], !LIVE.has(p[0]))).join('');
+  };
   $('nav').innerHTML = `<a class="navhome ${key === 'home/welcome' ? 'on' : ''}" href="#/home/welcome">Accueil</a>`
-    + (fin.length ? `<div class="sec ${navFinOpen || FIN_GROUPS.includes(cur) ? 'open' : ''}"><button type="button" class="sec-h">Dashboards financiers</button><div class="sec-body">${fin.map(grpHtml).join('')}</div></div>` : '')
-    + rest.map(grpHtml).join('');
+    + CHAPTERS.map(c => { const h = c.modules.map(modHtml).join(''); return h ? `<div class="chap"><div class="chap-h"><span>${c.n}</span>${esc(c.label)}</div>${h}</div>` : ''; }).join('');
 }
 
 let current = {key: null, blocks: []};
@@ -618,7 +627,7 @@ function render(force) {
   let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
   const {grp: g, it} = item(key);
   renderNav(key); buLogo(pageBu(key));
-  $('page-title').innerHTML = key === 'home/welcome' ? 'Accueil' : `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
+  $('page-title').innerHTML = pageTitle(key);
   const blocks = PAGES[key] ? PAGES[key]() : [];
   const bar = adjBar(key); if (bar) blocks.unshift(bar);
   current = {key, blocks};
@@ -694,7 +703,7 @@ $('refresh').onclick = refresh;
 $('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
-$('nav').onclick = e => { const h = e.target.closest('.sec-h'); if (h) { navFinOpen = !h.parentElement.classList.contains('open'); h.parentElement.classList.toggle('open'); return; } const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
+$('nav').onclick = e => { const h = e.target.closest('.sec-h'); if (h) { const id = h.parentElement.dataset.mod, open = !h.parentElement.classList.contains('open'); open ? navClosed.delete(id) : navClosed.add(id); h.parentElement.classList.toggle('open'); return; } const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
 const sortBy = e => { const h = e.target.closest('th[data-sort]'); if (!h) return false;
   const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' || k === 'client' ? 1 : -1)};     // 2ᵉ clic : inverse
   current.blocks.filter(b => !b.static).forEach(updateBlock); return true; };

@@ -24,6 +24,9 @@ PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
     "vehicles/usage": (("/api/expenses", "/api/vehicles", "/api/fuel"), set()),
     "marketing/site": ((), {"mkt_site"}), "marketing/expenses": (("/api/expenses",), {"mkt"}),
     "others/tags": (("/api/tags",), set()),
+    # modules à venir : droits prêts à être donnés dès maintenant (aucune donnée à ce stade)
+    "planifier/events": ((), set()), "planifier/resources": ((), set()),
+    "consigner/timesheets": ((), set()), "consigner/rides": ((), set()), "consigner/consumables": ((), set()),
 }
 XC_PAGES = ["xc/webshop_xc", "xc/webshop_gs", "xc/events", "xc/inventory", "xc/margins", "xc/tn11"]       # catégorie « XC » proposée par défaut
 

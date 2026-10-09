@@ -3,7 +3,8 @@ let us = {loaded: false, users: [], categories: [], fixed: [], domain: '', error
 const usCatLabel = id => { const c = us.categories.find(x => x.id === id); return c ? 'Catégorie : ' + c.name : 'Catégorie supprimée'; };
 const usRoles = () => [['standard', 'Standard : consulte tout, sans modifier'], ['admin', 'Administrateur : saisit les ajustements et voit le personnel']].concat(us.categories.map(c => ['cat:' + c.id, 'Catégorie : ' + c.name]));
 const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Administrateur' : r === 'standard' ? 'Standard' : r.startsWith('cat:') ? usCatLabel(r.slice(4)) : r;
-const usPages = () => MENU.filter(([g]) => true).map(([g, label, items]) => [g, label, items.filter(([i]) => g + '/' + i !== 'others/users').map(([i, l]) => [g + '/' + i, l])]).filter(([, , it]) => it.length);
+// Catalogue des pages cochables, par module (la page « Utilisateurs » n'est jamais attribuable) : [identifiant du module, libellé « Chapitre › Module », [[clé, libellé]]]
+const usPages = () => CHAPTERS.flatMap(c => c.modules.map(m => [m.id, c.label + ' › ' + m.label, modulePages(m).filter(p => p[0] !== 'others/users').map(p => [p[0], m.groups ? p[2] + ' › ' + p[1] : p[1]])])).filter(([, , it]) => it.length);
 const usAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 
 function usersBlocks() { return [{static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na">Chargement…</p></div></section>'}]; }

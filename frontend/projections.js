@@ -79,7 +79,7 @@ function pjHtml(kind) {
   const caP = {Total: c.TOTAL.total, XC: c.XC.total, CARS: c.CARS.total}, caR = {Total: pj.cur.pnl.total.ca, XC: grp(pj.cur, 'XC').ca, CARS: grp(pj.cur, 'CARS').ca};
   const mbR = {Total: pj.cur.pnl.total.margin, XC: grp(pj.cur, 'XC').margin, CARS: grp(pj.cur, 'CARS').margin};
   const intro = `<p class="na">Au ${fmtDate(pj.days.to)} : ${pj.days.elapsed} jours écoulés sur ${pj.days.len}. La projection part du <b>CA espéré</b> encodé dans Overview › Chiffre d’affaires pour les mois à venir (XC et CARS séparément) ; un mois sans chiffre compte pour la moyenne des mois écoulés.</p>`;
-  const link = '<small class="na"><a href="#/overview/ca">Encoder le CA espéré des mois à venir</a>.</small>';
+  const link = '<p style="margin:8px 0"><small class="na"><a href="#/overview/ca">Encoder le CA espéré des mois à venir</a></small></p>';
   if (kind === 'mb') {
     const rows = ['Total', 'XC', 'CARS'].map(sc => { const rate = caR[sc] ? mbR[sc] / caR[sc] : null, proj = rate == null ? null : caP[sc] * rate;
       return `<tr><td>${sc}</td><td data-v="${mbR[sc]}">${eur(mbR[sc])}</td><td data-v="${caP[sc]}">${eur(caP[sc])}</td><td>${rate == null ? '–' : pct(rate)}</td><td data-v="${proj ?? ''}" class="${proj == null ? '' : cls(proj)}"><b>${proj == null ? 'n/d' : eur(proj)}</b></td><td data-v="${mbR[sc] * k}" class="na">${eur(mbR[sc] * k)}</td></tr>`; });

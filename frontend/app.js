@@ -586,7 +586,7 @@ function renderNav(key) {
   const modHtml = m => {
     const pages = modulePages(m).filter(p => allowedPage(p[0])); if (!pages.length) return '';
     if (m.groups) { const open = !navClosed.has(m.id) || (mo && mo.module.id === m.id);
-      return `<div class="sec ${open ? 'open' : ''}" data-mod="${m.id}"><button type="button" class="sec-h">${esc(m.label)}</button><div class="sec-body">${m.groups.map(grpHtml).join('')}</div></div>`; }
+      return `<div class="sec ${open ? 'open' : ''} ${mo && mo.module.id === m.id ? 'cur' : ''}" data-mod="${m.id}"><button type="button" class="sec-h">${esc(m.label)}</button><div class="sec-body">${m.groups.map(grpHtml).join('')}</div></div>`; }
     return pages.map(p => link(p[0], pages.length === 1 ? m.label : p[1], !LIVE.has(p[0]))).join('');
   };
   $('nav').innerHTML = `<a class="navhome ${key === 'home/welcome' ? 'on' : ''}" href="#/home/welcome">Accueil</a>`

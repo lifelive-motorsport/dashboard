@@ -304,3 +304,25 @@ main a.home-tile:not(.olink):not(.btn),main a.home-tile:visited:not(.olink):not(
 .lang button{background:transparent;color:var(--text-muted);border:0;padding:8px 10px;font:600 12px var(--font-ui);cursor:pointer;letter-spacing:.04em}
 .lang button[aria-pressed="true"]{background:var(--action-bg);color:var(--action-text)}
 @media print{.lang{display:none}}
+/* Menu — maquette Logbook : chapitres en libellés mono, modules sobres, actif en gris clair, sous-arbre allégé */
+#nav{padding:16px 12px 40px}
+#nav a.navhome{display:none}
+#nav .chap{margin:0 0 18px}
+#nav .chap-h{display:block;padding:0 10px;margin:0 0 8px;border:0;font:500 11px var(--font-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--bu-mr-sombre)}
+#nav .chap-h span{display:none}
+#nav a.navmod,#nav .sec>.sec-h{display:flex;justify-content:space-between;align-items:center;width:100%;padding:11px 12px;margin:2px 0;border:0;border-radius:10px;background:transparent;font:400 15px var(--font-ui);letter-spacing:0;text-transform:none;color:var(--text);text-align:left}
+#nav a.navmod:hover,#nav .sec>.sec-h:hover{background:color-mix(in srgb,var(--text) 6%,transparent)}
+#nav a.navmod.on,#nav .sec.cur>.sec-h{background:color-mix(in srgb,var(--text) 12%,transparent);color:var(--text)}
+#nav a.navmod.soon,#nav a.navmod.on.soon{color:var(--text)}
+#nav a.navmod small,#nav a.soon small{display:none}
+#nav .sec>.sec-h::after{font-size:15px;color:var(--text-muted)}
+#nav .sec>.sec-body{margin:2px 0 8px 18px;padding:0 0 0 10px;border-left:1px solid var(--border)}
+#nav .grp>button{padding:8px 10px;font:500 13px var(--font-ui);letter-spacing:0;text-transform:none;color:var(--text-muted);border-radius:8px}
+#nav .grp.active>button{color:var(--text)}
+#nav .grp>button::after{font-size:14px}
+#nav ul{margin:0 0 4px;padding:0 0 0 8px}
+#nav .grp ul a{padding:7px 10px;font-size:14px;color:var(--text-muted);border-radius:8px}
+#nav .grp ul a:hover{color:var(--text)}
+#nav .grp ul a.on{background:color-mix(in srgb,var(--text) 12%,transparent);color:var(--text)}
+#nav .grp ul a.soon{color:var(--text-muted)}
+#nav li{display:block;padding:0;border:0}

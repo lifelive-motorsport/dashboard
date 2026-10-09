@@ -621,7 +621,7 @@ function needLogin() {
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
       try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); setSession(await sr.json()); } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
-  google.accounts.id.renderButton($('g_btn'), {theme: 'filled_black', size: 'large', width: 280, locale: 'fr'});
+  google.accounts.id.renderButton($('g_btn'), {theme: 'outline', size: 'large', width: 280, locale: 'fr'});
 }
 
 // ---- Export PDF : impression navigateur avec feuille de style dédiée ------------------------------

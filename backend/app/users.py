@@ -37,7 +37,8 @@ class Category(BaseModel):
 class Entry(BaseModel):
     email: str = Field(max_length=120)
     role: str = Field(pattern=r"^(admin|standard|xc|cat:[a-z0-9_-]{1,30})$")
-    note: str = Field(default="", max_length=120)
+    note: str = Field(default="", max_length=120)          # nom complet affiché
+    nickname: str = Field(default="", max_length=40)       # surnom : « Bonjour Raph ! »
 
     @field_validator("email")
     @classmethod
@@ -85,7 +86,7 @@ class FirestoreStore:
 
 
 _store = None
-_cache: dict = {"t": 0.0, "map": {}, "cats": {}, "notes": {}}
+_cache: dict = {"t": 0.0, "map": {}, "cats": {}, "notes": {}, "nicks": {}}
 
 
 def store():
@@ -107,6 +108,7 @@ def registry() -> dict[str, str]:
             _cache["map"] = {u["email"].lower(): u["role"] for u in doc.get("users", []) if u.get("role")}
             _cache["cats"] = {c["id"]: c for c in doc.get("categories", [])}
             _cache["notes"] = {u["email"].lower(): (u.get("note") or "").strip() for u in doc.get("users", [])}
+            _cache["nicks"] = {u["email"].lower(): (u.get("nickname") or "").strip() for u in doc.get("users", [])}
         except Exception:
             pass
         _cache["t"] = time.time()
@@ -177,4 +179,5 @@ def identity(email: str) -> dict:
         profile = "Catégorie : " + (cat["name"] if cat else r[4:])
     else:
         profile = {"super": "Super User", "admin": "Administrateur", "standard": "Standard"}.get(r, r)
-    return {"name": name, "first": name.split()[0] if name.split() else name, "profile": profile}
+    first = _cache["nicks"].get(email) or (name.split()[0] if name.split() else name)
+    return {"name": name, "first": first, "profile": profile}

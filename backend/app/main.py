@@ -138,8 +138,7 @@ def put_users(payload: users.Payload, user: str = Depends(super_user)):
         cat = u.role[4:] if u.role.startswith("cat:") else "xc" if u.role == "xc" else None
         if cat and cat not in ids:
             raise HTTPException(422, f"Catégorie inconnue pour {u.email}")
-        if u.email not in users.supers():                      # un Super User ne se gère pas depuis l'écran
-            rows.append(u.model_dump())
+        rows.append(u.model_dump())                            # pour un Super User, seuls le nom et le surnom comptent (son rôle vient de SUPER_USERS)
     try:
         doc = users.store().put(rows, user, cats)
     except Exception:

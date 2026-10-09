@@ -388,3 +388,18 @@ def test_projection_monthly_and_expected():
     assert r.status_code == 200 and c.get("/api/projection?year=2026").json()["expected"] == {"XC": {"11": 150000.0, "12": 90000.5}, "CARS": {"11": 80000.0}}
     assert c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"13": 5}}}).status_code == 422
     assert c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"3": -150}}}).status_code == 422
+
+
+def test_identity_nickname_and_super_row(monkeypatch):
+    from app import settings, users
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    monkeypatch.setattr(settings, "SUPER_USERS", ["raphael.deborman@lifelive-motorsport.com"])
+    r = c.put("/api/users", json={"categories": [], "users": [{"email": "raphael.deborman@lifelive-motorsport.com", "role": "standard", "note": "Raphaël de Borman", "nickname": "Raph"}]})
+    assert r.status_code == 200
+    users.invalidate()
+    i = users.identity("raphael.deborman@lifelive-motorsport.com")
+    assert i == {"name": "Raphaël de Borman", "first": "Raph", "profile": "Super User"}
+    assert users.role_of("raphael.deborman@lifelive-motorsport.com") == "super"
+    users.store().put([], "t"); users.invalidate()

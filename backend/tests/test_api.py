@@ -375,3 +375,15 @@ def test_custom_category_pages_and_routes(monkeypatch):
     d = c.get("/api/dashboard").json()
     assert d["pnl"]["total"]["ca"] == 0 and d["vehicles"] != {"unavailable": "Réservé"} and d["events"] == {"unavailable": "Réservé"}
     users.store().put([], "t"); users.invalidate()
+
+
+def test_projection_monthly_and_inputs():
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    j = c.get("/api/projection?year=2026").json()
+    assert j["months"] and set(j["months"][0]) >= {"month", "XC", "CARS", "OTHER", "partial"} and j["inputs"] == {"XC": {}, "CARS": {}}
+    r = c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"11": 10, "12": -5}, "CARS": {"11": 0}}})
+    assert r.status_code == 200 and c.get("/api/projection?year=2026").json()["inputs"] == {"XC": {"11": 10.0, "12": -5.0}, "CARS": {}}
+    assert c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"13": 5}}}).status_code == 422
+    assert c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"3": -150}}}).status_code == 422

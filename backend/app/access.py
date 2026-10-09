@@ -11,7 +11,7 @@ ALWAYS = ("/api/session", "/api/dashboard")
 
 # page -> (routes d'API, jeux de données du tableau de bord)
 PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
-    "overview/ca": ((), FIN), "overview/mb": (ADJ, FIN), "overview/nm": (NM, FIN), "overview/xcvscars": (ADJ, FIN),
+    "overview/ca": (("/api/projection",), FIN), "overview/mb": (ADJ + ("/api/projection",), FIN), "overview/nm": (NM + ("/api/projection",), FIN), "overview/xcvscars": (ADJ, FIN),
     "overview/clients": ((), FIN), "overview/suppliers": ((), FIN), "overview/adjustments": (ADJ, FIN),
     "xc/general": (NM, FIN), "xc/lignes": (ADJ, FIN), "xc/webshop_xc": ((), {"web"}), "xc/webshop_gs": ((), {"web"}), "xc/events": ((), {"events_xc"}),
     "xc/inventory": (("/api/stock",), set()), "xc/margins": (("/api/xc/margins",), set()), "xc/tn11": (("/api/xc/tn11",), set()),

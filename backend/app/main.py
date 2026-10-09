@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar, tn11
-from . import access, users
+from . import access, projection, users
 from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -635,6 +635,39 @@ def put_adjustments(payload: adjustments.Payload, user: str = Depends(require_us
         log.exception("Enregistrement des ajustements impossible")
         raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
     return {**doc, "can_edit": True}
+
+
+_proj_cache: dict = {}
+
+
+@app.get("/api/projection")
+def get_projection(year: int = Query(..., ge=2000, le=2100), refresh: bool = False, user: str = Depends(require_user)):
+    """Hypothèses de projection (variation % des mois restants, XC et CARS) et CA / marge brute mensuels réalisés."""
+    try:
+        doc = projection.store().get()
+    except Exception:
+        log.exception("Lecture des hypothèses de projection impossible")
+        doc = {"years": {}, "updated_at": None, "updated_by": None}
+    hit = _proj_cache.get(year)
+    if not hit or refresh or time.time() - hit[0] > 900:
+        try:
+            hit = (time.time(), projection.monthly(provider(), aggregate, year, date.today()))
+        except Exception:
+            log.exception("CA mensuel indisponible")
+            raise HTTPException(502, "CA mensuel indisponible pour le moment")
+        _proj_cache[year] = hit
+    return {"year": year, "months": hit[1], "inputs": doc["years"].get(str(year), {"XC": {}, "CARS": {}}), "updated_at": doc.get("updated_at"), "updated_by": doc.get("updated_by"),
+            "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
+
+
+@app.put("/api/projection")
+def put_projection(payload: projection.Payload, user: str = Depends(reference)):
+    try:
+        doc = projection.store().put(payload.year, payload.inputs, user)
+    except Exception:
+        log.exception("Enregistrement des hypothèses de projection impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    return {"year": payload.year, "inputs": payload.inputs, "updated_at": doc["updated_at"], "updated_by": doc["updated_by"], "can_edit": True, "can_save": True}
 
 
 @app.get("/api/stockvar")

@@ -17,7 +17,7 @@ function marginsBlocks() {
 }
 const mgEur = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
 const mgPct = v => v == null ? '–' : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' %';
-const mgPts = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' pts';
+const mgPts = v => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v * 10) / 10).toFixed(1).replace('.', LANG === 'en' ? '.' : ',') + ' pts';
 
 // Illustration de l'écart : sur une échelle de marge (−20 % à 80 %) avec les zones rouge (≤ 15 %), orange et verte (> 25 %), le rond creux marque la marge théorique,
 // le rond plein la marge réelle, et le trait entre les deux l'écart (rouge s'il y a perte de marge, vert sinon).

@@ -1278,6 +1278,33 @@ class OdooProvider:
         d'abandon du site. « Identifiés » = notion d'Odoo (menu Paniers abandonnés : client connecté) ; « anonymes » = visiteurs
         non connectés. Évolution du taux d'abandon = abandonnés ÷ (abandonnés + commandes confirmées)."""
         gran, buckets = self._buckets(d_from, d_to)
+        # Odoo semble purger les anciens paniers non confirmés : avant le plus ancien panier encore présent, le taux serait faussé
+        # (aucun abandon pour de vraies commandes). On ne calcule le taux que sur les périodes entièrement couvertes.
+        first = None
+        try:
+            f = self._call("sale.order", "search_read", domain=[("website_id", "=", wid), ("state", "=", "draft"), ("order_line", "!=", False)],
+                           fields=["date_order"], order="date_order asc", limit=1)
+            first = date.fromisoformat(str(f[0]["date_order"])[:10]) if f else None
+        except Exception:
+            first = None
+        conf = {pt["label"]: pt["orders"] for pt in (confirmed or {}).get("points", [])}
+        if gran == "month" and first and first > d_from + timedelta(days=7) and len([b for b in buckets if b[0] >= first]) < 6:
+            # historique trop court pour un graphique mensuel (1 à 5 points) : on trace par semaine, à partir du plus ancien panier conservé
+            gran, buckets = self._buckets(max(d_from, first), d_to, weekly=True)
+            conf = {}
+            try:
+                wstarts = [b[0] for b in buckets]
+                for o in self._call("sale.order", "search_read", domain=[("website_id", "=", wid), ("state", "in", ["sale", "done"]),
+                                                                          ("date_order", ">=", wstarts[0].isoformat()), ("date_order", "<", (d_to + timedelta(days=1)).isoformat())],
+                                    fields=["date_order"]):
+                    if o.get("date_order"):
+                        dd = date.fromisoformat(str(o["date_order"])[:10])
+                        st = max((x for x in wstarts if x <= dd), default=None)
+                        if st is not None:
+                            lbl = next(l for x, l in buckets if x == st)
+                            conf[lbl] = conf.get(lbl, 0) + 1
+            except Exception:
+                conf = {}
         starts = [b[0] for b in buckets]
         try:
             delay = float(self._call("website", "read", ids=[wid], fields=["cart_abandoned_delay"])[0]["cart_abandoned_delay"] or 1.0)
@@ -1299,16 +1326,6 @@ class OdooProvider:
                 c[0] += 1
                 c[1] += float(o["amount_untaxed"] or 0.0)
                 c[2] += 1 if o.get("id") in known else 0
-        # Odoo semble purger les anciens paniers non confirmés : avant le plus ancien panier encore présent, le taux serait
-        # faussé (aucun abandon pour de vraies commandes). On ne calcule le taux que sur les périodes entièrement couvertes.
-        first = None
-        try:
-            f = self._call("sale.order", "search_read", domain=[("website_id", "=", wid), ("state", "=", "draft"), ("order_line", "!=", False)],
-                           fields=["date_order"], order="date_order asc", limit=1)
-            first = date.fromisoformat(str(f[0]["date_order"])[:10]) if f else None
-        except Exception:
-            first = None
-        conf = {pt["label"]: pt["orders"] for pt in (confirmed or {}).get("points", [])}
         pts, cov_ab, cov_ok, rate_from = [], 0, 0, None
         for st, lbl in buckets:
             n, amt, ident = by.get(st, [0, 0.0, 0])

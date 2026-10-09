@@ -297,6 +297,9 @@ function decompTable(d, cols) {
 // Retire le mois en cours (incomplet) d'une série mensuelle : sinon la courbe semble descendre alors que les données ne sont pas complètes.
 const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 function closedMonths(points, granularity) {
+  if (granularity === 'week' && points && points.length >= 3 && new Date().getDay() !== 0) {          // la semaine en cours (lundi → dimanche) n'est pas terminée : points incomplets écartés
+    const out = points.slice(0, -1); out.trimmed = 'semaine du ' + points[points.length - 1].label; out.trimmedKind = 'semaine'; return out;
+  }
   if (granularity !== 'month' || !points || points.length < 3) return points;
   const t = new Date(), last = points[points.length - 1], m = /^(\S+)\s+(\d{4})$/.exec(last.label || '');
   if (!m || +m[2] !== t.getFullYear() || MOIS_COURTS.indexOf(m[1]) !== t.getMonth()) return points;
@@ -319,7 +322,7 @@ function lineChart(points, ref, unit, fmt = v => eur(Math.round(v)), tip = p => 
     ${pts.map(p => p.avg == null ? '' : `<circle class="dot" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>
       <circle class="hit" cx="${x(p.i).toFixed(1)}" cy="${y(p.avg).toFixed(1)}" r="12"><title>${esc(tip(p))}</title></circle>`).join('')}
     ${pts.map(p => p.i % every === 0 ? `<text class="ax" x="${x(p.i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
-  </svg><small class="na">${unit}${points.trimmed ? ' · ' + esc(points.trimmed) + ' (mois en cours, incomplet) non tracé' : ''}</small></div>`;
+  </svg><small class="na">${unit}${points.trimmed ? ' · ' + esc(points.trimmed) + ' (' + (points.trimmedKind || 'mois') + ' en cours, incomplet' + (points.trimmedKind === 'semaine' ? 'e' : '') + ') non tracé' + (points.trimmedKind === 'semaine' ? 'e' : '') : ''}</small></div>`;
 }
 
 // Répartition par mode (paiement, livraison) : tableau avec part en % et barre.
@@ -345,7 +348,7 @@ function multiLineChart(points, series, tip, note, H = 250) {
     ${points.map((p, i) => series.map(s => `<circle class="dot ${s.cls}" cx="${x(i).toFixed(1)}" cy="${y(p[s.key] || 0).toFixed(1)}" r="4"><title>${esc(tip(p))}</title></circle>`).join('')
       + `<rect class="hit" x="${(x(i) - 10).toFixed(1)}" y="${T}" width="20" height="${H - T - B}"><title>${esc(tip(p))}</title></rect>`).join('')}
     ${points.map((p, i) => i % every === 0 ? `<text class="ax" x="${x(i).toFixed(1)}" y="${H - 12}" text-anchor="middle">${esc(p.label)}</text>` : '').join('')}
-  </svg><small class="na">${note}${points.trimmed ? ' ' + esc(points.trimmed) + ' (mois en cours, incomplet) non tracé.' : ''}</small></div>`;
+  </svg><small class="na">${note}${points.trimmed ? ' ' + esc(points.trimmed) + ' (' + (points.trimmedKind || 'mois') + ' en cours, incomplet' + (points.trimmedKind === 'semaine' ? 'e' : '') + ') non tracé.' : ''}</small></div>`;
 }
 
 // Page d'un webshop : « pick » choisit le webshop concerné parmi ceux renvoyés par l'API.

@@ -560,8 +560,9 @@ def test_abandoned_rate_ignores_months_before_the_oldest_cart_kept_by_odoo():
         p._call = call
         (w,) = p.webshops(date(2026, 1, 1), date(2026, 3, 31), top=1)
         a = w["abandoned"]
-        assert a["incomplete"] and a["complete_from"] == "2026-02-10" and a["rate_from"] == "2026-03-01"
-        assert [x["avg"] for x in a["series"]["points"]] == [None, None, round(1 / 2, 4)]    # seul mars est entièrement couvert (1 abandon, 1 commande)
+        # historique trop court pour des mois : graphique par semaine, à partir du plus ancien panier conservé (la semaine partielle du 9 février est écartée)
+        assert a["incomplete"] and a["complete_from"] == "2026-02-10" and a["rate_from"] == "2026-02-16" and a["series"]["granularity"] == "week"
+        assert [x["avg"] for x in a["series"]["points"]] == [None, None, None, round(1 / 2, 4), None, None, None, None]    # seule la semaine du 2 mars a un abandon (1) et une commande (1)
         assert round(a["rate"], 3) == 0.5                                                      # taux sur la partie couverte uniquement
     finally:
         FIRST_CART[0] = "2026-01-01 00:00:00"

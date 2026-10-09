@@ -236,9 +236,18 @@ const suppliers = (d, allowed) => ranking(d, 's', allowed);
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
-const FINANCE = B('finance', 'Position financière (à date)', d => `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
+const BU_OPEN_KEY = {xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};
+const FINANCE = B('finance', 'Position financière (à date)', d => {
+  if (buSel !== 'all') {              // par BU : la trésorerie (comptes bancaires) n'est pas ventilable ; créances et dettes = encours des factures de l'année, répartis par BU
+    const yd = cached('ytd') || d, sc = BU_OPEN_KEY[buSel], c = yd.top_clients, f = yd.top_suppliers;
+    const ok = t => t && !t.unavailable && t._meta && t._meta.open, rec = ok(c) ? (c._open_totals || {})[sc] || 0 : null, pay = ok(f) ? (f._open_totals || {})[sc] || 0 : null;
+    if (rec == null && pay == null) return `<p class="na">Créances et dettes par BU indisponibles pour le moment.</p>`;
+    return `<div class="kpis">${rec == null ? '' : kpi('Créances clients · ' + BU_PNL_LABEL[buSel], eur(rec), '', 'à encaisser (TTC)')}${pay == null ? '' : kpi('Dettes fournisseurs · ' + BU_PNL_LABEL[buSel], eur(pay), '', 'à payer (TTC)')}`
+      + `${rec != null && pay != null ? kpi('Encours net', eur(rec - pay), cls(rec - pay), 'clients − fournisseurs') : ''}</div>`
+      + `<small class="na">Filtre BU actif : ${esc(BU_PNL_LABEL[buSel])}. Encours = reste dû TTC des factures de l’année en cours non encore soldées (avoirs déduits), réparti entre BU au prorata des lignes de facture. La trésorerie est celle de la société et ne se ventile pas par BU : elle n’est affichée que pour « Toutes ».</small>`; }
+  return `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
   + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
-  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`, true);
+  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`; }, true);
 
 const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};

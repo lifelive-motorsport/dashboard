@@ -250,5 +250,5 @@ input.tnx{vertical-align:middle;margin-right:.25em}
 .uscat{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:0 0 10px;background:var(--card)}
 .uscat .sdbar{margin:0}.uscat-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px 18px;margin-top:10px}
 .uscat-h{display:block;margin-bottom:4px}.uscat-items label{display:block;padding:2px 0 2px 20px;font-size:13px}.uscat input[type=checkbox]{margin-right:4px}
-.pjtable th.pjg{text-align:center}.pjtable .pjsub th{font-size:11px}.pjtable{font-size:13px;width:100%}.pjtable td,.pjtable th{padding:6px 5px}.pjtable input.pj-in{width:54px;padding:5px 4px;text-align:right;min-width:0}
+.pjtable th.pjg{text-align:center}.pjtable .pjsub th{font-size:11px}.pjtable{font-size:13px;width:100%}.pjtable td,.pjtable th{padding:6px 5px}.pjtable input.pj-in{width:120px;padding:5px 6px;text-align:right;min-width:0}.pjtable th:not(:first-child),.pjtable td:not(:first-child){text-align:right}.pjtable{max-width:640px}
 .pjtable .pjavg td{background:rgba(127,127,127,.12);font-weight:600}.pjtable .pjfut td.pjexp,.pjtable .pjcur td.pjexp{color:var(--fg)}.pjtable .pjcur td{background:rgba(224,160,48,.07)}

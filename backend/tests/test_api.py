@@ -377,13 +377,13 @@ def test_custom_category_pages_and_routes(monkeypatch):
     users.store().put([], "t"); users.invalidate()
 
 
-def test_projection_monthly_and_inputs():
+def test_projection_monthly_and_expected():
     from starlette.testclient import TestClient
     from app.main import app
     c = TestClient(app)
     j = c.get("/api/projection?year=2026").json()
-    assert j["months"] and set(j["months"][0]) >= {"month", "XC", "CARS", "OTHER", "partial"} and j["inputs"] == {"XC": {}, "CARS": {}}
-    r = c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"11": 10, "12": -5}, "CARS": {"11": 0}}})
-    assert r.status_code == 200 and c.get("/api/projection?year=2026").json()["inputs"] == {"XC": {"11": 10.0, "12": -5.0}, "CARS": {}}
-    assert c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"13": 5}}}).status_code == 422
-    assert c.put("/api/projection", json={"year": 2026, "inputs": {"XC": {"3": -150}}}).status_code == 422
+    assert j["months"] and set(j["months"][0]) >= {"month", "XC", "CARS", "OTHER", "partial"} and j["expected"] == {"XC": {}, "CARS": {}}
+    r = c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"11": 150000, "12": 90000.5}, "CARS": {"11": 80000}}})
+    assert r.status_code == 200 and c.get("/api/projection?year=2026").json()["expected"] == {"XC": {"11": 150000.0, "12": 90000.5}, "CARS": {"11": 80000.0}}
+    assert c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"13": 5}}}).status_code == 422
+    assert c.put("/api/projection", json={"year": 2026, "expected": {"XC": {"3": -150}}}).status_code == 422

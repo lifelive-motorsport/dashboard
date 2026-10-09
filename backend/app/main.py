@@ -642,7 +642,7 @@ _proj_cache: dict = {}
 
 @app.get("/api/projection")
 def get_projection(year: int = Query(..., ge=2000, le=2100), refresh: bool = False, user: str = Depends(require_user)):
-    """Hypothèses de projection (variation % des mois restants, XC et CARS) et CA / marge brute mensuels réalisés."""
+    """CA espéré des mois à venir (XC et CARS) et CA / marge brute mensuels réalisés."""
     try:
         doc = projection.store().get()
     except Exception:
@@ -656,18 +656,18 @@ def get_projection(year: int = Query(..., ge=2000, le=2100), refresh: bool = Fal
             log.exception("CA mensuel indisponible")
             raise HTTPException(502, "CA mensuel indisponible pour le moment")
         _proj_cache[year] = hit
-    return {"year": year, "months": hit[1], "inputs": doc["years"].get(str(year), {"XC": {}, "CARS": {}}), "updated_at": doc.get("updated_at"), "updated_by": doc.get("updated_by"),
+    return {"year": year, "months": hit[1], "expected": doc["years"].get(str(year), {"XC": {}, "CARS": {}}), "updated_at": doc.get("updated_at"), "updated_by": doc.get("updated_by"),
             "can_edit": adjustments.can_edit(user), "can_save": adjustments.can_reference(user)}
 
 
 @app.put("/api/projection")
 def put_projection(payload: projection.Payload, user: str = Depends(reference)):
     try:
-        doc = projection.store().put(payload.year, payload.inputs, user)
+        doc = projection.store().put(payload.year, payload.expected, user)
     except Exception:
         log.exception("Enregistrement des hypothèses de projection impossible")
         raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
-    return {"year": payload.year, "inputs": payload.inputs, "updated_at": doc["updated_at"], "updated_by": doc["updated_by"], "can_edit": True, "can_save": True}
+    return {"year": payload.year, "expected": payload.expected, "updated_at": doc["updated_at"], "updated_by": doc["updated_by"], "can_edit": True, "can_save": True}
 
 
 @app.get("/api/stockvar")

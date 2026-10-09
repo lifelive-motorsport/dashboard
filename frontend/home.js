@@ -81,7 +81,7 @@ const homeEtpFmt = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
 function homeEtpTile() {
   if (typeof sd !== 'undefined' && !sd.loaded && !homeEtpTried) { homeEtpTried = true; sdLoad().then(homeRedraw); }
   const e = homeEtp(); if (!e) return null;
-  const ROWS = [['XC', 'XC Cross', 'var(--bu-xc)'], ['MODERN_RALLY', 'Modern Rally', 'var(--bu-mr-ui)'], ['HISTORIC_RACING', 'Historic Racing', 'var(--bu-hrc)'], ['HISTORIC_RALLY', 'Historic Rally', 'var(--bu-hrl)'], ['SHARED', 'Shared Services', 'var(--bu-groupe-symbole)'], ['MANAGEMENT', 'Management', 'var(--mut)'], ['UNALLOC', 'Non imputé', 'var(--border)']];
+  const ROWS = [['XC', 'XC', 'var(--bu-xc)'], ['MODERN_RALLY', 'Modern Rally', 'var(--bu-mr-ui)'], ['HISTORIC_RACING', 'Historic Racing', 'var(--bu-hrc)'], ['HISTORIC_RALLY', 'Historic Rally', 'var(--bu-hrl)'], ['SHARED', 'Shared Services', 'var(--bu-lifelive-symbole)'], ['MANAGEMENT', 'Management', 'var(--mut)'], ['UNALLOC', 'Non imputé', 'var(--border)']];
   const keys = BU_KEYS[buSel], rows = keys ? ROWS.filter(r => keys.includes(r[0])) : ROWS.filter(r => e[r[0]] > 0.005), tot = keys ? rows.reduce((t, r) => t + e[r[0]], 0) : e.total;
   const bar = rows.length > 1 ? `<div class="stack">${rows.map(r => `<div style="width:${e[r[0]] / (tot || 1) * 100}%;background:${r[2]}"></div>`).join('')}</div>` : '';
   const list = `<div class="etp-list">${rows.map(r => `<div><span class="etp-dot" style="background:${r[2]}"></span>${esc(r[1])}<b>${homeEtpFmt(e[r[0]])}</b></div>`).join('')}</div>`;

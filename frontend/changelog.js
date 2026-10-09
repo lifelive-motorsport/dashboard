@@ -4,7 +4,7 @@ const CHANGELOG = [
     'Piloter (Tableaux de bord), Planifier (Événements, Ressources), Consigner (Pointages, Roulages, Consommables), Administrer (Équipage, Connexions).',
     'Les modules à venir sont déjà visibles (« bientôt ») et leurs droits d’accès peuvent déjà être donnés par catégorie.']},
   {date: 'Octobre 2026', title: 'Filtre BU sur Vue d’ensemble et l’accueil', tag: 'Vue d’ensemble', items: [
-    'Filtre à deux niveaux (Toutes / XC Cross / CARS, puis Modern Rally, Historic Racing, Historic Rally) sur l’accueil et sur les pages Vue d’ensemble ; le logo prend la couleur de la BU choisie.',
+    'Filtre à deux niveaux (ALL / XC / CARS, puis Modern Rally, Historic Racing, Historic Rally) sur l’accueil et sur les pages Vue d’ensemble ; le logo prend la couleur de la BU choisie.',
     'Créances et dettes par BU, avec rapprochement exact du total de la société ; jauges qui montrent aussi les marges négatives ; effectifs (ETP) par BU sur l’accueil.']},
   {date: 'Octobre 2026', title: 'Logbook : page d’accueil, nouvelle identité et nouveau menu', tag: 'Application', items: [
     'Nouvelle page d’accueil personnalisée, avec vos indicateurs clés selon vos accès.',

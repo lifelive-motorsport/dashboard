@@ -2,7 +2,7 @@
   /* Charte Logbook (docs/BRAND.md, docs/brand-kit/tokens.css) — structure */
   --noir-base:#000000;--graphite:#2B2B2B;--fond-sombre:#1F1F1F;--papier:#F4F4F2;--blanc:#FFFFFF;--blanc-casse:#EDEDEB;
   /* BU : sert uniquement à distinguer les BU (jamais aux boutons, liens, alertes ou états) */
-  --bu-groupe:#2B2B2B;--bu-groupe-symbole:#8A8F95;--bu-xc:#D8113E;--bu-mr:#2C4F9C;--bu-hrc:#009540;--bu-hrl:#F4BE00;--bu-mr-sombre:#6F8FD6;
+  --bu-lifelive:#2B2B2B;--bu-lifelive-symbole:#8A8F95;--bu-xc:#D8113E;--bu-mr:#2C4F9C;--bu-hrc:#009540;--bu-hrl:#F4BE00;--bu-mr-sombre:#6F8FD6;
   /* Polices */
   --font-display:'Barlow Condensed','Arial Narrow',sans-serif;--font-title:var(--font-display);
   --font-ui:'IBM Plex Sans','Helvetica Neue',Arial,sans-serif;--font-mono:'IBM Plex Mono',ui-monospace,monospace;

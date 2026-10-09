@@ -15,7 +15,7 @@ Object.assign(EN, {
   // Périodes
   'Année en cours': 'Current year', '6 derniers mois': 'Last 6 months', '3 derniers mois': 'Last 3 months', 'Mois dernier': 'Last month', 'à date': 'to date', 'année en cours': 'current year',
   // Filtre BU
-  'Toutes': 'All', 'Toutes CARS': 'All CARS', 'XC Cross': 'XC Cross', 'Filtrer par BU': 'Filter by BU', 'Filtrer par BU CARS': 'Filter by CARS BU',
+  'ALL': 'ALL', 'ALL CARS': 'ALL CARS', 'XC': 'XC', 'Lifelive': 'Lifelive', 'Filtrer par BU': 'Filter by BU', 'Filtrer par BU CARS': 'Filter by CARS BU',
   // Accueil
   'Vos indicateurs': 'Your indicators', 'Dernières mises à jour': 'Latest updates', 'Effectifs (ETP)': 'Headcount (FTE)', 'équivalents temps plein, imputés par BU': 'full-time equivalents, allocated by BU',
   'Valeur du stock XC': 'XC stock value', 'Non imputé': 'Unallocated', 'Shared Services': 'Shared Services', 'Management': 'Management', 'Super User': 'Super User', 'Administrateur': 'Administrator', 'Standard': 'Standard',

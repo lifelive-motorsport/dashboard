@@ -1,11 +1,11 @@
-// Filtre BU à deux niveaux (docs/BRAND.md §4) : niveau 1 = Toutes / XC Cross / CARS ; avec CARS (ou une BU CARS) : niveau 2 = Toutes CARS / Modern Rally / Historic Racing / Historic Rally.
+// Filtre BU à deux niveaux (docs/BRAND.md §4) : niveau 1 = ALL / XC / CARS ; avec CARS (ou une BU CARS) : niveau 2 = ALL CARS / Modern Rally / Historic Racing / Historic Rally.
 // La sélection est mémorisée ; la dernière ligne du logo prend la couleur de la BU filtrée (CARS : trois tirets bleu / vert / jaune). Chargé après bu.js, avant app.js.
 let buSel = (() => { try { return localStorage.getItem('lm_bu') || 'all'; } catch { return 'all'; } })();
 if (buSel !== 'all' && !BUS[buSel]) buSel = 'all';
 const buIsCars = id => id === 'cars' || (BUS[id] && BUS[id].parent === 'cars');
 // Clés du P&L de l'application pour chaque sélection
 const BU_KEYS = {all: null, xc: ['XC'], cars: ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'], mr: ['MODERN_RALLY'], hrc: ['HISTORIC_RACING'], hrl: ['HISTORIC_RALLY']};
-const BU_PNL_LABEL = {all: 'Groupe', xc: 'XC Cross', cars: 'CARS', mr: 'Modern Rally', hrc: 'Historic Racing', hrl: 'Historic Rally'};
+const BU_PNL_LABEL = {all: 'Lifelive', xc: 'XC', cars: 'CARS', mr: 'Modern Rally', hrc: 'Historic Racing', hrl: 'Historic Rally'};
 
 /** Chiffres de la sélection : {label, ca, direct_costs, margin, scoped}. `d` = données du tableau de bord (d.pnl). */
 function buScope(d, sel = buSel) {
@@ -35,9 +35,9 @@ function buLogo(sel = buSel) {
 }
 const buPill = (id, label, on, sym) => `<button type="button" class="bu-pill" data-bu="${id}" aria-pressed="${on}">${sym ? BuSymbol(sym, {size: 15}) : ''}<span>${esc(label)}</span></button>`;
 function buBarHtml() {
-  const l1 = [['all', 'Toutes', 'groupe'], ['xc', 'XC Cross', 'xc'], ['cars', 'CARS', 'cars']];
+  const l1 = [['all', 'ALL', 'lifelive'], ['xc', 'XC', 'xc'], ['cars', 'CARS', 'cars']];
   let h = `<div class="bu-filter" role="group" aria-label="Filtrer par BU">${l1.map(([id, l, sym]) => buPill(id, l, id === 'all' ? buSel === 'all' : id === 'cars' ? buIsCars(buSel) : buSel === id, sym)).join('')}</div>`;
-  if (buIsCars(buSel)) h += `<div class="bu-filter bu-l2" role="group" aria-label="Filtrer par BU CARS">${[['cars', 'Toutes CARS', 'cars'], ['mr', 'Modern Rally', 'mr'], ['hrc', 'Historic Racing', 'hrc'], ['hrl', 'Historic Rally', 'hrl']].map(([id, l, sym]) => buPill(id, l, buSel === id, sym)).join('')}</div>`;
+  if (buIsCars(buSel)) h += `<div class="bu-filter bu-l2" role="group" aria-label="Filtrer par BU CARS">${[['cars', 'ALL CARS', 'cars'], ['mr', 'Modern Rally', 'mr'], ['hrc', 'Historic Racing', 'hrc'], ['hrl', 'Historic Rally', 'hrl']].map(([id, l, sym]) => buPill(id, l, buSel === id, sym)).join('')}</div>`;
   return h;
 }
 const BU_BAR = () => ({static: `<div class="bu-bar">${buBarHtml()}</div>`});

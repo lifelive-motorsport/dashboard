@@ -34,8 +34,8 @@ BU (valeurs issues des SVG officiels — elles font foi) :
 
 | BU | Pôle | Couleur | Texte sur fond | Google Agenda (colorId) |
 |---|---|---|---|---|
-| Groupe (transverse) | — | #2B2B2B | blanc | Graphite (8) |
-| XC Cross | XC | #D8113E | blanc | Tomato (11) |
+| Lifelive (transverse : toute l'entreprise) | — | #2B2B2B | blanc | Graphite (8) |
+| XC Cross Car (libellé court : XC) | XC | #D8113E | blanc | Tomato (11) |
 | Modern Rally | CARS | #2C4F9C (mode sombre, petits éléments : #6F8FD6) | blanc | Blueberry (9) |
 | Historic Racing | CARS | #009540 | blanc, gras ≥ 18 px seulement | Basil (10) |
 | Historic Rally | CARS | #F4BE00 | **noir/graphite uniquement** | Banana (5) |
@@ -48,16 +48,18 @@ Règles :
 
 ## 4. Hiérarchie des BU et filtre
 
+Libellés : nom complet « XC Cross Car », libellé court « XC » (filtres, pastilles, listes) — jamais « XC Cross ». Le filtre global s'appelle « ALL » (pas « Toutes »). L'étiquette des éléments transverses (structure, temps atelier non imputable, ressources partagées XC/CARS, événements internes, communication corporate, RH) s'appelle « Lifelive » (pas « Groupe »). ALL est un filtre ; Lifelive est une étiquette — un élément n'est jamais tagué « ALL ».
+
 ```
-Toutes
-├── XC Cross
+ALL
+├── XC
 └── CARS
     ├── Modern Rally
     ├── Historic Racing
     └── Historic Rally
 ```
 
-Filtre à deux niveaux : niveau 1 = Toutes / XC Cross / CARS. Quand CARS ou une de ses BU est sélectionnée, afficher le niveau 2 = Toutes CARS / Modern Rally / Historic Racing / Historic Rally.
+Filtre à deux niveaux : niveau 1 = ALL / XC / CARS. Quand CARS ou une de ses BU est sélectionnée, afficher le niveau 2 = ALL CARS / Modern Rally / Historic Racing / Historic Rally.
 Filtrer sur une BU CARS précise affiche aussi les éléments rattachés à CARS (communs à l'équipe).
 
 ## 5. Symbole BU
@@ -74,7 +76,7 @@ Le symbole est composé de trois parallélogrammes (géométrie extraite des log
 
 - BU simple : haut et bas en couleur de texte (graphite en clair, blanc cassé en sombre), centre en couleur BU.
 - CARS : haut = Modern Rally, centre = Historic Racing, bas = Historic Rally.
-- Groupe : centre en gris #8A8F95.
+- Lifelive : centre en gris #8A8F95.
 - En faire un composant réutilisable `<BuSymbol bu="…" size="…" />` ; l'utiliser dans les pastilles, filtres, listes et agendas.
 
 ## 6. Logo Logbook
@@ -122,7 +124,7 @@ Google Fonts. **Ne pas utiliser Ethnocentric** (police de la charte, écartée).
 
 ## 10. Fichiers logos (`brand/`)
 
-- `LOGO_LIFELIVE_Black.svg` / `_White.svg` — logo groupe.
+- `LOGO_LIFELIVE_Black.svg` / `_White.svg` — logo Lifelive Motorsport.
 - `LOGO_<BU>_<Couleur>.svg` — version pleine couleur (fond inclus).
 - `LOGO_<BU>_Black_<Couleur>.svg` — pour fond clair.
 - `LOGO_<BU>_White_<Couleur>.svg` — pour fond sombre.

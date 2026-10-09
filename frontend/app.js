@@ -184,10 +184,10 @@ const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Mo
 const ALL_SUPPLIERS = Object.keys(SUPPLIER_TABS);
 
 // Classement clients (kind 'c') ou fournisseurs (kind 's') : mêmes colonnes, mêmes totaux.
-function ranking(d, kind, allowed) {
+function ranking(d, kind, allowed, opts = {}) {
   const sup = kind === 's', tc = sup ? d.top_suppliers : d.top_clients, labels = sup ? SUPPLIER_TABS : CLIENT_TABS;
   if (!tc || tc.unavailable) return `<p class="na">${esc(tc ? tc.unavailable : 'Indisponible pour le moment.')}</p>`;
-  const sel = sup ? tabS : tab, cur = allowed.includes(sel) ? sel : allowed[0];
+  const sel = opts.force || (sup ? tabS : tab), cur = allowed.includes(sel) ? sel : allowed[0];
   const scope = sup ? ((tc._totals || {})[cur] || 0)                                   // achats HT du périmètre
     : cur === 'total' ? d.pnl.total.ca : cur === 'CARS' ? grp(d, 'CARS').ca : (d.pnl.bus.find(b => b.key === cur) || {ca: 0}).ca;   // CA du périmètre
   const share = v => scope > 0 ? pct(v / scope) : '–';
@@ -228,11 +228,11 @@ function ranking(d, kind, allowed) {
   }
   const infoOpen = m && !m.open ? `<br><small class="neg">${T.open} indisponible pour le moment.</small>` : '';
   const legend = hasMix ? `<div class="legend mixlegend">${['604', '603', '602', 'autres'].map(k => `<span><i class="sw m${k}"></i>${MIXN[k]}${k === 'autres' ? '' : ' (' + k + ')'}</span>`).join('')}</div>` : '';
-  return `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>
+  return `${opts.hideTabs ? '' : `<div class="tabs">${allowed.map(k => `<button data-tab="${k}" data-kind="${kind}" class="${k === cur ? 'on' : ''}">${labels[k]}</button>`).join('')}</div>`}
     ${list.length ? legend + table(T.head.concat(hasInv ? ['Factures', sup ? 'Achat moyen' : 'Panier moyen'] : [], hasMix ? ['Répartition'] : [], hasOpen ? [T.open] : []), rows, 'prodtable') : '<p class="na">Aucune ligne sur la période.</p>'}${info}${infoInv}${infoOpen}${infoRecon}`;
 }
-const clients = (d, allowed) => ranking(d, 'c', allowed);
-const suppliers = (d, allowed) => ranking(d, 's', allowed);
+const clients = (d, allowed, opts) => ranking(d, 'c', allowed, opts);
+const suppliers = (d, allowed, opts) => ranking(d, 's', allowed, opts);
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
@@ -446,7 +446,8 @@ const PAGES = {
         : `<div class="kpis">${kpi('CA facturé', eur(ca)) + kpi('Part des ' + list.length + ' premiers clients', pct(ca > 0 ? top / ca : 0), '', eur(top))
           + (c._stats && c._stats[key] && c._stats[key].invoices ? kpi('Factures émises', num(c._stats[key].invoices), '', 'panier moyen ' + eur(c._stats[key].avg || 0)) : '')
           + (c._meta && c._meta.open ? kpi('Solde ouvert (période)', eur((c._open_totals || {})[key] || 0)) : '')}</div>` + (buSel !== 'all' ? `<small class="na">Filtre BU actif : ${esc(BU_PNL_LABEL[buSel])}.</small>` : ''); }),
-    B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
+    B('clients', 'Hit-parade clients' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), d => clients(d, ALL_CLIENTS, {hideTabs: true})),
+    ...(buSel === 'cars' ? [B('clients_oth', 'Hit-parade clients · CARS Others', d => clients(d, ALL_CLIENTS, {hideTabs: true, force: 'CARS_OTHERS'}))] : []),
   ],
   'overview/mb': () => [
     BU_BAR(),
@@ -468,7 +469,8 @@ const PAGES = {
           + (s._stats && s._stats.total && s._stats.total.invoices ? kpi('Factures reçues', num(s._stats.total.invoices), '', 'achat moyen ' + eur(s._stats.total.avg || 0)) : '')
           + kpi('Hors BU (frais généraux…)', eur(t.HORS_BU || 0), '', pct(t.total ? (t.HORS_BU || 0) / t.total : 0))
           + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {}).total || 0)) : '')}</div>`; }),
-    B('suppliers', 'Hit-parade fournisseurs', d => suppliers(d, ALL_SUPPLIERS)),
+    B('suppliers', 'Hit-parade fournisseurs' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), d => suppliers(d, ALL_SUPPLIERS, {hideTabs: true})),
+    ...(buSel === 'cars' ? [B('suppliers_oth', 'Hit-parade fournisseurs · CARS Others', d => suppliers(d, ALL_SUPPLIERS, {hideTabs: true, force: 'CARS_OTHERS'}))] : []),
   ],
   'overview/adjustments': () => adjPageBlocks(),
   'xc/inventory': () => stockBlocks().concat(stockVarBlocks()),

@@ -1,5 +1,8 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Filtre BU sur Overview et l’accueil', tag: 'Overview', items: [
+    'Filtre à deux niveaux (Toutes / XC Cross / CARS, puis Modern Rally, Historic Racing, Historic Rally) sur l’accueil et sur les pages Overview ; le logo prend la couleur de la BU choisie.',
+    'Créances et dettes par BU, avec rapprochement exact du total de la société ; jauges qui montrent aussi les marges négatives ; effectifs (ETP) par BU sur l’accueil.']},
   {date: 'Octobre 2026', title: 'Logbook : page d’accueil, nouvelle identité et nouveau menu', tag: 'Application', items: [
     'Nouvelle page d’accueil personnalisée, avec vos indicateurs clés selon vos accès.',
     'L’application devient « Logbook », avec sa charte graphique (couleurs, polices, logo), et le menu regroupe les anciens tableaux de bord sous « Dashboards financiers ».']},

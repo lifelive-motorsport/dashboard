@@ -236,6 +236,10 @@ const suppliers = (d, allowed) => ranking(d, 's', allowed);
 
 // Un bloc = un tableau/graphique avec son sélecteur de période. `fixed` = chiffre à date (pas de période).
 const B = (id, title, render, fixed = false) => ({id, title, render, fixed});
+const BU_TAB = {all: 'total', xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};          // onglets des classements clients / fournisseurs
+const buSyncTabs = () => { tab = tabS = BU_TAB[buSel] || 'total'; };
+// Page « XC vs CARS » : quand une BU CARS précise est choisie, on compare XC à cette BU (sinon XC à l'ensemble CARS)
+const xvcSide = d => buIsCars(buSel) && buSel !== 'cars' ? buScope(d) : {...grp(d, 'CARS'), label: 'CARS'};
 const BU_OPEN_KEY = {xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};
 const FINANCE = B('finance', 'Position financière (à date)', d => {
   if (buSel !== 'all') {              // par BU : la trésorerie (comptes bancaires) n'est pas ventilable ; créances et dettes = encours des factures de l'année, répartis par BU
@@ -245,9 +249,16 @@ const FINANCE = B('finance', 'Position financière (à date)', d => {
     return `<div class="kpis">${rec == null ? '' : kpi('Créances clients · ' + BU_PNL_LABEL[buSel], eur(rec), '', 'à encaisser (TTC)')}${pay == null ? '' : kpi('Dettes fournisseurs · ' + BU_PNL_LABEL[buSel], eur(pay), '', 'à payer (TTC)')}`
       + `${rec != null && pay != null ? kpi('Encours net', eur(rec - pay), cls(rec - pay), 'clients − fournisseurs') : ''}</div>`
       + `<small class="na">Filtre BU actif : ${esc(BU_PNL_LABEL[buSel])}. Encours = reste dû TTC des factures de l’année en cours non encore soldées (avoirs déduits), réparti entre BU au prorata des lignes de facture. La trésorerie est celle de la société et ne se ventile pas par BU : elle n’est affichée que pour « Toutes ».</small>`; }
+  const yd = cached('ytd') || d, oc = yd.top_clients, of = yd.top_suppliers, okO = t => t && !t.unavailable && t._meta && t._meta.open;
+  const bank = d.balance_sheet, split = okO(oc) && okO(of) ? [['XC', 'XC Cross'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['HISTORIC_RALLY', 'Historic Rally'], ['CARS_OTHERS', 'CARS Others']].map(([k, l]) => [l, (oc._open_totals || {})[k] || 0, (of._open_totals || {})[k] || 0]).filter(r => r[1] || r[2]) : null;
+  let bu = '';
+  if (split) { const sr = split.reduce((t, r) => t + r[1], 0), sp = split.reduce((t, r) => t + r[2], 0), gr = bank.receivables - sr, gp = bank.payables - sp;
+    bu = '<h4 class="sub">Créances et dettes par BU</h4>' + table(['', 'Créances clients', 'Dettes fournisseurs', 'Encours net'], split.map(r => `<tr><td>${esc(r[0])}</td><td>${eur(r[1])}</td><td>${eur(r[2])}</td><td class="${cls(r[1] - r[2])}">${eur(r[1] - r[2])}</td></tr>`)
+      .concat([`<tr><td>Non ventilé par BU</td><td>${eur(gr)}</td><td>${eur(gp)}</td><td class="${cls(gr - gp)}">${eur(gr - gp)}</td></tr>`, `<tr class="tot"><td>Total (société)</td><td>${eur(bank.receivables)}</td><td>${eur(bank.payables)}</td><td class="${cls(bank.receivables - bank.payables)}">${eur(bank.receivables - bank.payables)}</td></tr>`]), 'prodtable')
+      + '<small class="na">Les lignes par BU sont celles qu’affiche le filtre BU. « Non ventilé » = écart entre le total de la société et la somme des BU : factures dont aucune ligne n’est rattachée à une BU (frais généraux, immobilisations…) ou sans tiers. Les BU et cet écart totalisent exactement les chiffres du haut.</small>'; }
   return `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
   + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
-  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>`; }, true);
+  <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>` + bu; }, true);
 
 const ALL_CLIENTS = ['total','XC','CARS','MODERN_RALLY','HISTORIC_RALLY','HISTORIC_RACING','CARS_OTHERS'];
 const GROUP_LABEL = {XC: 'XC Cross Car', CARS: 'CARS', OTHER: 'Non affecté'};
@@ -429,11 +440,12 @@ const PAGES = {
     PJ_BLOCK('ca'),
   ],
   'overview/clients': () => [
-    B('kpi', 'Clients', d => { const c = d.top_clients || {}, list = c.total || [], ca = d.pnl.total.ca, top = list.reduce((x, y) => x + y.ca, 0);
+    BU_BAR(),
+    B('kpi', 'Clients', d => { const c = d.top_clients || {}, key = BU_TAB[buSel], list = c[key] || [], ca = buScope(d).ca, top = list.reduce((x, y) => x + y.ca, 0);
       return c.unavailable ? `<p class="na">${esc(c.unavailable)}</p>`
         : `<div class="kpis">${kpi('CA facturé', eur(ca)) + kpi('Part des ' + list.length + ' premiers clients', pct(ca > 0 ? top / ca : 0), '', eur(top))
-          + (c._stats && c._stats.total && c._stats.total.invoices ? kpi('Factures émises', num(c._stats.total.invoices), '', 'panier moyen ' + eur(c._stats.total.avg || 0)) : '')
-          + (c._meta && c._meta.open ? kpi('Solde ouvert (période)', eur((c._open_totals || {}).total || 0)) : '')}</div>`; }),
+          + (c._stats && c._stats[key] && c._stats[key].invoices ? kpi('Factures émises', num(c._stats[key].invoices), '', 'panier moyen ' + eur(c._stats[key].avg || 0)) : '')
+          + (c._meta && c._meta.open ? kpi('Solde ouvert (période)', eur((c._open_totals || {})[key] || 0)) : '')}</div>` + (buSel !== 'all' ? `<small class="na">Filtre BU actif : ${esc(BU_PNL_LABEL[buSel])}.</small>` : ''); }),
     B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
   ],
   'overview/mb': () => [
@@ -444,9 +456,13 @@ const PAGES = {
     NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
     PJ_BLOCK('mb'),
   ],
-  'overview/nm': () => [NM_BLOCK('all', 'Marge nette par BU'), PJ_BLOCK('mn')],
+  'overview/nm': () => [BU_BAR(), NM_BLOCK('all', 'Marge nette par BU'), PJ_BLOCK('mn')],
   'overview/suppliers': () => [
-    B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
+    BU_BAR(),
+    B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, key = BU_TAB[buSel], bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
+      if (!(s.unavailable || !s._totals) && buSel !== 'all') return `<div class="kpis">${kpi('Achats HT · ' + BU_PNL_LABEL[buSel], eur(t[key] || 0), '', t.total ? pct((t[key] || 0) / t.total) + ' des achats totaux' : '')
+          + (s._stats && s._stats[key] && s._stats[key].invoices ? kpi('Factures reçues', num(s._stats[key].invoices), '', 'achat moyen ' + eur(s._stats[key].avg || 0)) : '')
+          + (s._meta && s._meta.open ? kpi('Reste à payer (période)', eur((s._open_totals || {})[key] || 0)) : '')}</div><small class="na">Filtre BU actif : ${esc(BU_PNL_LABEL[buSel])}.</small>`;
       return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`
         : `<div class="kpis">${kpi('Achats HT', eur(t.total || 0)) + kpi('Rattachés à une BU', eur(bu), '', pct(t.total ? bu / t.total : 0))
           + (s._stats && s._stats.total && s._stats.total.invoices ? kpi('Factures reçues', num(s._stats.total.invoices), '', 'achat moyen ' + eur(s._stats.total.avg || 0)) : '')
@@ -478,18 +494,18 @@ const PAGES = {
   'staff/shared': () => staffViewBlocks('shared'),
   'staff/management': () => staffViewBlocks('management'),
   'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans XC Detail.')]),
-  'overview/xcvscars': () => [...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
+  'overview/xcvscars': () => [BU_BAR(), ...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
-    B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS'), tot = x.ca + c.ca || 1;
-      return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi('CARS', eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
+    B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d), tot = x.ca + c.ca || 1;
+      return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi(c.label, eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
       <div class="stack"><div style="width:${x.ca / tot * 100}%;background:var(--red)"></div><div style="width:${c.ca / tot * 100}%;background:var(--mut)"></div></div>
-      <small class="na">Rouge : XC — gris : CARS (hors « Non affecté », ${eur(grp(d,'OTHER').ca)})</small>`; }),
+      <small class="na">Rouge : XC — gris : ${esc(c.label)} (hors « Non affecté », ${eur(grp(d,'OTHER').ca)})</small>`; }),
   ],
   'xcvscars/mb': () => [
-    B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS');
-      return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi('CARS', eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
-      + signedGauge([{v: x.margin, label: 'XC', color: 'var(--red)'}, {v: c.margin, label: 'CARS', color: 'var(--mut)'}]) + `<small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
-    B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
+    B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d);
+      return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi(c.label, eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
+      + signedGauge([{v: x.margin, label: 'XC', color: 'var(--red)'}, {v: c.margin, label: c.label, color: 'var(--mut)'}]) + `<small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
+    B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow(xvcSide(d).label, xvcSide(d))])),
   ],
   'xc/general': () => [
     B('kpi', 'XC — synthèse', d => { const x = grp(d,'XC'); return `<div class="kpis">${kpi('CA XC', eur(x.ca)) + kpi('Coûts directs', eur(x.direct_costs)) + kpi('Marge brute', eur(x.margin), cls(x.margin)) + kpi('Marge brute / CA', margin(x), cls(x.margin))}</div>` + encoursCards(d, 'XC'); }),
@@ -688,6 +704,7 @@ const tick = () => { if (document.visibilityState === 'visible' && $('login').hi
 setInterval(tick, 5 * 60000);   // l'API met déjà ses réponses en cache 5 min
 document.addEventListener('visibilitychange', tick);
 
+buSyncTabs(); if (typeof buLogo === 'function') buLogo();
 (async () => {
   cfg = await (await fetch('/api/config')).json();
   if (cfg.auth) {

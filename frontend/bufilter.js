@@ -16,7 +16,7 @@ function buScope(d, sel = buSel) {
 }
 function buSetSel(sel) {
   buSel = sel; try { localStorage.setItem('lm_bu', sel); } catch {}
-  buLogo(); if (typeof render === 'function') render();
+  buLogo(); if (typeof buSyncTabs === 'function') buSyncTabs(); if (typeof render === 'function') render();
 }
 // Logo : la dernière ligne (entrée en cours) prend la couleur de la BU active
 function buLogo() {

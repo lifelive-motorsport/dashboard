@@ -160,8 +160,10 @@ function nmHtml(d, scope) {
   if (!nm.ready) return '<p class="na">Chargement des coûts (personnel, frais généraux, véhicules)…</p>';
   if (!ex.alloc) return `<p class="neg">Clé d’imputation des frais généraux indisponible${ex.allocErr ? ' : ' + esc(ex.allocErr) : ''}.</p>`;
   const res = nmCompute(d), c = res.cols, tot = nmSum(c, Object.keys(c)), xc = nmSum(c, ['XC']), cars = nmSum(c, NM_CARS);
+  if (scope === 'all' && buSel !== 'all') scope = buSel === 'xc' ? 'xc' : buSel === 'cars' ? 'cars' : 'one';
   const carsCols = NM_CARS.filter(k => c[k].ca || c[k].dc || c[k].staff || c[k].veh).map(k => ({label: NM_LABEL[k], keys: [k]}));
   const ctl = nmControls();
+  if (scope === 'one') { const k = BU_KEYS[buSel][0]; return ctl + nmKpis(nmSum(c, [k]), BU_PNL_LABEL[buSel]) + nmTable(res, [{label: BU_PNL_LABEL[buSel], keys: [k]}]) + nmNote(res); }
   if (scope === 'xc') return ctl + nmKpis(xc, 'XC') + nmTable(res, [{label: 'XC', keys: ['XC']}]) + nmNote(res);
   if (scope === 'cars') return ctl + nmKpis(cars, 'CARS') + nmTable(res, [{label: 'CARS', keys: NM_CARS}].concat(carsCols)) + nmNote(res);
   if (scope === 'carsbu') { const items = carsCols.map(s => { const o = nmSum(c, s.keys); return {label: s.label, ca: o.ca, margin: nmNet(o)}; });

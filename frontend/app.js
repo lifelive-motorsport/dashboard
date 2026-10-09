@@ -72,8 +72,9 @@ const periodOf = bid => PERIODS.some(p => p[0] === periods[bid]) ? periods[bid] 
 // Données par période (clé = dates réelles, donc renouvelée chaque jour)
 const cache = new Map();   // "from|to" -> {data, at}
 const inflight = new Map();
-async function getData(p, force) {
-  const [f, t] = periodRange(p), key = f + '|' + t, hit = cache.get(key);
+const getData = (p, force) => getRange(...periodRange(p), force);
+async function getRange(f, t, force) {
+  const key = f + '|' + t, hit = cache.get(key);
   if (hit && !force && Date.now() - hit.at < 60000) return hit.data;
   if (inflight.has(key) && !force) return inflight.get(key);
   const job = (async () => {
@@ -411,6 +412,7 @@ const PAGES = {
     }),
     FINANCE,
     B('bu', 'CA par BU', d => bars(busTree(d), 'ca', {sub: b => d.pnl.total.ca ? pct(b.ca / d.pnl.total.ca) + ' du CA' : ''})),
+    PJ_BLOCK('ca'),
   ],
   'overview/clients': () => [
     B('kpi', 'Clients', d => { const c = d.top_clients || {}, list = c.total || [], ca = d.pnl.total.ca, top = list.reduce((x, y) => x + y.ca, 0);
@@ -425,8 +427,9 @@ const PAGES = {
     FINANCE,
     B('bu', 'Marge brute par BU', d => bars(busTree(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),
+    PJ_BLOCK('mb'),
   ],
-  'overview/nm': () => [NM_BLOCK('all', 'Marge nette par BU')],
+  'overview/nm': () => [NM_BLOCK('all', 'Marge nette par BU'), PJ_BLOCK('mn')],
   'overview/suppliers': () => [
     B('kpi', 'Achats fournisseurs', d => { const s = d.top_suppliers || {}, t = s._totals || {}, bu = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'].reduce((x, k) => x + (t[k] || 0), 0);   // sans la vue CARS (déjà comprise)
       return s.unavailable || !s._totals ? `<p class="na">${esc(s.unavailable || 'Indisponible pour le moment.')}</p>`

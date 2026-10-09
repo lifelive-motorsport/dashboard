@@ -11,7 +11,7 @@ function homeBlocks() {
     {static: '<section class="block" data-bid="home-news"><div class="block-head"><h3>Dernières mises à jour</h3></div><div class="block-body" id="home-news"></div></section>'},
   ];
 }
-const homeGauge = (a, b, la, lb) => { const px = Math.max(0, a), pc = Math.max(0, b), t = px + pc; return t > 0 ? `<div class="stack"><div style="width:${px / t * 100}%;background:var(--red)"></div><div style="width:${pc / t * 100}%;background:var(--mut)"></div></div><small class="na">${la} ${pct(px / t)} · ${lb} ${pct(pc / t)}</small>` : ''; };
+const homeGauge = (a, b, la, lb) => signedGauge([{v: a, label: la, color: 'var(--red)'}, {v: b, label: lb, color: 'var(--mut)'}]);
 const homeTile = (title, value, cl, sub, extra = '', href = '') => `<${href ? 'a href="' + href + '"' : 'div'} class="card home-tile"><div class="l">${esc(title)}</div><div class="v ${cl}">${value}</div>${sub ? `<div class="l">${sub}</div>` : ''}${extra}</${href ? 'a' : 'div'}>`;
 
 async function homeDraw() {

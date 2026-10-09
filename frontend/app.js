@@ -479,9 +479,7 @@ const PAGES = {
   'xcvscars/mb': () => [
     B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = grp(d,'CARS');
       return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi('CARS', eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
-      + (() => { const px = Math.max(0, x.margin), pc = Math.max(0, c.margin), t = px + pc;
-        return t > 0 ? `<div class="stack"><div style="width:${px / t * 100}%;background:var(--red)"></div><div style="width:${pc / t * 100}%;background:var(--mut)"></div></div>
-      <small class="na">Rouge : XC (${pct(px / t)}) — gris : CARS (${pct(pc / t)}) : parts de la marge brute XC + CARS (hors « Non affecté », ${eur(grp(d,'OTHER').margin)})${x.margin < 0 || c.margin < 0 ? ' ; une marge négative n’est pas représentée' : ''}</small>` : ''; })(); }),
+      + signedGauge([{v: x.margin, label: 'XC', color: 'var(--red)'}, {v: c.margin, label: 'CARS', color: 'var(--mut)'}]) + `<small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
     B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow('CARS', grp(d,'CARS'))])),
   ],
   'xc/general': () => [

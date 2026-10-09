@@ -291,3 +291,7 @@ main a.home-tile:not(.olink):not(.btn),main a.home-tile:visited:not(.olink):not(
 .bu-pill[aria-pressed="true"]{background:var(--action-bg);border-color:var(--action-bg);color:var(--action-text)}
 .bu-l2{padding-left:12px;border-left:2px solid var(--border)}
 @media print{.bu-bar{display:none}}
+.sgauge{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--border);margin-top:8px}
+.sgauge .sg-neg{display:flex;justify-content:flex-end;border-right:2px solid var(--text)}.sgauge .sg-pos{display:flex}
+.sgauge .sg-neg>div,.sgauge .sg-pos>div{height:100%}
+.sgauge .hatch{background-image:repeating-linear-gradient(135deg,rgba(0,0,0,.35) 0 4px,transparent 4px 8px)}

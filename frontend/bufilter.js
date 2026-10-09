@@ -34,3 +34,14 @@ function buBarHtml() {
 }
 const BU_BAR = () => ({static: `<div class="bu-bar">${buBarHtml()}</div>`});
 document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('.bu-pill'); if (b) buSetSel(b.dataset.bu); });
+
+// Jauge de répartition qui accepte des valeurs négatives : les valeurs positives s'empilent à droite du zéro, les négatives (hachurées) à gauche.
+// items = [{v, label, color}] ; sans valeur négative : jauge de parts classique, légende en %.
+function signedGauge(items) {
+  const pos = items.filter(i => i.v > 0), neg = items.filter(i => i.v < 0), P = pos.reduce((t, i) => t + i.v, 0), N = neg.reduce((t, i) => t - i.v, 0);
+  if (P + N <= 0) return '';
+  if (!neg.length) return `<div class="stack">${pos.map(i => `<div style="width:${i.v / P * 100}%;background:${i.color}"></div>`).join('')}</div><small class="na">${pos.map(i => `${i.label} ${pct(i.v / P)}`).join(' · ')}</small>`;
+  const zero = N / (P + N) * 100, seg = (list, tot, cl) => list.map(i => `<div class="${cl}" style="width:${Math.abs(i.v) / tot * 100}%;background:${i.color}"></div>`).join('');
+  return `<div class="sgauge" role="img" aria-label="${esc(items.map(i => i.label + ' ' + eur(i.v)).join(', '))}"><div class="sg-neg" style="width:${zero}%">${seg(neg, N, 'hatch')}</div><div class="sg-pos" style="width:${100 - zero}%">${seg(pos, P, '')}</div></div>`
+    + `<small class="na">${items.map(i => `${i.label} <span class="${i.v < 0 ? 'neg' : ''}">${eur(i.v)}</span>`).join(' · ')} <span class="na">(hachuré : négatif)</span></small>`;
+}

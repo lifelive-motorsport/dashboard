@@ -621,7 +621,7 @@ function needLogin() {
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
       try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); setSession(await sr.json()); } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
-  google.accounts.id.renderButton($('g_btn'), {theme: 'outline', size: 'large', width: 280, locale: 'fr'});
+  google.accounts.id.renderButton($('g_btn'), {theme: 'outline', size: 'large', width: 280, locale: 'en'});
 }
 
 // ---- Export PDF : impression navigateur avec feuille de style dédiée ------------------------------
@@ -684,7 +684,7 @@ document.addEventListener('visibilitychange', tick);
 (async () => {
   cfg = await (await fetch('/api/config')).json();
   if (cfg.auth) {
-    await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; document.head.append(s); });
+    await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client?hl=en'; s.onload = res; document.head.append(s); });
     let ok = false;
     try { const sr = await fetch('/api/session', {headers: token ? {Authorization: 'Bearer ' + token} : {}}); ok = sr.ok; if (ok) setSession(await sr.json()); } catch {}      // cookie de session valide, ou jeton Google encore valable
     if (!ok) { token = null; sessionStorage.removeItem('idt'); return needLogin(); }

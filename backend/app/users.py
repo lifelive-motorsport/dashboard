@@ -85,7 +85,7 @@ class FirestoreStore:
 
 
 _store = None
-_cache: dict = {"t": 0.0, "map": {}, "cats": {}}
+_cache: dict = {"t": 0.0, "map": {}, "cats": {}, "notes": {}}
 
 
 def store():
@@ -106,6 +106,7 @@ def registry() -> dict[str, str]:
             doc = store().get()
             _cache["map"] = {u["email"].lower(): u["role"] for u in doc.get("users", []) if u.get("role")}
             _cache["cats"] = {c["id"]: c for c in doc.get("categories", [])}
+            _cache["notes"] = {u["email"].lower(): (u.get("note") or "").strip() for u in doc.get("users", [])}
         except Exception:
             pass
         _cache["t"] = time.time()
@@ -161,3 +162,19 @@ def restricted(email: str) -> bool:
 
 def is_registered(email: str) -> bool:
     return (email or "").lower() in registry()
+
+
+def identity(email: str) -> dict:
+    """Nom, prénom et type de profil affichés sur la page d'accueil. Le nom vient de la note saisie dans Settings › Utilisateurs, à défaut de l'adresse (prenom.nom@…)."""
+    email = (email or "").lower()
+    registry()
+    note = _cache["notes"].get(email, "")
+    local = email.split("@")[0]
+    name = note or " ".join(w.capitalize() for w in re.split(r"[._-]+", local) if w) or email
+    r = role_of(email)
+    if r.startswith("cat:"):
+        cat = next((c for c in categories() if c["id"] == r[4:]), None)
+        profile = "Catégorie : " + (cat["name"] if cat else r[4:])
+    else:
+        profile = {"super": "Super User", "admin": "Administrateur", "standard": "Standard"}.get(r, r)
+    return {"name": name, "first": name.split()[0] if name.split() else name, "profile": profile}

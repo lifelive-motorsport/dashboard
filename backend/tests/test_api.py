@@ -81,7 +81,7 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     cl = TestClient(app)
     assert cl.get("/api/session").status_code == 401                                   # ni cookie ni jeton
     r = cl.post("/api/session", headers={"Authorization": "Bearer ok"})
-    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False, "pages": None} and "lm_session" in r.headers["set-cookie"]
+    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False, "name": "Md", "first": "Md", "profile": "Standard", "pages": None} and "lm_session" in r.headers["set-cookie"]
     assert "HttpOnly" in r.headers["set-cookie"] and "SameSite=strict" in r.headers["set-cookie"]
     assert cl.get("/api/session").json()["email"] == "md@lifelive-motorsport.com"      # le cookie suffit, plus de jeton Google
     good = a.make_session("md@lifelive-motorsport.com")

@@ -29,7 +29,7 @@ async function nmEnsure() {
   })();
 }
 const nmLoadInvoices = () => Promise.all(sd.doc.people.filter(p => p.kind === 'independant' && !sd.inv[p.id]).map(p => { sd.inv[p.id] = {list: []}; return sdLoadInvoices(p); }));
-const nmRedraw = () => { document.querySelectorAll('.nm-host').forEach(h => { h.innerHTML = nmHtml(nm.d, h.dataset.scope); }); if (typeof pjRedraw === 'function') pjRedraw(); };
+const nmRedraw = () => { document.querySelectorAll('.nm-host').forEach(h => { h.innerHTML = nmHtml(nm.d, h.dataset.scope); }); if (typeof pjRedraw === 'function') pjRedraw(); if (typeof homeRedraw === 'function') homeRedraw(); };
 
 // Calcul : une colonne par BU (+ « Non affecté » du P&L et « Non imputé »), lignes de coûts séparées pour savoir d'où vient chaque euro.
 function nmCompute(d) {

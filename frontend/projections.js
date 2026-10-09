@@ -93,7 +93,7 @@ function pjHtml(kind) {
   return intro + table(['', 'Marge nette à date', 'CA espéré ' + yr, 'Marge brute projetée', 'Charges annualisées', 'Marge nette projetée', 'Pour comparaison : linéaire'], rows, 'prodtable') + link
     + '<small class="na">Marge nette projetée = marge brute projetée (CA espéré × taux de marge brute à date) − charges imputées à date × ' + num(Math.round(k * 100) / 100) + ' (personnel, véhicules, frais généraux, Shared Services, Management, marketing : elles courent au fil du temps). Les charges suivent les hypothèses et options de « Marge nette par BU » ci-dessus. « Total » comprend aussi les comptes non affectés et les coûts non imputés.</small>';
 }
-const pjRedraw = () => document.querySelectorAll('.pj-host').forEach(h => { h.innerHTML = pjHtml(h.dataset.kind); });
+const pjRedraw = () => { document.querySelectorAll('.pj-host').forEach(h => { h.innerHTML = pjHtml(h.dataset.kind); }); if (typeof homeRedraw === 'function') homeRedraw(); };
 // Mise à jour des seules cellules calculées (la saisie garde son focus)
 function pjUpdateCells() {
   const c = pjAll(), set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = eur(v); };

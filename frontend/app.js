@@ -9,13 +9,14 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
 let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
-const allowedPage = k => (k !== 'others/users' || superUser) && (!pagesList || pagesList.has(k));
-const homePage = () => { for (const [g, , items] of MENU) for (const [i] of items) if (allowedPage(g + '/' + i) && LIVE.has(g + '/' + i)) return g + '/' + i; return 'overview/ca'; };
+const allowedPage = k => k === 'home/welcome' || ((k !== 'others/users' || superUser) && (!pagesList || pagesList.has(k)));
+const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
-const setSession = sj => { role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
+const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
+  ['home', 'Accueil', [['welcome','Accueil']]],
   ['overview', 'Overview', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
   ['xc', 'XC Detail', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Inventory'], ['margins','Contrôle des marges s/ produits'], ['tn11','Contrôle des marges s/ TN11']]],
   ['cars', 'CARS Detail', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
@@ -25,7 +26,7 @@ const MENU = [
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['others', 'Settings', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -48,7 +49,7 @@ const PLAN = {
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || store.get('lm_page') || 'overview/ca').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
+const route = () => (location.hash.replace(/^#\/?/, '') || 'home/welcome').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -444,6 +445,7 @@ const PAGES = {
   'xc/margins': () => marginsBlocks(),
   'xc/tn11': () => tn11Blocks(),
   'marketing/expenses': () => marketingBlocks(),
+  'home/welcome': () => homeBlocks(),
   'others/tags': () => tagsBlocks(),
   'others/users': () => usersBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
@@ -532,12 +534,19 @@ function soon(key) {
 }
 
 // ---- Rendu -----------------------------------------------------------------------------------
+const FIN_GROUPS = ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing'];
+let navFinOpen = true;
 function renderNav(key) {
   const cur = key.split('/')[0];
-  $('nav').innerHTML = MENU.map(([g, label, all]) => [g, label, all.filter(([i]) => allowedPage(g + '/' + i))]).filter(([, , items]) => items.length).map(([g, label, items]) => `<div class="grp ${g === cur ? 'open active' : ''}" data-g="${g}">
+  const grpHtml = ([g, label, items]) => `<div class="grp ${g === cur ? 'open active' : ''}" data-g="${g}">
     <button type="button">${esc(label)}</button><ul>${items.map(([i, l]) => {
       const k = g + '/' + i, live = LIVE.has(k);
-      return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`).join('');
+      return `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${live ? '' : 'soon'}">${esc(l)}${live ? '' : '<small>bientôt</small>'}</a></li>`; }).join('')}</ul></div>`;
+  const vis = MENU.filter(m => m[0] !== 'home').map(([g, label, all]) => [g, label, all.filter(([i]) => allowedPage(g + '/' + i))]).filter(([, , items]) => items.length);
+  const fin = vis.filter(m => FIN_GROUPS.includes(m[0])), rest = vis.filter(m => !FIN_GROUPS.includes(m[0]));
+  $('nav').innerHTML = `<a class="navhome ${key === 'home/welcome' ? 'on' : ''}" href="#/home/welcome">Accueil</a>`
+    + (fin.length ? `<div class="sec ${navFinOpen || FIN_GROUPS.includes(cur) ? 'open' : ''}"><button type="button" class="sec-h">Dashboards financiers</button><div class="sec-body">${fin.map(grpHtml).join('')}</div></div>` : '')
+    + rest.map(grpHtml).join('');
 }
 
 let current = {key: null, blocks: []};
@@ -575,7 +584,7 @@ function render(force) {
   let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
   const {grp: g, it} = item(key);
   renderNav(key);
-  $('page-title').innerHTML = `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
+  $('page-title').innerHTML = key === 'home/welcome' ? 'Accueil' : `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
   const blocks = PAGES[key] ? PAGES[key]() : [];
   const bar = adjBar(key); if (bar) blocks.unshift(bar);
   current = {key, blocks};
@@ -583,6 +592,7 @@ function render(force) {
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
   if (key === 'xc/inventory') { drawStockVar(); loadStock(!!force).then(drawStock); }
+  if (key === 'home/welcome') homeDraw();
   if (key === 'xc/tn11') drawTn11();
   if (key === 'xc/margins') { drawMargins(); if (!mg.data || force) loadMargins(!!force); }
   if (/^staff\/(source|people|general|xc|cars|shared|management)$/.test(key)) { sdDraw(); sdLoad().then(sdDraw); }
@@ -650,7 +660,7 @@ $('refresh').onclick = refresh;
 $('pdf').onclick = exportPdf;
 $('menu-btn').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
 $('backdrop').onclick = () => document.body.classList.remove('nav-open');
-$('nav').onclick = e => { const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
+$('nav').onclick = e => { const h = e.target.closest('.sec-h'); if (h) { navFinOpen = !h.parentElement.classList.contains('open'); h.parentElement.classList.toggle('open'); return; } const b = e.target.closest('.grp > button'); if (b) b.parentElement.classList.toggle('open'); };
 const sortBy = e => { const h = e.target.closest('th[data-sort]'); if (!h) return false;
   const k = h.dataset.sort; evSort = {k, dir: evSort.k === k ? -evSort.dir : (k === 'name' || k === 'bu' || k === 'client' ? 1 : -1)};     // 2ᵉ clic : inverse
   current.blocks.filter(b => !b.static).forEach(updateBlock); return true; };

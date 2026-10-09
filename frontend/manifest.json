@@ -1,6 +1,6 @@
 {
- "name": "Lifelive Dashboard",
- "short_name": "Lifelive",
+ "name": "Lifelive Co-Driver",
+ "short_name": "Co-Driver",
  "start_url": "/",
  "display": "standalone",
  "background_color": "#ffffff",

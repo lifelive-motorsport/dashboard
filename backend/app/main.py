@@ -17,7 +17,7 @@ from .bu import aggregate
 from .providers.demo import DemoProvider
 
 log = logging.getLogger("dashboard")
-app = FastAPI(title="Lifelive Motorsport — Dashboard")
+app = FastAPI(title="Lifelive Motorsport — Co-Driver")
 _provider = None
 _cache: dict[tuple, tuple[float, dict]] = {}
 
@@ -81,14 +81,14 @@ def open_session(request: Request, response: Response, authorization: str | None
     """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant)."""
     email = verify_google(authorization)
     if not settings.SESSION_SECRET:
-        return {"email": email, "session": False, "role": role(email), "super": users.is_super(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}            # non configuré : on reste sur le jeton Google
+        return {"email": email, "session": False, "role": role(email), "super": users.is_super(email), **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}            # non configuré : on reste sur le jeton Google
     set_session_cookie(response, request, email)
-    return {"email": email, "session": True, "role": role(email), "super": users.is_super(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}
+    return {"email": email, "session": True, "role": role(email), "super": users.is_super(email), **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}
 
 
 @app.get("/api/session")
 def current_session(user: str = Depends(require_user)):
-    return {"email": user, "session": True, "role": role(user), "super": users.is_super(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
+    return {"email": user, "session": True, "role": role(user), "super": users.is_super(user), **users.identity(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
 
 
 @app.delete("/api/session")

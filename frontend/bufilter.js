@@ -16,14 +16,22 @@ function buScope(d, sel = buSel) {
 }
 function buSetSel(sel) {
   buSel = sel; try { localStorage.setItem('lm_bu', sel); } catch {}
-  buLogo(); if (typeof buSyncTabs === 'function') buSyncTabs(); if (typeof render === 'function') render();
+  if (typeof buSyncTabs === 'function') buSyncTabs(); if (typeof render === 'function') render();
 }
 // Logo : la dernière ligne (entrée en cours) prend la couleur de la BU active
-function buLogo() {
+// BU « de contexte » d'une page : XC Detail -> XC, CARS Detail -> CARS ; Accueil et Overview suivent le filtre BU ; le reste de l'application reste neutre
+function pageBu(key) {
+  const g = key.split('/')[0];
+  if (g === 'xc' || key === 'staff/xc') return 'xc';
+  if (g === 'cars' || key === 'staff/cars') return 'cars';
+  if (g === 'overview' || g === 'home') return buSel;
+  return 'all';
+}
+function buLogo(sel = buSel) {
   const el = document.getElementById('logo-line'), el2 = document.getElementById('logo-line-cars'); if (!el) return;
   const dark = buDark();
-  if (buSel === 'cars') { el.setAttribute('display', 'none'); el2.removeAttribute('display'); el2.querySelectorAll('line').forEach((l, i) => l.setAttribute('stroke', buSymbolColors('cars', '#fff', dark)[i])); }
-  else { el2.setAttribute('display', 'none'); el.removeAttribute('display'); el.setAttribute('stroke', buSel === 'all' ? '#fff' : buSel === 'mr' ? (dark ? '#6F8FD6' : '#2C4F9C') : BUS[buSel].color); el.setAttribute('stroke-width', buSel === 'all' ? '4' : '5'); }
+  if (sel === 'cars') { el.setAttribute('display', 'none'); el2.removeAttribute('display'); el2.querySelectorAll('line').forEach((l, i) => l.setAttribute('stroke', buSymbolColors('cars', '#fff', dark)[i])); }
+  else { el2.setAttribute('display', 'none'); el.removeAttribute('display'); el.setAttribute('stroke', sel === 'all' ? '#fff' : sel === 'mr' ? (dark ? '#6F8FD6' : '#2C4F9C') : BUS[sel].color); el.setAttribute('stroke-width', sel === 'all' ? '4' : '5'); }
 }
 const buPill = (id, label, on, sym) => `<button type="button" class="bu-pill" data-bu="${id}" aria-pressed="${on}">${sym ? BuSymbol(sym, {size: 15}) : ''}<span>${esc(label)}</span></button>`;
 function buBarHtml() {

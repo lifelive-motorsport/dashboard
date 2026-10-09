@@ -617,7 +617,7 @@ async function fillBlock(b, force) {
 function render(force) {
   let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
   const {grp: g, it} = item(key);
-  renderNav(key);
+  renderNav(key); buLogo(pageBu(key));
   $('page-title').innerHTML = key === 'home/welcome' ? 'Accueil' : `${esc(g[1])} <small>›</small> ${esc(it[1])}`;
   const blocks = PAGES[key] ? PAGES[key]() : [];
   const bar = adjBar(key); if (bar) blocks.unshift(bar);

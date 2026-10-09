@@ -403,3 +403,17 @@ def test_identity_nickname_and_super_row(monkeypatch):
     assert i == {"name": "Raphaël de Borman", "first": "Raph", "profile": "Super User"}
     assert users.role_of("raphael.deborman@lifelive-motorsport.com") == "super"
     users.store().put([], "t"); users.invalidate()
+
+
+def test_legacy_host_redirect(monkeypatch):
+    from app import settings
+    from starlette.testclient import TestClient
+    from app.main import app
+    c = TestClient(app, follow_redirects=False)
+    assert c.get("/api/health", headers={"host": "dashboard-app.lifelive-motorsport.com"}).status_code == 200           # désactivé tant que CANONICAL_HOST est vide
+    monkeypatch.setattr(settings, "CANONICAL_HOST", "logbook.lifelive-motorsport.com")
+    r = c.get("/api/dashboard?from=2026-01-01", headers={"host": "dashboard-app.lifelive-motorsport.com"})
+    assert r.status_code == 301 and r.headers["location"] == "https://logbook.lifelive-motorsport.com/api/dashboard?from=2026-01-01"
+    assert c.get("/api/health", headers={"host": "dashboard-app.lifelive-motorsport.com"}).status_code == 200
+    assert c.get("/api/health", headers={"host": "logbook.lifelive-motorsport.com"}).status_code == 200
+    assert c.get("/api/health", headers={"host": "dashboard-xyz.europe-west1.run.app"}).status_code == 200

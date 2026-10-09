@@ -15,6 +15,9 @@ CACHE_TTL = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 AUTH_ENABLED = os.getenv("AUTH_ENABLED", "false").lower() == "true"
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "lifelive-motorsport.com").lower()
+# Renommage Dashboard -> Logbook : quand CANONICAL_HOST est défini (ex. logbook.lifelive-motorsport.com), les requêtes arrivant sur un ancien nom d'hôte (LEGACY_HOSTS) sont redirigées en 301, chemin et paramètres conservés.
+CANONICAL_HOST = os.getenv("CANONICAL_HOST", "").strip().lower()
+LEGACY_HOSTS = [h.strip().lower() for h in os.getenv("LEGACY_HOSTS", "dashboard-app.lifelive-motorsport.com").split(",") if h.strip()]
 ALLOWED_EMAILS = _list("ALLOWED_EMAILS")  # actionnaires hors domaine
 
 # Nom du site web dans Odoo -> libellé affiché

@@ -53,6 +53,17 @@ def _safe(fn, *a):
 
 
 @app.middleware("http")
+async def legacy_host_redirect(request, call_next):
+    """Ancien nom d'hôte (dashboard-app…) -> 301 vers le nouveau (logbook…), une fois CANONICAL_HOST défini."""
+    host = (request.headers.get("host") or "").split(":")[0].lower()
+    if settings.CANONICAL_HOST and host in settings.LEGACY_HOSTS and host != settings.CANONICAL_HOST and request.url.path != "/api/health":
+        from fastapi.responses import RedirectResponse
+        url = f"https://{settings.CANONICAL_HOST}{request.url.path}" + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(url, status_code=301)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
     resp.headers.update({"X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin",
@@ -252,7 +263,7 @@ def reference(user: str = Depends(require_user)) -> str:
 def admin(user: str = Depends(require_user)) -> str:
     """Données du personnel : réservées aux administrateurs (ADMIN_EMAILS)."""
     if not adjustments.can_edit(user):
-        raise HTTPException(403, "Réservé aux administrateurs du dashboard")
+        raise HTTPException(403, "Réservé aux administrateurs de Logbook")
     return user
 
 
@@ -624,7 +635,7 @@ def get_adjustments(user: str = Depends(require_user)):
 @app.put("/api/adjustments")
 def put_adjustments(payload: adjustments.Payload, user: str = Depends(require_user)):
     if not adjustments.can_edit(user):
-        raise HTTPException(403, "Modification réservée aux administrateurs du dashboard")
+        raise HTTPException(403, "Modification réservée aux administrateurs de Logbook")
     ids = [i.id for i in payload.items]
     if len(set(ids)) != len(ids):
         raise HTTPException(422, "Identifiants d'ajustement en double")

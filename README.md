@@ -1,4 +1,4 @@
-# Lifelive Motorsport — Dashboard
+# Lifelive Motorsport — Logbook
 
 Application web (PWA) de pilotage : CA, marge brute, trésorerie, créances, dettes, hit-parade clients et webshops, par BU (XC / CARS).
 

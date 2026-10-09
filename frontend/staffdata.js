@@ -53,7 +53,7 @@ function staffPeopleBlocks() {
 function sdGate() {
   if (!sd.loaded) return '<p class="na">Chargement…</p>';
   if (sd.error) return `<p class="neg">${esc(sd.error)}</p>`;
-  if (sd.restricted) return '<p class="na">Ces données (rémunérations, coûts par personne) sont réservées aux administrateurs du dashboard.</p>';
+  if (sd.restricted) return '<p class="na">Ces données (rémunérations, coûts par personne) sont réservées aux administrateurs de Logbook.</p>';
   return '';
 }
 const sdBar = () => sd.canSave === false ? `<div class="sdbar sim"><span class="chip bad">Simulation</span><span class="na">Vos modifications ne sont pas enregistrées : elles disparaissent à la fermeture de la page. Les valeurs de référence sont celles de leur propriétaire (les fiches de paie et les imports ne sont pas modifiables).</span><button type="button" data-sd-reload>Restaurer les valeurs par défaut</button></div>` : `<div class="sdbar"><button type="button" class="primary" data-sd-save${sd.dirty ? '' : ' disabled'}>Enregistrer</button>

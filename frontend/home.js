@@ -6,6 +6,7 @@ function homeBlocks() {
   const first = me.first || '';
   return [
     {static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''} !</div><div class="who">${esc(me.name || me.email || '')}${me.profile ? ` <span class="badge-profile">${esc(me.profile)}</span>` : ''}</div><small class="na">${esc(dt.charAt(0).toUpperCase() + dt.slice(1))}</small></section>`},
+    BU_BAR(),
     {static: '<section class="block" data-bid="home-kpis"><div class="block-head"><h3>Vos indicateurs</h3><span class="per-wrap"><small class="per-dates">année en cours</small></span></div><div class="block-body" id="home-kpis"><p class="na">Chargement…</p></div></section>'},
     {static: '<section class="block" data-bid="home-news"><div class="block-head"><h3>Dernières mises à jour</h3></div><div class="block-body" id="home-news"></div></section>'},
   ];
@@ -31,18 +32,18 @@ async function homeRedraw() {
   }
   const d = homeData, tiles = [];
   if (d && allowedPage('overview/ca')) {
-    const x = grp(d, 'XC'), c = grp(d, 'CARS'), pv = d.pnl_prev;
-    tiles.push(homeTile('Chiffre d’affaires', eur(d.pnl.total.ca), '', pv && pv.total.ca > 0 ? vsPrev(d.pnl.total.ca, pv.total.ca, pv.period.from.slice(0, 4)) : '', homeGauge(x.ca, c.ca, 'XC', 'CARS'), '#/overview/ca'));
+    const x = grp(d, 'XC'), c = grp(d, 'CARS'), pv = d.pnl_prev, sc = buScope(d);
+    tiles.push(homeTile('Chiffre d’affaires' + (sc.scoped ? ' · ' + sc.label : ''), eur(sc.ca), '', !sc.scoped && pv && pv.total.ca > 0 ? vsPrev(sc.ca, pv.total.ca, pv.period.from.slice(0, 4)) : sc.scoped && d.pnl.total.ca > 0 ? pct(sc.ca / d.pnl.total.ca) + ' du CA total' : '', sc.scoped ? '' : homeGauge(x.ca, c.ca, 'XC', 'CARS'), '#/overview/ca'));
     pjEnsure();
     if (pj.ready) { const t = pjAll().TOTAL.total, prev = pj.prev.reduce((s, m) => s + m.ca, 0);
-      tiles.push(homeTile('Projection du CA ' + pj.year, eur(t), '', prev > 0 ? pjVs(t, prev) + ' vs ' + (pj.year - 1) : 'selon le CA espéré encodé', '', '#/overview/ca')); }
+      tiles.push(homeTile('Projection du CA ' + pj.year + (buSel !== 'all' ? ' · total' : ''), eur(t), '', prev > 0 ? pjVs(t, prev) + ' vs ' + (pj.year - 1) : 'selon le CA espéré encodé', '', '#/overview/ca')); }
   }
-  if (d && allowedPage('overview/mb')) { const x = grp(d, 'XC'), c = grp(d, 'CARS'), t = d.pnl.total;
-    tiles.push(homeTile('Marge brute', eur(t.margin), cls(t.margin), t.ca ? pct(t.margin / t.ca) + ' du CA' : '', homeGauge(x.margin, c.margin, 'XC', 'CARS'), '#/overview/mb')); }
+  if (d && allowedPage('overview/mb')) { const x = grp(d, 'XC'), c = grp(d, 'CARS'), t = buScope(d);
+    tiles.push(homeTile('Marge brute' + (t.scoped ? ' · ' + t.label : ''), eur(t.margin), cls(t.margin), t.ca ? pct(t.margin / t.ca) + ' du CA' : '', t.scoped ? '' : homeGauge(x.margin, c.margin, 'XC', 'CARS'), '#/overview/mb')); }
   if (d && allowedPage('overview/nm')) {
     nm.d = d; nmEnsure();
-    if (nm.ready && ex.alloc) { const cols = nmCompute(d).cols, o = nmSum(cols, Object.keys(cols)), net = nmNet(o);
-      tiles.push(homeTile('Marge nette', eur(net), cls(net), o.ca ? pct(net / o.ca) + ' du CA' : '', homeGauge(nmNet(nmSum(cols, ['XC'])), nmNet(nmSum(cols, NM_CARS)), 'XC', 'CARS'), '#/overview/nm')); }
+    if (nm.ready && ex.alloc) { const cols = nmCompute(d).cols, keys = BU_KEYS[buSel] || Object.keys(cols), o = nmSum(cols, keys), net = nmNet(o);
+      tiles.push(homeTile('Marge nette' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), eur(net), cls(net), o.ca ? pct(net / o.ca) + ' du CA' : '', buSel !== 'all' ? '' : homeGauge(nmNet(nmSum(cols, ['XC'])), nmNet(nmSum(cols, NM_CARS)), 'XC', 'CARS'), '#/overview/nm')); }
     else tiles.push(homeTile('Marge nette', '…', '', nm.err ? esc(nm.err) : 'calcul en cours', '', '#/overview/nm'));
   }
   if (d && !d.webshops.unavailable) [['xc/webshop_xc', w => !/goldspeed/i.test(w.name)], ['xc/webshop_gs', w => /goldspeed/i.test(w.name)]].forEach(([k, pick]) => {

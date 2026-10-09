@@ -8,12 +8,12 @@ BILLING_ACCOUNT="${BILLING_ACCOUNT:-}"  # facultatif si le projet est déjà li�
 : "${GOOGLE_CLIENT_ID:?ID client OAuth requis (voir infra/README_DEPLOY.md, étape 3)}"
 PROJECT_ID="${PROJECT_ID:-lifelive-dashboard-app}"
 REGION="${REGION:-europe-west1}"
-DOMAIN="${DOMAIN:-dashboard-app.lifelive-motorsport.com}"
+DOMAIN="${DOMAIN:-logbook.lifelive-motorsport.com}"
 ALLOWED_EMAILS="${ALLOWED_EMAILS:-}"
 ADMIN_EMAILS="${ADMIN_EMAILS:-}"
 SA="dashboard-run@${PROJECT_ID}.iam.gserviceaccount.com"
 
-gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Lifelive Dashboard"
+gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1 || gcloud projects create "$PROJECT_ID" --name="Lifelive Logbook"
 if [ -n "$BILLING_ACCOUNT" ]; then
   gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" >/dev/null
 else

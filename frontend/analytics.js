@@ -10,7 +10,7 @@ function pageLink(host, path, text) {
 
 function gaSite(d, key) {                       // -> {site} ou {msg, cls}
   const a = d.analytics;
-  if (!a || a.unconfigured) return {msg: 'Google Analytics n’est pas encore relié au dashboard (identifiant de propriété à renseigner).', cls: 'na'};
+  if (!a || a.unconfigured) return {msg: 'Google Analytics n’est pas encore relié à Logbook (identifiant de propriété à renseigner).', cls: 'na'};
   if (a.unavailable) return {msg: a.unavailable, cls: 'na'};
   const s = a[key];
   if (!s || s.error) return {msg: 'Google Analytics indisponible : ' + ((s && s.error) || 'pas de données'), cls: 'neg'};

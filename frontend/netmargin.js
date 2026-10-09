@@ -155,7 +155,7 @@ function nmAssumptions(res) {
 }
 function nmHtml(d, scope) {
   if (!d) return '<p class="na">Chargement…</p>';
-  if (sd.loaded && sd.restricted) return '<p class="na">La marge nette inclut les rémunérations : elle est réservée aux administrateurs du dashboard.</p>';
+  if (sd.loaded && sd.restricted) return '<p class="na">La marge nette inclut les rémunérations : elle est réservée aux administrateurs de Logbook.</p>';
   if (nm.err) return `<p class="neg">${esc(nm.err)}</p>`;
   if (!nm.ready) return '<p class="na">Chargement des coûts (personnel, frais généraux, véhicules)…</p>';
   if (!ex.alloc) return `<p class="neg">Clé d’imputation des frais généraux indisponible${ex.allocErr ? ' : ' + esc(ex.allocErr) : ''}.</p>`;

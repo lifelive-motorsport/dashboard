@@ -113,11 +113,12 @@ const CARS_KEYS = ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OT
 // BU avec CARS en entité propre (total du groupe) suivie de ses sous-BU en retrait ; les autres BU (XC, non affecté) restent au niveau principal
 function busTree(d) {
   const bs = busOf(d), cars = grp(d, 'CARS'), out = [];
+  const keep = b => b.key === 'CARS_OTHERS' ? ['all', 'cars'].includes(buSel) : buMatchesFilter(buOfKey(b.key), buSel);
   bs.filter(b => !CARS_KEYS.includes(b.key)).forEach(b => { if (b.key !== 'OTHER' && b.key !== 'NON_AFFECTE' && !/non affect/i.test(b.label)) out.push(b); });
   const cb = bs.filter(b => CARS_KEYS.includes(b.key));
   if (cb.length) { out.push({...cars, key: 'CARS', label: 'CARS', group: true}); cb.forEach(b => out.push({...b, indent: true})); }
   bs.filter(b => !CARS_KEYS.includes(b.key) && !out.includes(b)).forEach(b => out.push(b));
-  return out;
+  return buSel === 'all' ? out : out.filter(keep);
 }
 
 function bars(items, key, opts = {}) {
@@ -403,7 +404,10 @@ function webshopPage(pick, {topPages = true, customers = false, picking = false,
 }
 const PAGES = {
   'overview/ca': () => [
+    BU_BAR(),
     B('kpi', 'Chiffre d’affaires', d => {
+      if (buSel !== 'all') { const sc = buScope(d), t = d.pnl.total.ca;
+        return `<div class="kpis">${kpi('Chiffre d’affaires · ' + sc.label, eur(sc.ca), '', t > 0 ? pct(sc.ca / t) + ' du CA total' : '')}</div><small class="na">Filtre BU actif : ${esc(sc.label)}. La comparaison avec l’année précédente n’existe que pour le total (le plan comptable de 2025 ne distinguait pas les BU).</small>`; }
       const tot = d.pnl.total.ca, pv = d.pnl_prev, yr = pv && pv.period ? pv.period.from.slice(0, 4) : '';
       const share = k => tot > 0 ? pct(grp(d, k).ca / tot) + ' du CA' : '';
       const cmp = (cur, prev) => pv ? vsPrev(cur, prev, yr) : '';
@@ -424,7 +428,8 @@ const PAGES = {
     B('clients', 'Hit-parade clients', d => clients(d, ALL_CLIENTS)),
   ],
   'overview/mb': () => [
-    B('kpi', 'Marge brute', d => { const t = d.pnl.total; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Coûts directs', eur(t.direct_costs))}</div>`; }),
+    BU_BAR(),
+    B('kpi', 'Marge brute', d => { const t = buScope(d); if (t.scoped) return `<div class="kpis">${kpi('Marge brute · ' + t.label, eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', t.ca ? pct(t.margin / t.ca) : '–', cls(t.margin)) + kpi('Coûts directs', eur(t.direct_costs))}</div>`; return `<div class="kpis">${kpi('Marge brute', eur(t.margin), cls(t.margin)) + kpi('Marge brute / CA', pct(t.margin_pct), cls(t.margin)) + kpi('Coûts directs', eur(t.direct_costs))}</div>`; }),
     FINANCE,
     B('bu', 'Marge brute par BU', d => bars(busTree(d), 'margin', {sub: b => 'sur ' + eur(b.ca) + ' de CA · ' + margin(b)})),
     NOTE('Marge brute = CA − coûts directs (comptes 602, 603, 604). Personnel et véhicules (615) ne sont pas imputables à une BU et sont exclus.'),

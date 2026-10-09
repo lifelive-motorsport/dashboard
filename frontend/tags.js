@@ -1,4 +1,4 @@
-// Settings › Tags Odoo : aide-mémoire des étiquettes et conventions Odoo qui pilotent le dashboard (+ présence réelle des étiquettes).
+// Settings › Tags Odoo : aide-mémoire des étiquettes et conventions Odoo qui pilotent Logbook (+ présence réelle des étiquettes).
 // Chargé avant app.js ; utilise ses fonctions (esc, num, table) au moment de l'appel.
 let tagsState = {data: null, error: null};
 
@@ -21,7 +21,7 @@ const TAGS_DOC = [
    rules: ['Les contacts d’une même société sont fusionnés automatiquement ; l’étiquette regroupe des sociétés différentes (ex. regroup_fournisseur=Pirelli).']},
   {tag: 'invest marketing', where: 'Contacts › fiche du fournisseur › Étiquettes', kind: 'invest',
    use: 'Désigne les fournisseurs dont les factures portées sur le compte INVEST (240050) sont des investissements marketing. Leurs lignes sont reprises dans la remarque de Marketing › Dépenses marketing (montant, imputations, durée d’amortissement).',
-   rules: ['Sans cette étiquette, le dashboard retombe sur des mots-clés dans le libellé des lignes (graphique, social media, marketing, photo, vidéo…), moins fiable.',
+   rules: ['Sans cette étiquette, Logbook retombe sur des mots-clés dans le libellé des lignes (graphique, social media, marketing, photo, vidéo…), moins fiable.',
            'Le matériel et les autres investissements du même compte INVEST ne sont pas repris tant que leur fournisseur n’a pas l’étiquette.']},
 ];
 

@@ -105,7 +105,7 @@ function drawAdjEditor() {
   const el = document.getElementById('adj-editor'); if (!el) return;
   const edit = !!adj.can_edit;
   let h = adj.error ? `<p class="neg">${esc(adj.error)}</p>` : '';
-  if (!edit) h += '<p class="na">Lecture seule : seuls les administrateurs du dashboard peuvent modifier les ajustements.</p>';
+  if (!edit) h += '<p class="na">Lecture seule : seuls les administrateurs de Logbook peuvent modifier les ajustements.</p>';
   if (!adjDraft.length) h += '<p class="na">Aucun ajustement enregistré.</p>';
   adjDraft.forEach((a, i) => {
     const dis = edit ? '' : ' disabled';

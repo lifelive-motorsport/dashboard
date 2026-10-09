@@ -19,8 +19,8 @@ Créer d'abord le projet pour pouvoir y configurer OAuth (étape 3) :
 
 ## 3. Client OAuth Google (manuel, ~5 min)
 Console > projet `lifelive-dashboard-app` > API et services :
-1. **Écran de consentement OAuth** : type **Externe** ; nom « Lifelive Dashboard » ; e-mails de support = le vôtre. Portées : seulement les basiques (openid, email, profile). Puis **Publier l'application** (état « En production ») : sans cela, seuls les « utilisateurs test » déclarés pourraient se connecter. Avec des portées basiques, aucune vérification Google n'est demandée.
-2. **Identifiants > Créer > ID client OAuth > Application Web** ; *Origines JavaScript autorisées* : `https://dashboard-app.lifelive-motorsport.com` (ajouter ensuite l'URL `…run.app` affichée au déploiement si vous voulez tester avant le DNS).
+1. **Écran de consentement OAuth** : type **Externe** ; nom « Logbook — Lifelive Motorsport » ; e-mails de support = le vôtre. Portées : seulement les basiques (openid, email, profile). Puis **Publier l'application** (état « En production ») : sans cela, seuls les « utilisateurs test » déclarés pourraient se connecter. Avec des portées basiques, aucune vérification Google n'est demandée.
+2. **Identifiants > Créer > ID client OAuth > Application Web** ; *Origines JavaScript autorisées* : `https://logbook.lifelive-motorsport.com` (et, le temps de la transition, `https://dashboard-app.lifelive-motorsport.com` ; ajouter ensuite l'URL `…run.app` affichée au déploiement si vous voulez tester avant le DNS).
 3. Copier l'**ID client** (`….apps.googleusercontent.com`) — ce n'est pas un secret.
 
 ## 4. Déploiement
@@ -147,3 +147,23 @@ Après avoir créé les comptes dans l'écran, on peut retirer les adresses deve
 ```
 gcloud run services update dashboard --region=europe-west1 --update-env-vars="^#^ALLOWED_EMAILS=#ADMIN_EMAILS="
 ```
+
+
+## Renommage Dashboard → Logbook : nouveau domaine et redirection 301
+
+Dans l'ordre (le nouveau nom doit fonctionner avant d'activer la redirection) :
+
+1. **Domaine** (Cloud Shell, projet `lifelive-dashboard-app`) :
+   ```
+   gcloud beta run domain-mappings create --service=dashboard --domain=logbook.lifelive-motorsport.com --region=europe-west1
+   gcloud beta run domain-mappings describe --domain=logbook.lifelive-motorsport.com --region=europe-west1 --format='value(status.resourceRecords)'
+   ```
+   Créer chez l'hébergeur DNS l'enregistrement affiché (CNAME `logbook` → `ghs.googlehosted.com.`). Le certificat HTTPS est émis automatiquement (quelques minutes à 1 h).
+2. **Google Cloud Console › API et services › Identifiants** : dans le client OAuth, ajouter l'origine JavaScript autorisée `https://logbook.lifelive-motorsport.com` (garder l'ancienne pendant la transition). **Écran de consentement** : renommer l'application en « Logbook — Lifelive Motorsport » et mettre à jour le logo (`frontend/brand/logbook-icon.svg`, 120×120 px minimum en PNG : `frontend/icon-512.png`).
+3. Vérifier que `https://logbook.lifelive-motorsport.com` s'ouvre et que la connexion Google fonctionne.
+4. **Activer la redirection 301** de l'ancien nom (chemins et paramètres conservés) :
+   ```
+   gcloud run services update dashboard --region=europe-west1 --update-env-vars=CANONICAL_HOST=logbook.lifelive-motorsport.com
+   ```
+   Variable `LEGACY_HOSTS` (liste séparée par des virgules, par défaut `dashboard-app.lifelive-motorsport.com`) : anciens noms d'hôte à rediriger. L'adresse `…run.app` et `/api/health` ne sont jamais redirigées.
+5. Les sessions sont liées au nom d'hôte : chacun devra se reconnecter une fois sur le nouveau domaine. L'application installée sur un téléphone est à réinstaller.

@@ -53,7 +53,7 @@ async function homeRedraw() {
     const keys = BU_KEYS[buSel], groups = ['XC', 'CARS'].filter(g => allowedPage(g === 'XC' ? 'xc/events' : 'cars/events')), ok = e => groups.includes(e.group) && (!keys || (e.bus || []).some(b => keys.includes(b.bu)) || (buSel === 'xc' && e.group === 'XC') || (buSel === 'cars' && e.group === 'CARS'));
     const ev = d.events.events.filter(ok);
     if (ev.length) { const ca = ev.reduce((s2, e) => s2 + e.ca, 0), res = ev.reduce((s2, e) => s2 + e.result, 0);
-      tiles.push(homeTile('Événements' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), `${ev.length}`, '', `CA ${eur(ca)} · résultat cash <span class="${cls(res)}">${eur(res)}</span>`, '', '#/' + (buSel === 'xc' || (buSel === 'all' && !allowedPage('cars/events')) ? 'xc/events' : 'cars/events'))); } }
+      tiles.push(homeTile('Événements' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), `${ev.length}`, '', `CA ${eur(ca)} · résultat cash <span class="${cls(res)}">${eur(res)}</span>`, '', (buSel === 'all' ? (groups.length === 1 ? '#/' + (groups[0] === 'XC' ? 'xc/events' : 'cars/events') : '') : '#/' + (buSel === 'xc' ? 'xc/events' : 'cars/events')))); } }          // « Toutes » mélange XC et CARS : pas de lien (sauf si une seule des deux est accessible)
   // Webshops et stock : propres à XC, affichés uniquement quand XC est sélectionné
   if (buSel === 'xc') {
     if (d && !d.webshops.unavailable) [['xc/webshop_xc', w => !/goldspeed/i.test(w.name)], ['xc/webshop_gs', w => /goldspeed/i.test(w.name)]].forEach(([k, pick]) => {

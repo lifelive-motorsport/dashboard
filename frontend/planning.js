@@ -89,7 +89,8 @@ function plCalHtml() {
 }
 
 function plDraw() {
-  const el = document.getElementById('pl-view'); if (!el) return;
+  const el = document.getElementById('pl-view'); if (!el) { plHideTip(); return; }
+  plHideTip();
   if (pl.error) { el.innerHTML = `<p class="neg">${esc(pl.error)}</p>`; return; }
   if (!pl.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
   const pill = (cls, k, label, on, extra = '') => `<button type="button" class="rs-pill ${cls}" data-k="${k}" aria-pressed="${on}"${extra}><span>${esc(label)}</span></button>`;
@@ -127,14 +128,19 @@ function plTip(ev, show) {
   t.hidden = false; const r = bar.getBoundingClientRect(), w = t.offsetWidth, h = t.offsetHeight;
   t.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px'; t.style.top = (r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
 }
+// L'infobulle ne doit jamais rester affichée : on la masque dès que la souris quitte une barre (même si la barre a été redessinée ou si la page a changé), au clic, au défilement, à la navigation et avec Échap
+const plHideTip = () => { const t = document.getElementById('pl-tip'); if (t) t.hidden = true; };
 document.addEventListener('mouseover', e => { if (document.getElementById('pl-view')) plTip(e, true); });
+document.addEventListener('mousemove', e => { const t = document.getElementById('pl-tip'); if (t && !t.hidden && !(e.target.closest && e.target.closest('.pl-bar, .pl-immo'))) t.hidden = true; });
+window.addEventListener('hashchange', plHideTip); window.addEventListener('scroll', plHideTip, true); window.addEventListener('blur', plHideTip);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') plHideTip(); });
 document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('.pl-bar, .pl-immo') && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.pl-bar, .pl-immo'))) plTip(e, false); });
 
 // ---- Interactions --------------------------------------------------------------------------------------------------------------------------------------------------
 document.addEventListener('click', e => {
   if (!document.getElementById('pl-view')) return;
   const bar = e.target.closest('.pl-bar, .pl-immo');
-  if (bar) { if (superUser) { window.peEditAfter = bar.dataset.id; location.hash = '#/planifier/events'; } return; }
+  if (bar) { plHideTip(); if (superUser) { window.peEditAfter = bar.dataset.id; location.hash = '#/planifier/events'; } return; }
   const b = e.target.closest('button'); if (!b) return;
   if (b.classList.contains('pl-nav')) {
     const d = +b.dataset.d;

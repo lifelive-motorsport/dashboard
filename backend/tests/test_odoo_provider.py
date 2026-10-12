@@ -897,8 +897,15 @@ def test_contacts_raises_when_odoo_fails_for_every_field_list():
         p.contacts("juli")
 
 
-def test_partner_functions_returns_job_positions_and_empty_strings():
+def test_partner_infos_returns_job_position_email_phone_and_falls_back_on_refused_fields():
     p = OdooProvider.__new__(OdooProvider)
-    p._call = lambda model, method, **kw: [{"id": 7, "function": " Mécanicien "}, {"id": 8, "function": False}]
-    assert p.partner_functions([7, 8, 9]) == {7: "Mécanicien", 8: ""}
-    assert p.partner_functions([]) == {}
+    seen = []
+
+    def call(model, method, **kw):
+        seen.append(kw["fields"])
+        if "phone" in kw["fields"]:
+            raise RuntimeError("Invalid field 'phone'")
+        return [{"id": 7, "function": " Mécanicien ", "email": " Julien@Garage.be "}, {"id": 8, "function": False, "email": False}]
+    p._call = call
+    assert p.partner_infos([7, 8, 9]) == {7: {"function": "Mécanicien", "email": "julien@garage.be", "phone": ""}, 8: {"function": "", "email": "", "phone": ""}}
+    assert len(seen) == 2 and p.partner_infos([]) == {}

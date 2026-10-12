@@ -170,8 +170,9 @@ class DemoProvider:
                 {"id": 9103, "name": "Marc Sans Mail", "email": "", "phone": "+32 470 00 00 03", "company": "", "function": ""}]
         return [c for c in base if q.lower() in (c["name"] + c["company"] + c["email"]).lower()]
 
-    def partner_functions(self, ids: list[int]) -> dict[int, str]:
-        known = {9101: "Mécanicien", 9102: "Chauffeur", 9103: ""}
+    def partner_infos(self, ids: list[int]) -> dict[int, dict]:
+        known = {9101: {"function": "Mécanicien", "email": "julien@garage-exemple.be", "phone": "+32 470 00 00 01"}, 9102: {"function": "Chauffeur", "email": "sophie@transport-exemple.be", "phone": ""},
+                 9103: {"function": "", "email": "", "phone": "+32 470 00 00 03"}}
         return {i: known[i] for i in ids if i in known}
 
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:

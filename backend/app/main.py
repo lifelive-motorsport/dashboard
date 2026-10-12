@@ -623,12 +623,13 @@ def get_resources(user: str = Depends(super_user)):
         raise HTTPException(503, "Stockage des ressources inaccessible")
     roles_ok = True
     ext = res["data"]["externals"]
-    if ext:                                                    # Odoo reste la référence : la fonction (Job Position) est relue à chaque ouverture et écrase la copie enregistrée
+    if ext:                                                    # Odoo reste la référence : fonction (Job Position), e-mail et téléphone sont relus à chaque ouverture et écrasent la copie enregistrée
         try:
-            funcs = provider().partner_functions([e["partner_id"] for e in ext])
+            infos = provider().partner_infos([e["partner_id"] for e in ext])
             for e in ext:
-                if e["partner_id"] in funcs:
-                    e["role"] = funcs[e["partner_id"]]
+                i = infos.get(e["partner_id"])
+                if i:
+                    e["role"], e["email"], e["phone"] = i["function"], i["email"], i["phone"]
         except Exception:
             log.exception("Job Position des prestataires illisible dans Odoo")
             roles_ok = False

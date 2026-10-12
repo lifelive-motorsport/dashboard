@@ -57,12 +57,12 @@ function rsDrawExt() {
   const extIn = x => buSel === 'all' || (x.bus || []).some(k => (BU_KEYS[buSel] || []).includes(k));
   const RS_BUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
   const buCell = (e, i) => `<div class="rs-bus" role="group" aria-label="BU concernées">${RS_BUS.map(([k, sym, l]) => `<button type="button" class="rs-pill rs-ico rs-xbu" data-i="${i}" data-b="${k}" aria-pressed="${(e.bus || []).includes(k)}" aria-label="${esc(l)}" title="${esc(l)}">${BuSymbol(sym, {size: 15})}</button>`).join('')}${(e.bus || []).length ? '' : ' <small class="neg">à choisir</small>'}</div>`;
-  const mailCell = (e, i) => `<input class="sdin rs-email" data-i="${i}" value="${esc(e.email)}" placeholder="adresse e-mail" style="min-width:180px">${e.email ? '' : ' <small class="neg">à compléter</small>'}`;
-  const erows = rs.externals.map((e, i) => [e, i]).filter(([e]) => extIn(e)).map(([e, i]) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td>${e.role ? esc(e.role) : '<small class="neg" title="À renseigner dans Odoo (fiche du contact)">⚠ Job Position vide</small>'}</td><td>${mailCell(e, i)}</td><td>${buCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
+  const mailCell = e => e.email ? esc(e.email) : '<small class="neg" title="À renseigner dans Odoo (fiche du contact)">⚠ E-mail vide dans Odoo</small>';
+  const erows = rs.externals.map((e, i) => [e, i]).filter(([e]) => extIn(e)).map(([e, i]) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td>${e.role ? esc(e.role) : '<small class="neg" title="À renseigner dans Odoo (fiche du contact)">⚠ Job Position vide</small>'}</td><td>${mailCell(e)}</td><td>${buCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
   const found = rs.found == null ? '' : rs.found.length ? table(['Contact Odoo', 'Société', 'Fonction', 'E-mail', ''], rs.found.map(c => {
     const has = rs.externals.some(e => e.partner_id === c.id);
     return `<tr><td class="prod">${esc(c.name)}</td><td>${esc(c.company)}</td><td>${c.function ? esc(c.function) : '<small class="neg">⚠ Job Position vide dans Odoo</small>'}</td><td>${c.email ? esc(c.email) : '<small class="neg">pas d’e-mail dans Odoo</small>'}</td><td>${has ? '<small class="na">déjà dans la liste</small>' : `<button type="button" class="rs-add" data-id="${c.id}">Ajouter</button>`}</td></tr>`; }), 'prodtable') : '<p class="na">Aucun contact trouvé.</p>';
-  b.innerHTML = (rs.rolesOk ? '' : '<p class="neg">Fonctions non relues dans Odoo (indisponible) : les dernières valeurs enregistrées sont affichées.</p>') + '<p class="na">Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. La fonction est lue dans Odoo (Job Position) à chaque ouverture de la page. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.</p>'
+  b.innerHTML = (rs.rolesOk ? '' : '<p class="neg">Fonctions non relues dans Odoo (indisponible) : les dernières valeurs enregistrées sont affichées.</p>') + '<p class="na">Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (qui sert à leur envoyer l’invitation à l’événement Google), la fonction (Job Position) et le téléphone sont lus dans Odoo à chaque ouverture de la page : on les modifie dans Odoo, pas ici. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.</p>'
     + (erows.length ? table(['Prestataire', 'Société', 'Fonction', 'E-mail', 'BU concernées', 'Téléphone', ''], erows, 'prodtable') : (rs.externals.length ? '<p class="na">Aucun prestataire rattaché à cette BU.</p>' : '<p class="na">Aucun prestataire pour le moment.</p>'))
     + `<div class="sdbar"><button type="button" id="rs-save" ${rs.dirty ? '' : 'disabled'}>Enregistrer</button><button type="button" id="rs-cancel" ${rs.dirty ? '' : 'disabled'}>Annuler les modifications</button><span class="na" id="rs-msg">${esc(rs.msg || '')}</span></div>`
     + `<div class="sdbar"><input class="sdin" id="rs-q" placeholder="Rechercher un contact Odoo (nom, société, e-mail)" style="min-width:300px"><button type="button" id="rs-find">${rs.searching ? 'Recherche…' : 'Rechercher'}</button></div>` + found;
@@ -82,7 +82,6 @@ function rsDrawVeh() {
 }
 
 async function rsSaveExternals() {
-  if (rs.externals.some(e => !rsMail(e.email))) { rs.msg = 'Une adresse e-mail est invalide.'; drawResources(); return; }
   try {
     const j = await rsCall('/api/resources/externals', {method: 'PUT', body: JSON.stringify({data: {externals: rs.externals}, base: rs.base})});
     rs.base = j.updated_at; rs.dirty = false; rs.msg = 'Enregistré.';
@@ -102,7 +101,7 @@ document.addEventListener('change', async e => {
     if (!rsMail(v)) { if (st) st.innerHTML = '<small class="neg">adresse invalide</small>'; return; }
     try { const j = await rsCall('/api/resources/staff/' + encodeURIComponent(pid), {method: 'PUT', body: JSON.stringify({email: v})}); const p = rs.staff.find(x => x.id === pid); if (p) p.email = j.email; t.value = j.email; if (st) st.innerHTML = j.email ? '<small class="na">enregistré</small>' : '<small class="neg">à renseigner</small>'; }
     catch (err) { if (st) st.innerHTML = '<small class="neg">' + esc(err.message) + '</small>'; }
-  } else if (t.classList.contains('rs-email')) { rs.externals[+t.dataset.i].email = t.value.trim().toLowerCase(); rs.dirty = true; rs.msg = null; drawResources(); }
+  }
 });
 
 document.addEventListener('click', async e => {

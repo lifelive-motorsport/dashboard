@@ -683,12 +683,20 @@ class OdooProvider:
         return [{"id": r["id"], "name": r["name"], "email": (r.get("email") or "").strip(), "phone": r.get("phone") or "",
                  "company": r["parent_id"][1] if r.get("parent_id") else (r["name"] if r.get("is_company") else ""), "function": r.get("function") or ""} for r in rows]
 
-    def partner_functions(self, ids: list[int]) -> dict[int, str]:
-        """Job Position (champ `function`) des contacts Odoo donnés : {identifiant: fonction, '' si vide}. Les contacts introuvables sont absents."""
+    def partner_infos(self, ids: list[int]) -> dict[int, dict]:
+        """Job Position, e-mail et téléphone des contacts Odoo donnés : {identifiant: {function, email, phone}} ('' si vide). Les contacts introuvables sont absents."""
         if not ids:
             return {}
-        rows = self._call("res.partner", "search_read", domain=[("id", "in", list(ids))], fields=["function"])
-        return {r["id"]: (r.get("function") or "").strip() for r in rows}
+        rows, err = None, None
+        for fields in (["function", "email", "phone"], ["function", "email"], ["email"]):
+            try:                                                        # les champs varient selon les versions d'Odoo
+                rows = self._call("res.partner", "search_read", domain=[("id", "in", list(ids))], fields=fields)
+                break
+            except Exception as e:
+                err = e
+        if rows is None:
+            raise err
+        return {r["id"]: {"function": (r.get("function") or "").strip(), "email": (r.get("email") or "").strip().lower(), "phone": (r.get("phone") or "").strip()} for r in rows}
 
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
         """Factures et avoirs fournisseurs comptabilisés des sociétés données (et de leurs contacts) sur l'année."""

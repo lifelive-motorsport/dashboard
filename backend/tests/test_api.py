@@ -562,20 +562,21 @@ def test_planned_event_with_custom_origin():
     c.delete(f"/api/events/{lb2}")
 
 
-def test_external_roles_are_read_from_odoo_and_override_stored_copy():
+def test_external_contact_details_are_read_from_odoo_and_override_stored_copy():
     from fastapi.testclient import TestClient
     from app.main import app
     c = TestClient(app)
     base = c.get("/api/resources").json()["externals"]["updated_at"]
-    exts = [{"partner_id": 9101, "name": "Julien Garage", "role": "saisi à la main"}, {"partner_id": 9103, "name": "Marc", "role": "autre saisie"}, {"partner_id": 5, "name": "Inconnu", "role": "gardé"}]
+    exts = [{"partner_id": 9101, "name": "Julien Garage", "role": "saisi à la main", "email": "ancien@x.be", "phone": "1"},
+            {"partner_id": 9103, "name": "Marc", "role": "autre saisie", "email": "vieux@x.be"}, {"partner_id": 5, "name": "Inconnu", "role": "gardé", "email": "garde@x.be"}]
     assert c.put("/api/resources/externals", json={"data": {"externals": exts}, "base": base}).status_code == 200
     j = c.get("/api/resources").json()
-    roles = {e["partner_id"]: e["role"] for e in j["externals"]["data"]["externals"]}
-    assert roles == {9101: "Mécanicien", 9103: "", 5: "gardé"} and j["roles_from_odoo"] is True
-    stored = c.get("/api/resources").json()["externals"]["data"]["externals"][0]
+    got = {e["partner_id"]: (e["role"], e["email"], e["phone"]) for e in j["externals"]["data"]["externals"]}
+    assert got == {9101: ("Mécanicien", "julien@garage-exemple.be", "+32 470 00 00 01"), 9103: ("", "", "+32 470 00 00 03"), 5: ("gardé", "garde@x.be", "")} and j["roles_from_odoo"] is True
     from app import resources
     assert resources.store().get()["data"]["externals"][0]["role"] == "saisi à la main"          # la copie enregistrée n'est pas modifiée par la lecture
     c.put("/api/resources/externals", json={"data": {"externals": []}, "base": c.get("/api/resources").json()["externals"]["updated_at"]})
+
 
 
 def test_service_worker_lists_every_script_and_is_not_empty():

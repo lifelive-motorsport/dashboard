@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
+from . import speech
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
 from . import access, projection, users
 from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
@@ -738,7 +739,7 @@ def ts_me(user: str = Depends(require_user)):
     p = r["person"] or {}
     return {"role": r["role"], "bus": r["bus"], "super": r["super"], "name": p.get("name", ""), "theoretical": timesheets.theoretical_minutes(r["person"]),
             "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "natures": [{"id": a, "label": l} for a, l in timesheets.EVENT_NATURES], "atelier_natures": [{"id": a, "label": l} for a, l in timesheets.ATELIER_NATURES], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
-            "attachments": timesheets.blobs().enabled}
+            "attachments": timesheets.blobs().enabled, "transcribe": settings.TRANSCRIBE}
 
 
 @app.get("/api/timesheets/jobs")
@@ -911,6 +912,25 @@ def ts_validate_entry(eid: str, validated: bool = True, user: str = Depends(requ
     except Exception as ex:
         _ts_err(ex)
     return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
+
+
+@app.post("/api/timesheets/transcribe")
+async def ts_transcribe(request: Request, user: str = Depends(require_user)):
+    """Mémo vocal (WAV 16 kHz mono) -> texte, pour pré-remplir l'intervention ; rien n'est enregistré."""
+    _ts_ctx(user)
+    if not settings.TRANSCRIBE:
+        raise HTTPException(503, "Transcription désactivée")
+    data = await request.body()
+    if not data or len(data) > 7 * 1024 * 1024:
+        raise HTTPException(413, "Mémo vide ou trop long")
+    try:
+        from starlette.concurrency import run_in_threadpool
+        return {"text": await run_in_threadpool(speech.transcribe_wav, data)}
+    except speech.SpeechError as e:
+        raise HTTPException(422, str(e))
+    except Exception as e:
+        log.exception("Transcription indisponible")
+        raise HTTPException(503, f"Transcription indisponible : {e}")
 
 
 @app.post("/api/timesheets/entries/{eid}/attachments")

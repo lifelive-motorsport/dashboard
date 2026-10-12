@@ -245,3 +245,53 @@ def test_edit_job_recomputes_title_and_keeps_rights(api):
     assert api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "XC", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}}).status_code == 403
     as_(api, CHEF_XC)
     assert api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "XC", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}}).status_code == 403
+
+
+def _wav(seconds, rate=16000, ch=1):
+    import io, wave
+    b = io.BytesIO()
+    with wave.open(b, "wb") as w:
+        w.setnchannels(ch); w.setsampwidth(2); w.setframerate(rate); w.writeframes(b"\0\0" * rate * ch * seconds)
+    return b.getvalue()
+
+
+def test_transcribe_chunks_long_memos_and_rejects_bad_audio(api, monkeypatch):
+    from app import speech
+    seen = []
+    monkeypatch.setattr(speech, "_recognize", lambda chunk: (seen.append(len(chunk)), f"partie {len(seen)}")[1])
+    as_(api, MEC)
+    r = api.post("/api/timesheets/transcribe", content=_wav(120), headers={"Content-Type": "audio/wav"})
+    assert r.status_code == 200 and r.json()["text"] == "partie 1 partie 2 partie 3" and len(seen) == 3          # 50 s + 50 s + 20 s
+    assert api.post("/api/timesheets/transcribe", content=_wav(5, rate=44100), headers={"Content-Type": "audio/wav"}).status_code == 422
+    assert api.post("/api/timesheets/transcribe", content=b"pas du wav", headers={"Content-Type": "audio/wav"}).status_code == 422
+    assert api.post("/api/timesheets/transcribe", content=_wav(200), headers={"Content-Type": "audio/wav"}).status_code == 422
+    as_(api, NOBODY)
+    assert api.post("/api/timesheets/transcribe", content=_wav(2), headers={"Content-Type": "audio/wav"}).status_code == 403
+
+
+def test_transcribe_google_error_is_reported_not_crashing(api, monkeypatch):
+    from app import speech
+    def boom(chunk): raise speech.SpeechError("API non activée")
+    monkeypatch.setattr(speech, "_recognize", boom)
+    as_(api, MEC)
+    r = api.post("/api/timesheets/transcribe", content=_wav(2), headers={"Content-Type": "audio/wav"})
+    assert r.status_code == 422 and "API non activée" in r.json()["detail"]
+
+
+def test_speech_request_shape(monkeypatch):
+    from app import speech
+    seen = {}
+
+    class R:
+        status_code = 200
+        def json(self): return {"results": [{"alternatives": [{"transcript": " bonjour "}]}, {"alternatives": [{"transcript": "atelier"}]}]}
+
+    class S:
+        def post(self, url, json, timeout):
+            seen.update(url=url, body=json)
+            return R()
+    monkeypatch.setattr(speech, "_session", lambda: (S(), "mon-projet"))
+    assert speech._recognize(b"abc") == "bonjour atelier"
+    assert seen["url"] == "https://europe-west4-speech.googleapis.com/v2/projects/mon-projet/locations/europe-west4/recognizers/_:recognize"
+    c = seen["body"]["config"]
+    assert c["model"] == "chirp_2" and c["languageCodes"] == ["fr-FR"] and c["explicitDecodingConfig"]["encoding"] == "LINEAR16"

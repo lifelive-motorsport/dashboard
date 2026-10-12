@@ -54,7 +54,7 @@ function tsFormHtml() {
   const chips = [30, 60, 120, 240, 480].map(m => `<button type="button" class="ts-chip${f.minutes === m ? ' sel' : ''}" data-ts="dur" data-m="${m}">${tsDur(m)}</button>`).join('');
   const x = (k, i) => `<button type="button" class="ts-x" data-ts="rm" data-k="${k}" data-i="${i}" aria-label="Retirer" title="Retirer">✕</button>`;
   const photos = ts.pend.photos.map((p, i) => `<span class="ts-pp"><img class="ts-ph" src="${tsUrl(p)}" alt="Photo">${x('photo', i)}</span>`).join('');
-  const audio = ts.pend.audio ? `<span class="ts-pp"><audio controls src="${tsUrl(ts.pend.audio)}"></audio>${x('audio', 0)}</span>` : '';
+  const audio = ts.pend.audio ? `<span class="ts-pp"><audio controls src="${tsUrl(ts.pend.audio)}"></audio>${x('audio', 0)}</span>${{busy: '<span class="ts-n">Transcription en cours…</span>', ok: '<span class="ts-n">✓ Transcrit : relisez et corrigez le texte ci-dessus</span>', empty: '<span class="ts-n">Aucune parole reconnue</span>'}[ts.pend.tr] || ''}` : '';
   const saved = (f.atts || []).map(at => { const u = `/api/timesheets/entries/${f.id}/attachments/${at.id}`; return `<span class="ts-pp">${at.kind === 'photo' ? `<img class="ts-ph" src="${u}" alt="Photo">` : `<audio controls preload="none" src="${u}"></audio>`}<button type="button" class="ts-x" data-ts="rmsaved" data-id="${at.id}" aria-label="Supprimer" title="Supprimer">✕</button></span>`; }).join('');
   return `<div class="ts-form"><h4>${f.id ? 'Modifier le pointage' : 'Nouveau pointage'}</h4>
     <label class="sdfield"><span>Job</span>${tsJobSelect(f.job_id)}</label>
@@ -149,9 +149,32 @@ async function tsToggleRec() {
   try {
     const st = await navigator.mediaDevices.getUserMedia({audio: true}), mr = new MediaRecorder(st), parts = [];
     mr.ondataavailable = e => parts.push(e.data);
-    mr.onstop = () => { st.getTracks().forEach(t => t.stop()); ts.pend.audio = new Blob(parts, {type: mr.mimeType || 'audio/webm'}); ts.rec = null; tsReadForm(); tsDraw(); };
-    mr.start(); ts.rec = mr; tsReadForm(); tsDraw();
+    mr.onstop = async () => { clearTimeout(ts.recTimer); st.getTracks().forEach(t => t.stop()); const raw = new Blob(parts, {type: mr.mimeType || 'audio/webm'}); ts.rec = null; tsReadForm(); ts.pend.audio = raw; tsDraw(); await tsAfterRecord(raw); };
+    mr.start(); ts.rec = mr; ts.recTimer = setTimeout(() => ts.rec && ts.rec.stop(), 180000); tsReadForm(); tsDraw();
   } catch { ts.msg = 'Micro indisponible : autorisez l’accès au micro dans le navigateur.'; tsDraw(); }
+}
+// WAV 16 kHz mono 16 bits : format accepté par la transcription, lisible partout (Chrome enregistre en WebM, Safari en MP4)
+async function tsWav(blob) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)(), buf = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
+  const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000), src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0), out = new DataView(new ArrayBuffer(44 + pcm.length * 2)), w = (o, t) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); out.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVEfmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, 16000, true); out.setUint32(28, 32000, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, pcm.length * 2, true);
+  pcm.forEach((v, i) => out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
+  return new Blob([out], {type: 'audio/wav'});
+}
+async function tsAfterRecord(raw) {
+  let wav; try { wav = await tsWav(raw); } catch { return; }              // conversion impossible : le mémo reste tel quel, sans transcription
+  if (ts.pend.audio !== raw) return;                                      // mémo retiré entre-temps
+  ts.pend.audio = wav; if (!ts.me.transcribe) return tsDraw();
+  ts.pend.tr = 'busy'; tsReadForm(); tsDraw();
+  try {
+    const r = await fetch('/api/timesheets/transcribe', {method: 'POST', headers: {...rsAuth(), 'Content-Type': 'audio/wav'}, body: wav}), j = await r.json().catch(() => ({}));
+    if (ts.pend.audio !== wav) return;
+    if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+    tsReadForm(); if (ts.form && j.text) ts.form.text = (ts.form.text ? ts.form.text.trim() + '\n' : '') + j.text;
+    ts.pend.tr = j.text ? 'ok' : 'empty';
+  } catch (e) { ts.pend.tr = 'err'; ts.msg = 'Transcription impossible : ' + e.message + ' — saisissez le texte.'; }
+  tsDraw();
 }
 async function tsUpload(eid, blob, name) {
   const r = await fetch(`/api/timesheets/entries/${eid}/attachments?filename=${encodeURIComponent(name)}`, {method: 'POST', headers: {...rsAuth(), 'Content-Type': blob.type || 'application/octet-stream'}, body: blob});
@@ -195,7 +218,7 @@ document.addEventListener('click', async ev => {
     if (a === 'dur') f.minutes = +b.dataset.m; else if (a === 'step') f.minutes = Math.min(960, Math.max(15, f.minutes + +b.dataset.n)); else f.date = plAdd(plToday(), +b.dataset.d);
     return tsDraw();
   }
-  if (a === 'rm') { tsReadForm(); if (b.dataset.k === 'audio') ts.pend.audio = null; else ts.pend.photos.splice(+b.dataset.i, 1); return tsDraw(); }
+  if (a === 'rm') { tsReadForm(); if (b.dataset.k === 'audio') { ts.pend.audio = null; ts.pend.tr = null; } else ts.pend.photos.splice(+b.dataset.i, 1); return tsDraw(); }
   if (a === 'rmsaved') { if (!confirm(t('Supprimer cette pièce jointe ?'))) return; tsReadForm(); try { await rsCall(`/api/timesheets/entries/${ts.form.id}/attachments/${b.dataset.id}`, {method: 'DELETE'}); ts.form.atts = ts.form.atts.filter(x => x.id !== b.dataset.id); } catch (e) { ts.msg = e.message; } return tsDraw(); }
   if (a === 'rec') return tsToggleRec();
   if (a === 'save') return tsSave();

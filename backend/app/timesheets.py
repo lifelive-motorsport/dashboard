@@ -420,7 +420,7 @@ def add_attachment(eid: str, name: str, ctype: str, data: bytes, user: str, r: d
     if len(e.get("attachments", [])) >= 12:
         raise ValueError("12 pièces jointes au maximum par pointage")
     aid = uuid.uuid4().hex[:10]
-    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/webm": "webm", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/mpeg": "mp3"}.get(ctype.split(";")[0], "bin")
+    ext = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "audio/webm": "webm", "audio/mp4": "m4a", "audio/wav": "wav", "audio/x-wav": "wav", "audio/ogg": "ogg", "audio/mpeg": "mp3"}.get(ctype.split(";")[0], "bin")
     key = f"timesheets/{eid}/{aid}.{ext}"
     blobs().put(key, data, ctype.split(";")[0] if kind == "photo" else ctype)
     att = {"id": aid, "kind": kind, "name": re.sub(r"[^\w .()\-]", "_", name)[:80], "content_type": ctype, "size": len(data), "key": key, "created_at": now().isoformat()}

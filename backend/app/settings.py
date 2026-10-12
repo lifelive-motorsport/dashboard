@@ -103,3 +103,8 @@ LIFELIVE_ORIGIN = os.getenv("LIFELIVE_ORIGIN", "Mercatorstrasse 1, 4780 Sankt Vi
 EVENT_TRAVEL_DAYS = int(os.getenv("EVENT_TRAVEL_DAYS", "1"))                                           # jours de trajet ajoutés avant et après l'événement pour l'immobilisation des véhicules (par défaut)
 FUEL_SUPPLIER_NAME = os.getenv("FUEL_SUPPLIER_NAME", "DKV Euro Service")                               # fournisseur des cartes carburant (recherche par nom)
 FUEL_BUFFER_DAYS = int(os.getenv("FUEL_BUFFER_DAYS", "3"))                                              # jours avant / après un événement pendant lesquels le véhicule est en déplacement
+SPEECH_MODEL = os.getenv("SPEECH_MODEL", "chirp_2")                  # modèle Google Speech-to-Text v2 des mémos vocaux
+SPEECH_LOCATION = os.getenv("SPEECH_LOCATION", "europe-west4")        # région (UE) : chirp_2 y est disponible
+SPEECH_LANGUAGE = os.getenv("SPEECH_LANGUAGE", "fr-FR")
+SPEECH_PROJECT = os.getenv("SPEECH_PROJECT", "")                      # vide : projet de l'environnement Cloud Run
+TRANSCRIBE = os.getenv("TRANSCRIBE", "on").lower() != "off"          # « off » masque la transcription des mémos

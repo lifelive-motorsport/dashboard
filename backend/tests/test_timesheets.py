@@ -208,3 +208,14 @@ def test_system_only_for_workshop_jobs(api):
     ev = mkjob(api, kind="event", title="Chargement — Imola", bu="CARS", event={"id": "1", "title": "Imola"}, nature="chargement").json()["id"]
     as_(api, MEC)
     assert api.post("/api/timesheets/entries", json=entry(ev, system="moteur")).json()["system"] == "autre"
+
+
+def test_team_hours_follow_bu_filter(api):
+    cars = mkjob(api, title="Job HR", bu="HISTORIC_RACING").json()["id"]
+    bg = mkjob(api, kind="background", title="Rangement 2", bu="ALL").json()["id"]
+    as_(api, MEC)
+    api.post("/api/timesheets/entries", json=entry(cars, minutes=120))
+    api.post("/api/timesheets/entries", json=entry(bg, minutes=60))
+    as_(api, CHEF)
+    tot = lambda bu: next(r for r in api.get("/api/timesheets/team", params={"start": date.today().isoformat(), "bu": bu}).json()["rows"] if r["name"] == "Nolan Collinet")["summary"]["total"]
+    assert (tot("all"), tot("cars"), tot("hrc"), tot("hrl"), tot("xc")) == (180, 120, 120, 0, 0)

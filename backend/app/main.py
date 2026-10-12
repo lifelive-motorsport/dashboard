@@ -844,13 +844,13 @@ def ts_week(start: date, user: str = Depends(require_user)):
 
 
 @app.get("/api/timesheets/team")
-def ts_team(start: date, user: str = Depends(require_user)):
+def ts_team(start: date, bu: str = "all", user: str = Depends(require_user)):
     """Chef d'atelier : heures de chaque mécanicien sur la semaine (taux d'occupation et taux facturable), pointages à valider."""
     r = _ts_chef(user)
     start = timesheets.monday(start)
     a, b = start.isoformat(), (start + timedelta(days=6)).isoformat()
     jm = {j["id"]: j for j in timesheets.jobs().all()}
-    all_ents = timesheets.entries().between("date", a, b)
+    all_ents = [e for e in timesheets.entries().between("date", a, b) if timesheets.job_in_bu(jm.get(e["job_id"]), bu)]
     people = [p for p in staff.store().get()["data"]["people"] if p.get("google_email") and p.get("active", True)
               and p.get("workshop")]
     rows = []

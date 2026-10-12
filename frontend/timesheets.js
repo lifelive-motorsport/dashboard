@@ -22,7 +22,7 @@ async function tsLoad(page) {
     if (ts.me.role) {
       ts.jobs = (await rsCall('/api/timesheets/jobs')).jobs;
       if (page === 'team') {
-        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; }
+        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; }
       } else ts.week = await rsCall(`/api/timesheets/week?start=${ts.start}`);
     }
   } catch (e) { ts.err = e.message; }
@@ -78,7 +78,7 @@ function tsTeamHtml() {
   const days = Array.from({length: 7}, (_, i) => plAdd(ts.start, i));
   const head = `<tr><th>Personne</th>${days.map(d => `<th class="num">${esc(plFmt(d, {weekday: 'short'}))} ${+d.slice(8)}</th>`).join('')}<th class="num">Total</th><th class="num">Occupation</th><th class="num">Facturable</th><th class="num">À valider</th></tr>`;
   const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => ((r.alloc || {})[k] || 0) > 0);
-  const rows = tm.rows.filter(inBu).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
+  const rows = tm.rows.filter(r => inBu(r) || r.summary.count > 0).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
       + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" data-ts="valall" data-u="${esc(r.user)}">Valider toute la semaine</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
   return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;

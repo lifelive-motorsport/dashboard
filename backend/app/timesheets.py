@@ -226,6 +226,16 @@ def bu_group(bu: str) -> str:
     return bu if bu in ("XC", "ALL") else "CARS"
 
 
+BU_FILTER = {"xc": ("XC",), "cars": ("CARS", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING"), "mr": ("MODERN_RALLY",), "hrc": ("HISTORIC_RACING",), "hrl": ("HISTORIC_RALLY",)}
+
+
+def job_in_bu(job: dict | None, sel: str) -> bool:
+    """Filtre BU de la page Équipe : « all » garde tout ; sinon seuls les jobs rattachés à cette BU (les jobs « Toutes » n'appartiennent à aucune BU en particulier)."""
+    if sel == "all" or sel not in BU_FILTER:
+        return True
+    return bool(job) and job.get("bu") in BU_FILTER[sel]
+
+
 def chef_for(r: dict, job: dict | None) -> bool:
     """Le chef d'atelier gère les jobs de sa BU (et ceux « ALL ») ; le Super User, tous."""
     if r["role"] != "chef":

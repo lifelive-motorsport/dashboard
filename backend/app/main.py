@@ -615,7 +615,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 def get_resources(user: str = Depends(super_user)):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
-        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", "")}
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {})}
                   for p in staff.store().get()["data"]["people"]]
         res = resources.store().get()
     except Exception:

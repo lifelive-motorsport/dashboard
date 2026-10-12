@@ -5,17 +5,20 @@ const rsNorm = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCa
 // Propose, pour chaque personne sans compte Google, l'utilisateur de l'annuaire dont le nom correspond (mêmes mots, ou tous les mots du staff présents) : seulement si la correspondance est unique
 function rsMatch(users) {
   const out = {};
-  rs.staff.filter(p => !p.email).forEach(p => {
+  rsVisible().filter(p => !p.email).forEach(p => {
     const t = rsNorm(p.name); if (!t.length) return;
     const hits = users.filter(u => { const w = rsNorm(u.name); return w.length && (t.every(x => w.includes(x)) || (w.length > 1 && w.every(x => t.includes(x)))); });
     if (hits.length === 1) out[p.id] = hits[0].email.toLowerCase();
   });
   return out;
 }
+// Une personne relève d'une BU si une part de son imputation y va (le filtre « ALL » montre tout le monde, y compris le support et le management)
+const rsInBu = p => buSel === 'all' || (BU_KEYS[buSel] || []).some(k => ((p.alloc || {})[k] || 0) > 0);
+const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p));
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
 function resourcesBlocks() {
-  return [{static: '<section class="block" data-bid="rs-staff"><div class="block-head"><h3>Staff</h3></div><div class="block-body" id="rs-staff"><p class="na">Chargement…</p></div></section>'},
+  return [BU_BAR(), {static: '<section class="block" data-bid="rs-staff"><div class="block-head"><h3>Staff</h3></div><div class="block-body" id="rs-staff"><p class="na">Chargement…</p></div></section>'},
     {static: '<section class="block" data-bid="rs-ext"><div class="block-head"><h3>Prestataires externes</h3></div><div class="block-body" id="rs-ext"></div></section>'},
     {static: '<section class="block" data-bid="rs-veh"><div class="block-head"><h3>Véhicules de service</h3></div><div class="block-body" id="rs-veh"></div></section>'}];
 }
@@ -28,6 +31,7 @@ async function rsCall(url, opt) {
 }
 
 async function loadResources() {
+  if (rs.dirty) return;                         // les modifications non enregistrées (prestataires) ne sont pas écrasées par un rechargement (ex. changement de filtre BU)
   try {
     const j = await rsCall('/api/resources');
     rs = {...rs, loaded: true, error: null, staff: j.staff || [], externals: (j.externals.data || {}).externals || [], base: j.externals.updated_at || null, vehicles: j.vehicles || {items: []}, delegation: j.delegation, dirty: false};
@@ -38,12 +42,12 @@ function drawResources() {
   const a = document.getElementById('rs-staff'); if (!a) return;
   if (!rs.loaded) { a.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
-  const part = rs.staff.filter(p => p.active), off = rs.staff.filter(p => !p.active);
+  const vis = rsVisible();
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}</td><td>${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${esc(p.function || '')}</td>`
     + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td></tr>`;
   const nSugg = Object.keys(rs.sugg).length;
-  a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche.</p>'
-    + (rs.staff.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (rs.staff.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], part.concat(off).map(row), 'prodtable') : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>');
+  a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
+    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
   const b = document.getElementById('rs-ext');
   const mailCell = (e, i) => `<input class="sdin rs-email" data-i="${i}" value="${esc(e.email)}" placeholder="adresse e-mail" style="min-width:220px">${e.email ? '' : ' <small class="neg">à compléter</small>'}`;
   const erows = rs.externals.map((e, i) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
@@ -90,7 +94,7 @@ document.addEventListener('click', async e => {
     rs.suggBusy = true; rs.suggMsg = null; drawResources();
     try {
       const j = await rsCall('/api/resources/directory-users');
-      if (j.message) rs.suggMsg = j.message; else { rs.sugg = rsMatch(j.items || []); const n = Object.keys(rs.sugg).length, miss = rs.staff.filter(p => !p.email).length - n; rs.suggMsg = n ? n + ' suggestion' + (n > 1 ? 's' : '') + (miss > 0 ? ' · ' + miss + ' sans correspondance unique' : '') : 'Aucune correspondance trouvée.'; }
+      if (j.message) rs.suggMsg = j.message; else { rs.sugg = rsMatch(j.items || []); const n = Object.keys(rs.sugg).length, miss = rsVisible().filter(p => !p.email).length - n; rs.suggMsg = n ? n + ' suggestion' + (n > 1 ? 's' : '') + (miss > 0 ? ' · ' + miss + ' sans correspondance unique' : '') : 'Aucune correspondance trouvée.'; }
     } catch (err) { rs.suggMsg = err.message; }
     rs.suggBusy = false; drawResources();
   } else if (t.id === 'rs-acc') {
@@ -99,7 +103,7 @@ document.addEventListener('click', async e => {
     }
     if (!Object.keys(rs.sugg).length) rs.suggMsg = 'Suggestions enregistrées.'; drawResources();
   } else if (t.id === 'rs-save') rsSaveExternals();
-  else if (t.id === 'rs-cancel') { await loadResources(); rs.msg = null; drawResources(); }
+  else if (t.id === 'rs-cancel') { rs.dirty = false; await loadResources(); rs.msg = null; drawResources(); }
   else if (t.id === 'rs-find') {
     const q = (document.getElementById('rs-q').value || '').trim(); if (q.length < 2) { rs.msg = 'Saisissez au moins 2 caractères.'; drawResources(); return; }
     rs.searching = true; rs.msg = null; drawResources();

@@ -1321,3 +1321,4 @@ Object.assign(EN, {
   'Toutes': 'All', 'Clôturer': 'Close', 'Rouvrir': 'Reopen', 'Logbook · Odoo': 'Logbook · Odoo',
 });
 Object.assign(EN, {'Atelier': 'Workshop', '— Hors atelier —': '— Not in workshop —', 'Chef d’atelier CARS': 'Workshop manager CARS', 'Chef d’atelier XC': 'Workshop manager XC', 'Chef d’atelier CARS + XC': 'Workshop manager CARS + XC'});
+Object.assign(EN, {'Date invalide : saisissez jj/mm/aaaa (pas dans le futur).': 'Invalid date: enter dd/mm/yyyy (not in the future).'});

@@ -5,7 +5,7 @@ const CHAPTERS = [
     {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']}]},
   {id: 'planifier', n: '02', label: 'Planifier', modules: [
     {id: 'events', label: 'Événements', source: 'Google Agenda', pages: ['planifier/events']},
-    {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', pages: ['planifier/resources']}]},
+    {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', sub: true, pages: ['planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']}]},
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Odoo', pages: ['consigner/timesheets']},
     {id: 'rides', label: 'Roulages', source: 'Logbook', pages: ['consigner/rides']},
@@ -14,6 +14,8 @@ const CHAPTERS = [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},
     {id: 'connections', label: 'Connexions', source: 'Odoo · Google', pages: ['others/tags']}]},
 ];
+// Pages réservées au Super User : jamais attribuables à une catégorie d'utilisateurs
+const SUPER_ONLY = new Set(['others/users', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
 // Toutes les pages d'un module, dans l'ordre : [clé, libellé]
 function modulePages(mod) {
   const out = [];

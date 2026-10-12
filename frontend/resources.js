@@ -1,4 +1,4 @@
-// Planifier › Ressources : staff (compte Google), prestataires externes (contacts Odoo) et véhicules de service (ressources Google Agenda). Réservé au Super User. Chargé avant app.js.
+// Planifier › Ressources (trois pages) : staff interne (compte Google), staff externe (contacts Odoo) et véhicules (ressources Google Agenda). Réservé au Super User. Chargé avant app.js.
 let rs = {loaded: false, error: null, staff: [], externals: [], base: null, vehicles: {items: []}, delegation: true, dirty: false, msg: null, found: null, searching: false, savingMail: {}, sugg: {}, suggMsg: null, suggBusy: false, vcat: 'all'};
 const rsAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const rsNorm = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s'-]/g, ' ').split(/[\s'-]+/).filter(w => w.length > 1 && !['de', 'du', 'van', 'von', 'le', 'la'].includes(w));
@@ -18,10 +18,10 @@ const rsCmp = (a, b) => a.name.localeCompare(b.name, 'fr', {sensitivity: 'base'}
 const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p)).sort(rsCmp);
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
-function resourcesBlocks() {
-  return [BU_BAR(), {static: '<section class="block" data-bid="rs-staff"><div class="block-head"><h3>Staff</h3></div><div class="block-body" id="rs-staff"><p class="na">Chargement…</p></div></section>'},
-    {static: '<section class="block" data-bid="rs-ext"><div class="block-head"><h3>Prestataires externes</h3></div><div class="block-body" id="rs-ext"></div></section>'},
-    {static: '<section class="block" data-bid="rs-veh"><div class="block-head"><h3>Véhicules</h3></div><div class="block-body" id="rs-veh"></div></section>'}];
+const rsBlock = (id, title) => ({static: `<section class="block" data-bid="${id}"><div class="block-head"><h3>${title}</h3></div><div class="block-body" id="${id}"><p class="na">Chargement…</p></div></section>`});
+// Trois pages : staff interne (compte Google), staff externe (contacts Odoo, BU concernées), véhicules (ressources Google Agenda)
+function resourcesBlocks(which) {
+  return which === 'ext' ? [BU_BAR(), rsBlock('rs-ext', 'Staff externe')] : which === 'veh' ? [rsBlock('rs-veh', 'Véhicules')] : [BU_BAR(), rsBlock('rs-staff', 'Staff interne')];
 }
 
 async function rsCall(url, opt) {
@@ -39,7 +39,8 @@ async function loadResources() {
   } catch (e) { rs.error = e.message; rs.loaded = true; }
 }
 
-function drawResources() {
+function drawResources() { rsDrawStaff(); rsDrawExt(); rsDrawVeh(); }
+function rsDrawStaff() {
   const a = document.getElementById('rs-staff'); if (!a) return;
   if (!rs.loaded) { a.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
@@ -49,19 +50,27 @@ function drawResources() {
   const nSugg = Object.keys(rs.sugg).length;
   a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
     + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
-  const b = document.getElementById('rs-ext');
+}
+function rsDrawExt() {
+  const b = document.getElementById('rs-ext'); if (!b) return;
+  if (!rs.loaded || rs.error) { b.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  const extIn = x => buSel === 'all' || (x.bus || []).some(k => (BU_KEYS[buSel] || []).includes(k));
   const RS_BUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
   const buCell = (e, i) => `<div class="bu-filter" role="group" aria-label="BU concernées">${RS_BUS.map(([k, sym, l]) => `<button type="button" class="rs-pill rs-xbu" data-i="${i}" data-b="${k}" aria-pressed="${(e.bus || []).includes(k)}" title="${esc(l)}">${BuSymbol(sym, {size: 14})}<span>${esc(l)}</span></button>`).join('')}</div>${(e.bus || []).length ? '' : '<small class="neg">à choisir</small>'}`;
   const mailCell = (e, i) => `<input class="sdin rs-email" data-i="${i}" value="${esc(e.email)}" placeholder="adresse e-mail" style="min-width:220px">${e.email ? '' : ' <small class="neg">à compléter</small>'}`;
-  const erows = rs.externals.map((e, i) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${buCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
+  const erows = rs.externals.map((e, i) => [e, i]).filter(([e]) => extIn(e)).map(([e, i]) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${buCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
   const found = rs.found == null ? '' : rs.found.length ? table(['Contact Odoo', 'Société', 'Fonction', 'E-mail', ''], rs.found.map(c => {
     const has = rs.externals.some(e => e.partner_id === c.id);
     return `<tr><td class="prod">${esc(c.name)}</td><td>${esc(c.company)}</td><td>${esc(c.function)}</td><td>${c.email ? esc(c.email) : '<small class="neg">pas d’e-mail dans Odoo</small>'}</td><td>${has ? '<small class="na">déjà dans la liste</small>' : `<button type="button" class="rs-add" data-id="${c.id}">Ajouter</button>`}</td></tr>`; }), 'prodtable') : '<p class="na">Aucun contact trouvé.</p>';
   b.innerHTML = '<p class="na">Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.</p>'
-    + (erows.length ? table(['Prestataire', 'Société', 'Fonction', 'E-mail', 'BU concernées', 'Téléphone', ''], erows, 'prodtable') : '<p class="na">Aucun prestataire pour le moment.</p>')
+    + (erows.length ? table(['Prestataire', 'Société', 'Fonction', 'E-mail', 'BU concernées', 'Téléphone', ''], erows, 'prodtable') : (rs.externals.length ? '<p class="na">Aucun prestataire rattaché à cette BU.</p>' : '<p class="na">Aucun prestataire pour le moment.</p>'))
     + `<div class="sdbar"><button type="button" id="rs-save" ${rs.dirty ? '' : 'disabled'}>Enregistrer</button><button type="button" id="rs-cancel" ${rs.dirty ? '' : 'disabled'}>Annuler les modifications</button><span class="na" id="rs-msg">${esc(rs.msg || '')}</span></div>`
     + `<div class="sdbar"><input class="sdin" id="rs-q" placeholder="Rechercher un contact Odoo (nom, société, e-mail)" style="min-width:300px"><button type="button" id="rs-find">${rs.searching ? 'Recherche…' : 'Rechercher'}</button></div>` + found;
-  const c = document.getElementById('rs-veh'), v = rs.vehicles;
+}
+function rsDrawVeh() {
+  const c = document.getElementById('rs-veh'); if (!c) return;
+  if (!rs.loaded || rs.error) { c.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  const v = rs.vehicles;
   const cats = (v.categories || []).filter(k => (v.items || []).some(x => x.category === k.id));
   const vitems = (v.items || []).filter(x => rs.vcat === 'all' || x.category === rs.vcat);
   const catLabel = id => ((v.categories || []).find(k => k.id === id) || {}).label || id;

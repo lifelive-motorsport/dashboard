@@ -10,7 +10,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
 let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
-const allowedPage = k => k === 'home/welcome' || (((k !== 'others/users' && k !== 'planifier/resources' && k !== 'planifier/events') || superUser) && (!pagesList || pagesList.has(k)));
+const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!pagesList || pagesList.has(k)));
 const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
 const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
@@ -25,16 +25,15 @@ const MENU = [
   ['expenses', 'Frais généraux', [['source','Données source'], ['general','Général'], ['rules','Imputation des frais généraux']]],
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
-  ['planifier', 'Planifier', [['events','Événements'], ['resources','Ressources']]],
+  ['planifier', 'Planifier', [['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
   ['consigner', 'Consigner', [['timesheets','Pointages'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','planifier/resources','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
   'planifier/events': ['Courses, essais et roulages clients : création et mise à jour des événements dans les agendas Google partagés, avec la couleur de la BU.', 'Valider les agendas à utiliser et donner au compte de service un droit d’écriture sur ces agendas.'],
-  'planifier/resources': ['Allocation du personnel, des voitures, des camions et du matériel à chaque événement, avec les conflits de réservation.', 'Lister les ressources (agendas de ressources Google, fiches Odoo) et les règles d’allocation.'],
   'consigner/timesheets': ['Fiches de pointage de l’atelier : heures par job, par voiture et par technicien, saisies depuis un téléphone.', 'Décider si les heures se saisissent dans Odoo (feuilles de temps, clé API en écriture) ou dans Logbook.'],
   'consigner/rides': ['Suivi des meetings : rapports de roulage, réglages, remarques du pilote, séance par séance (données propres à Logbook).', 'Définir le modèle d’un rapport de roulage (champs, réglages, pièces jointes) avec les mécaniciens et ingénieurs.'],
   'consigner/consumables': ['Stocks de pneus et de carburant, mouvements par événement et par voiture.', 'Choisir les emplacements et articles de stock Odoo à suivre et qui encode les mouvements.'],
@@ -57,7 +56,7 @@ const PLAN = {
 };
 
 let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
-const route = () => (location.hash.replace(/^#\/?/, '') || 'home/welcome').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
+const route = () => (location.hash.replace(/^#\/?/, '') || 'home/welcome').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^planifier\/resources$/, 'planifier/res_staff').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
 
@@ -492,7 +491,9 @@ const PAGES = {
   'home/welcome': () => homeBlocks(),
   'others/tags': () => tagsBlocks(),
   'others/users': () => usersBlocks(),
-  'planifier/resources': () => resourcesBlocks(),
+  'planifier/res_staff': () => resourcesBlocks('staff'),
+  'planifier/res_ext': () => resourcesBlocks('ext'),
+  'planifier/res_veh': () => resourcesBlocks('veh'),
   'planifier/events': () => eventsBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
   'expenses/general': () => expensesGeneralBlocks(),
@@ -587,6 +588,8 @@ function renderNav(key) {
   const link = (k, label, soon) => `<a class="navmod ${k === key ? 'on' : ''} ${soon ? 'soon' : ''}" href="#/${k}">${esc(label)}${soon ? '<small>bientôt</small>' : ''}</a>`;
   const modHtml = m => {
     const pages = modulePages(m).filter(p => allowedPage(p[0])); if (!pages.length) return '';
+    if (m.sub) { const open = !navClosed.has(m.id) || (mo && mo.module.id === m.id);          // module à sous-menus (pages listées directement sous le module, comme les groupes des tableaux de bord)
+      return `<div class="sec ${open ? 'open' : ''} ${mo && mo.module.id === m.id ? 'cur' : ''}" data-mod="${m.id}"><button type="button" class="sec-h">${esc(m.label)}</button><div class="sec-body"><ul class="subpages">${pages.map(([k, l]) => `<li><a href="#/${k}" class="${k === key ? 'on' : ''} ${LIVE.has(k) ? '' : 'soon'}">${esc(l)}${LIVE.has(k) ? '' : '<small>bientôt</small>'}</a></li>`).join('')}</ul></div></div>`; }
     if (m.groups) { const open = !navClosed.has(m.id) || (mo && mo.module.id === m.id);
       return `<div class="sec ${open ? 'open' : ''} ${mo && mo.module.id === m.id ? 'cur' : ''}" data-mod="${m.id}"><button type="button" class="sec-h">${esc(m.label)}</button><div class="sec-body">${m.groups.map(grpHtml).join('')}</div></div>`; }
     return pages.map(p => link(p[0], pages.length === 1 ? m.label : p[1], !LIVE.has(p[0]))).join('');
@@ -652,7 +655,7 @@ function render(force) {
   if (key === 'expenses/general') { exDrawGeneral(); exLoadGeneral().then(exDrawGeneral); }
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   if (key === 'others/users') { drawUsers(); loadUsers().then(drawUsers); }
-  if (key === 'planifier/resources') { drawResources(); loadResources().then(drawResources); }
+  if (key.startsWith('planifier/res_')) { drawResources(); loadResources().then(drawResources); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(peDraw); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

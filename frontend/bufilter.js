@@ -24,7 +24,7 @@ function pageBu(key) {
   const g = key.split('/')[0];
   if (g === 'xc' || key === 'staff/xc') return 'xc';
   if (g === 'cars' || key === 'staff/cars') return 'cars';
-  if (g === 'overview' || g === 'home' || key === 'planifier/resources') return buSel;
+  if (g === 'overview' || g === 'home' || key === 'planifier/res_staff' || key === 'planifier/res_ext') return buSel;
   return 'all';
 }
 function buLogo(sel = buSel) {

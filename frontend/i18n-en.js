@@ -1268,3 +1268,4 @@ EN_PATTERNS.push([/^\((\d+) masqués?\)$/, m => '(' + m[1] + ' hidden)']);
 Object.assign(EN, {
   "Lieu de départ": "Departure place", "Lieu de l’événement": "Event place", "Revenir à Lifelive": "Back to Lifelive", "Rechercher le lieu de départ": "Search for the departure place"});
 EN_PATTERNS.push([/^(\d+) km depuis (.+) \((\d+) h (\d+)\) à l’aller · (\d+) km aller-retour$/, m => m[1] + ' km from ' + m[2] + ' (' + m[3] + ' h ' + m[4] + ') one way · ' + m[5] + ' km round trip']);
+Object.assign(EN, {'Staff interne': 'Internal staff', 'Staff externe': 'External staff', 'Aucun prestataire rattaché à cette BU.': 'No contractor linked to this BU.', 'Ressources': 'Resources'});

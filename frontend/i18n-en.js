@@ -1300,3 +1300,23 @@ Object.assign(EN, {
 Object.assign(EN_T, {'{} km depuis Lifelive': '{} km from Lifelive', 'Immobilisation véhicules : {} → {}': 'Vehicle immobilisation: {} → {}'});
 EN_PATTERNS.push([/^Semaine (\d+) · (.+)$/, m => 'Week ' + m[1] + ' · ' + m[2]], [/^(\d+) autres? invités?$/, m => m[1] + ' other guest' + (m[1] > 1 ? 's' : '')]);
 Object.assign(EN, {'Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation ; dans le calendrier, le trait fin sous une barre indique l’immobilisation des véhicules. Survolez une barre pour le détail.': 'Bars: BU colour · hatched = unconfirmed event (TBC) · ✗ = invitation declined. For a vehicle, the bar covers the whole immobilisation; in the calendar, the thin line under a bar shows the vehicles’ immobilisation. Hover over a bar for details.'});
+
+// Consigner › Pointages
+Object.assign(EN, {
+  'Mes pointages': 'My timesheets', 'Ma semaine': 'My week', 'Équipe': 'Team', 'Heures pointées': 'Hours logged', 'Facturables': 'Billable', 'Taux d’occupation': 'Occupancy rate', 'Taux facturable': 'Billable rate', 'Horaire théorique': 'Scheduled hours',
+  'Semaine précédente': 'Previous week', 'Semaine suivante': 'Next week', 'Aujourd’hui': 'Today', 'Hier': 'Yesterday', '+ Nouveau pointage': '+ New timesheet entry', 'Nouveau pointage': 'New timesheet entry', 'Modifier le pointage': 'Edit timesheet entry',
+  'Job': 'Job', '— Choisir un job —': '— Choose a job —', 'Jobs atelier': 'Workshop jobs', 'Jobs événement': 'Event jobs', 'Tâches de fond': 'Background tasks', 'Job atelier': 'Workshop job', 'Job événement': 'Event job', 'Tâche de fond': 'Background task',
+  'Date': 'Date', 'Rapide': 'Quick', 'Durée': 'Duration', 'Moins 15 minutes': 'Minus 15 minutes', 'Plus 15 minutes': 'Plus 15 minutes', 'Affectation': 'Assignment', 'Système': 'System', 'Intervention': 'Work done', 'Ce qui a été fait…': 'What was done…',
+  'Prépa': 'Prep', 'Révision': 'Service', 'Labo': 'Lab', 'Setup': 'Setup', 'Chargement': 'Loading', 'Crash': 'Crash', 'Autre': 'Other',
+  'Moteur': 'Engine', 'Transmission': 'Transmission', 'Suspension': 'Suspension', 'Direction': 'Steering', 'Freins': 'Brakes', 'Électricité': 'Electrics', 'Châssis / Carrosserie': 'Chassis / Bodywork', 'Habitacle': 'Cabin',
+  '📷 Photo': '📷 Photo', '🎙 Mémo vocal': '🎙 Voice memo', '⏹ Arrêter': '⏹ Stop', 'photo(s) à envoyer': 'photo(s) to upload', 'Mémo vocal prêt': 'Voice memo ready',
+  'Choisissez un job.': 'Choose a job.', 'Micro indisponible : autorisez l’accès au micro dans le navigateur.': 'Microphone unavailable: allow microphone access in the browser.',
+  'Facturable': 'Billable', '✓ Validé': '✓ Approved', 'Modifiable jusqu’à': 'Editable until', '🔒 Verrouillé': '🔒 Locked', 'Modifier': 'Edit', 'Valider': 'Approve', 'Annuler la validation': 'Undo approval', 'Supprimer ce pointage ?': 'Delete this entry?',
+  'Mécanicien': 'Mechanic', 'Total': 'Total', 'Occupation': 'Occupancy', 'À valider': 'To approve', 'Valider toute la semaine': 'Approve the whole week', 'Aucun pointage cette semaine.': 'No entries this week.',
+  'Aucun mécanicien trouvé (fonction du staff différente de « Chef d’atelier » et compte Google renseigné).': 'No mechanic found (staff function other than “Chef d’atelier” and a Google account filled in).',
+  'Votre adresse Google n’est liée à aucune fiche du staff : demandez au Super User de la renseigner (Planifier › Ressources › Staff interne).': 'Your Google address is not linked to any staff record: ask the Super User to fill it in (Plan › Resources › Internal staff).',
+  'Cette page est réservée au chef d’atelier.': 'This page is reserved for the workshop manager.',
+  'Jobs': 'Jobs', 'Propositions d’après le planning': 'Suggestions from the planning', 'Voir les propositions d’après le planning': 'Show suggestions from the planning', 'Créer ce job': 'Create this job', '+ Nouveau job': '+ New job', 'Créer le job': 'Create job',
+  'Aucune proposition : tous les jobs des prochains événements existent déjà.': 'No suggestions: all jobs for upcoming events already exist.', 'Type': 'Type', 'BU': 'BU', 'Intitulé': 'Title', 'Voiture (Odoo)': 'Car (Odoo)', '— Aucune —': '— None —', 'Événement': 'Event', 'Rattachement': 'Linked to',
+  'Toutes': 'All', 'Clôturer': 'Close', 'Rouvrir': 'Reopen', 'Logbook · Odoo': 'Logbook · Odoo',
+});

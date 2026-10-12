@@ -26,15 +26,14 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Pointages'], ['rides','Roulages'], ['consumables','Consommables']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/timesheets','consigner/team','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
   'planifier/events': ['Courses, essais et roulages clients : création et mise à jour des événements dans les agendas Google partagés, avec la couleur de la BU.', 'Valider les agendas à utiliser et donner au compte de service un droit d’écriture sur ces agendas.'],
-  'consigner/timesheets': ['Fiches de pointage de l’atelier : heures par job, par voiture et par technicien, saisies depuis un téléphone.', 'Décider si les heures se saisissent dans Odoo (feuilles de temps, clé API en écriture) ou dans Logbook.'],
   'consigner/rides': ['Suivi des meetings : rapports de roulage, réglages, remarques du pilote, séance par séance (données propres à Logbook).', 'Définir le modèle d’un rapport de roulage (champs, réglages, pièces jointes) avec les mécaniciens et ingénieurs.'],
   'consigner/consumables': ['Stocks de pneus et de carburant, mouvements par événement et par voiture.', 'Choisir les emplacements et articles de stock Odoo à suivre et qui encode les mouvements.'],
   'xc/events': ['CA, coûts directs et marge par événement (course, meeting) pour XC.',
@@ -492,6 +491,8 @@ const PAGES = {
   'others/tags': () => tagsBlocks(),
   'others/users': () => usersBlocks(),
   'planifier/planning': () => planningBlocks(),
+  'consigner/timesheets': () => tsBlocks('mine'),
+  'consigner/team': () => tsBlocks('team'),
   'planifier/res_staff': () => resourcesBlocks('staff'),
   'planifier/res_ext': () => resourcesBlocks('ext'),
   'planifier/res_veh': () => resourcesBlocks('veh'),
@@ -658,6 +659,7 @@ function render(force) {
   if (key === 'others/users') { drawUsers(); loadUsers().then(drawUsers); }
   if (key.startsWith('planifier/res_')) { drawResources(); loadResources().then(drawResources); }
   if (key === 'planifier/planning') { plDraw(); plLoad(); }
+  if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

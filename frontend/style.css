@@ -352,3 +352,18 @@ textarea.sdin{width:100%;font:inherit;resize:vertical}
 .pl-tip{position:fixed;z-index:60;max-width:380px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none}.pl-thead{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:2px}.pl-dot{width:10px;height:10px;border-radius:50%;flex:none}.pl-tmeta{color:var(--mut)}.pl-tsec{margin-top:5px}
 @media print{.pl-tip{display:none}}
 .pl-wtrack .pl-bar{align-self:start}.pl-immo{align-self:end;height:5px;margin:0 2px 1px;border-radius:3px;opacity:.5;z-index:0;position:relative}
+/* Consigner › Pointages */
+.ts-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}.ts-nav b{flex:1;min-width:170px;text-align:center;font-size:14px}.ts-nav button,.ts-dur button,.ts-chip,.ts-media button,.ts-media label.btn{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer;min-height:40px}
+.ts-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:0 0 14px}.ts-kpis>div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.ts-kpis small{display:block;color:var(--mut);font-size:12px}.ts-kpis b{font-size:20px}
+.ts-form{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 16px;display:flex;flex-direction:column;gap:12px}.ts-form h4{margin:0}
+.ts-chips{display:flex;gap:6px;flex-wrap:wrap}.ts-chip.sel{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ts-dur{display:flex;align-items:center;gap:12px;margin-bottom:6px}.ts-dur b{font-size:22px;min-width:84px;text-align:center}.ts-dur button{width:48px;font-size:20px}
+.ts-media{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ts-media button.rec{background:var(--neg);color:#fff;border-color:var(--neg)}.ts-n{color:var(--mut);font-size:13px}
+.ts-day{margin:0 0 12px}.ts-day.today .ts-dh{border-bottom-color:var(--accent)}.ts-dh{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:4px 0;margin-bottom:6px;text-transform:capitalize}.ts-dh span{color:var(--mut)}
+.ts-entry{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 6px}.ts-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ts-min{margin-left:auto;font-weight:600}
+.ts-tag{font-size:11px;border:1px solid var(--grn);color:var(--grn);border-radius:10px;padding:0 7px}.ts-sub{color:var(--mut);font-size:13px;margin-top:2px;white-space:pre-wrap}
+.ts-att{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.ts-ph{height:64px;width:64px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}.ts-att audio{height:34px;max-width:100%}
+.ts-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px}.ts-act button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--fg);padding:5px 10px;font:inherit;cursor:pointer}.ts-lock{color:var(--mut)}.ts-lock.ok{color:var(--grn)}.ts-lock.bad{color:var(--neg)}
+.ts-msg{background:var(--card);border:1px solid var(--neg);color:var(--neg);border-radius:8px;padding:8px 12px}.ts-row{cursor:pointer}.ts-closed{opacity:.55}.ts-team td.num,.ts-team th.num{white-space:nowrap}
+.ts-detail{display:flex;flex-direction:column;gap:6px;padding:6px 0}.ts-dline small{color:var(--mut);text-transform:capitalize}
+@media(max-width:700px){.ts-nav b{order:-1;flex-basis:100%}.ts-form{padding:12px}}

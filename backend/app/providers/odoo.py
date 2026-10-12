@@ -668,9 +668,9 @@ class OdooProvider:
         return [{"id": r["id"], "name": r["name"], "vat": r.get("vat") or "", "city": r.get("city") or ""} for r in rows]
 
     def contacts(self, q: str) -> list[dict]:
-        """Contacts Odoo (personnes et sociétés) dont le nom, l'adresse ou la société contient `q` : prestataires à inviter aux événements."""
+        """Contacts Odoo (personnes, pas les sociétés) dont le nom, l'adresse ou la société contient `q` : prestataires à inviter aux événements."""
         q = q.strip()
-        domain = ["&", ("active", "=", True), "|", "|", ("name", "ilike", q), ("email", "ilike", q), ("parent_id.name", "ilike", q)]
+        domain = ["&", "&", ("active", "=", True), ("is_company", "=", False), "|", "|", ("name", "ilike", q), ("email", "ilike", q), ("parent_id.name", "ilike", q)]        # personnes seulement : les sociétés ne sont pas sélectionnables
         rows, err = None, None
         for fields in (["name", "email", "phone", "is_company", "parent_id", "function"], ["name", "email", "phone", "is_company", "parent_id"], ["name", "email", "is_company", "parent_id"]):
             try:                                                        # les champs varient selon les versions d'Odoo : on retombe sur une liste plus courte si Odoo en refuse un

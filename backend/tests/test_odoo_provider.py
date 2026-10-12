@@ -875,6 +875,7 @@ def test_contacts_falls_back_when_odoo_refuses_a_field():
     seen = []
 
     def call(model, method, **kw):
+        assert ("is_company", "=", False) in kw["domain"]                  # les sociétés ne sont jamais proposées
         seen.append(kw["fields"])
         if "function" in kw["fields"]:
             raise RuntimeError("Invalid field 'function' on model 'res.partner'")

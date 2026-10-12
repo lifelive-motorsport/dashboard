@@ -24,10 +24,19 @@ function resourcesBlocks(which) {
   return which === 'ext' ? [BU_BAR(), rsBlock('rs-ext', 'Staff externe')] : which === 'veh' ? [rsBlock('rs-veh', 'Véhicules')] : [BU_BAR(), rsBlock('rs-staff', 'Staff interne')];
 }
 
+// Erreur de validation du serveur (422) : « champ : règle non respectée », dans la langue de l'utilisateur quand c'est un cas courant
+const RS_FIELDS = {title: 'Titre', bu: 'BU', start: 'Début de l’événement', end: 'Fin de l’événement', immo_start: 'Début d’immobilisation', immo_end: 'Fin d’immobilisation', place: 'Lieu de l’événement', origin: 'Lieu de départ', notes: 'Notes', staff: 'Staff interne', externals: 'Staff externe', vehicles: 'Véhicules', email: 'E-mail', bus: 'BU concernées'};
+function rsFieldError(d) {
+  const path = (d.loc || []).filter(x => x !== 'body' && x !== 'data'), key = path[0], sub = path.slice(1).filter(x => typeof x !== 'number').join('.');
+  const label = (RS_FIELDS[key] || String(key || 'champ')) + (sub ? ' › ' + sub : '');
+  let m = (d.msg || 'valeur refusée').replace(/^Value error, /, '');
+  m = m.replace(/^String should have at most (\d+) characters?$/, 'trop long (maximum $1 caractères)').replace(/^String should have at least \d+ characters?$/, 'obligatoire').replace(/^Field required$/, 'obligatoire').replace(/^Input should be a valid date.*$/, 'date invalide').replace(/^List should have at most (\d+) items.*$/, 'trop d’éléments (maximum $1)');
+  return label + ' : ' + m;
+}
 async function rsCall(url, opt) {
   const r = await fetch(url, {...opt, headers: {...rsAuth(), ...(opt && opt.body ? {'Content-Type': 'application/json'} : {})}});
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
+  if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : Array.isArray(j.detail) && j.detail.length ? j.detail.slice(0, 3).map(rsFieldError).join(' ; ') : 'Erreur ' + r.status);
   return j;
 }
 

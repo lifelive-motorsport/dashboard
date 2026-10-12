@@ -60,7 +60,7 @@ class EventIn(BaseModel):
         for x in v:
             x = x.strip().lower()
             if not EMAIL.match(x):
-                raise ValueError("adresse e-mail invalide")
+                raise ValueError(f"adresse e-mail invalide : {x}")
             if x not in out:
                 out.append(x)
         return out

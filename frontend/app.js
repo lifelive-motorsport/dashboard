@@ -703,6 +703,7 @@ async function refresh() {
   try {
     await Promise.all(periodsUsed.map(p => getData(p, true)));   // une seule demande par période
     render();
+    if (!periodsUsed.length) { flash(`Page actualisée à ${new Date().toLocaleTimeString(LOCALE())}.`); return; }
     const fresh = periodsUsed.some(p => !before.has((cached(p) || {}).generated_at));
     const at = new Date().toLocaleTimeString(LOCALE());
     if (fresh) flash(`Données actualisées à ${at}.`);
@@ -746,3 +747,22 @@ buSyncTabs(); if (typeof buLogo === 'function') buLogo();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
+
+
+// Tirer vers le bas pour actualiser (mobile, application installée) : un indicateur apparaît, tourne pendant l'actualisation puis disparaît
+(() => {
+  const el = document.createElement('div'); el.id = 'ptr'; el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4h-4"/></svg>';
+  document.body.appendChild(el);
+  let y0 = null, d = 0, busy = false;
+  const TH = 80, show = (dy, spin) => { el.style.opacity = dy > 8 || spin ? 1 : 0; el.style.transform = `translateY(${Math.min(dy, 110) - 50}px) rotate(${dy * 3}deg)`; el.classList.toggle('spin', !!spin); };
+  document.addEventListener('touchstart', e => { y0 = !busy && window.scrollY <= 0 && !document.body.classList.contains('nav-open') && !document.querySelector('.ts-lb') && e.touches.length === 1 ? e.touches[0].clientY : null; d = 0; }, {passive: true});
+  document.addEventListener('touchmove', e => { if (y0 === null) return; d = Math.max(0, e.touches[0].clientY - y0); if (d > 0 && window.scrollY > 0) { y0 = null; show(0); return; } show(d * 0.6); }, {passive: true});
+  document.addEventListener('touchend', async () => {
+    if (y0 === null) return; const go = d * 0.6 >= TH * 0.6; y0 = null;
+    if (!go) return show(0);
+    busy = true; show(TH * 0.6, true);
+    try { await Promise.all([refresh(), new Promise(r => setTimeout(r, 700))]); } catch {}
+    busy = false; show(0); el.style.transform = 'translateY(-60px)';
+  });
+})();

@@ -330,9 +330,10 @@ function tsLbOpen(urls, i) {
   el.innerHTML = '<button type="button" class="lb-x" aria-label="Fermer" title="Fermer">✕</button><button type="button" class="lb-p" aria-label="Photo précédente" title="Photo précédente">‹</button><img alt="Photo"><button type="button" class="lb-s" aria-label="Photo suivante" title="Photo suivante">›</button><span class="lb-n"></span>';
   document.body.appendChild(el); tsLb = {el, urls, i}; tsLbShow(i);
   let x0 = null;
-  el.addEventListener('click', e => { if (e.target.closest('.lb-x') || e.target === el) tsLbClose(); else if (e.target.closest('.lb-p')) tsLbShow(tsLb.i - 1); else if (e.target.closest('.lb-s')) tsLbShow(tsLb.i + 1); });
-  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, {passive: true});
-  el.addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) tsLbShow(tsLb.i + (dx < 0 ? 1 : -1)); });
+  el.addEventListener('click', e => { if (e.target.closest('.lb-x') || e.target === el || e.target.tagName === 'IMG') tsLbClose(); else if (e.target.closest('.lb-p')) tsLbShow(tsLb.i - 1); else if (e.target.closest('.lb-s')) tsLbShow(tsLb.i + 1); });
+  let y0 = 0;
+  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, {passive: true});
+  el.addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null; if (dy > 90 && Math.abs(dx) < 60) tsLbClose(); else if (Math.abs(dx) > 50) tsLbShow(tsLb.i + (dx < 0 ? 1 : -1)); });
 }
 function tsLbClose() { if (tsLb) { tsLb.el.remove(); tsLb = null; } }
 document.addEventListener('click', e => {

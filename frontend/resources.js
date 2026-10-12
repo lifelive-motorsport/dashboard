@@ -20,7 +20,7 @@ const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 function resourcesBlocks() {
   return [BU_BAR(), {static: '<section class="block" data-bid="rs-staff"><div class="block-head"><h3>Staff</h3></div><div class="block-body" id="rs-staff"><p class="na">Chargement…</p></div></section>'},
     {static: '<section class="block" data-bid="rs-ext"><div class="block-head"><h3>Prestataires externes</h3></div><div class="block-body" id="rs-ext"></div></section>'},
-    {static: '<section class="block" data-bid="rs-veh"><div class="block-head"><h3>Véhicules de service</h3></div><div class="block-body" id="rs-veh"></div></section>'}];
+    {static: '<section class="block" data-bid="rs-veh"><div class="block-head"><h3>Véhicules</h3></div><div class="block-body" id="rs-veh"></div></section>'}];
 }
 
 async function rsCall(url, opt) {
@@ -113,7 +113,7 @@ document.addEventListener('click', async e => {
   else if (t.id === 'rs-find') {
     const q = (document.getElementById('rs-q').value || '').trim(); if (q.length < 2) { rs.msg = 'Saisissez au moins 2 caractères.'; drawResources(); return; }
     rs.searching = true; rs.msg = null; drawResources();
-    try { const j = await rsCall('/api/resources/contacts?q=' + encodeURIComponent(q)); rs.found = j.contacts || []; if (j.unavailable) rs.msg = j.unavailable; } catch (err) { rs.found = []; rs.msg = err.message; }
+    try { const j = await rsCall('/api/resources/contacts?q=' + encodeURIComponent(q)); rs.found = j.contacts || []; if (j.unavailable) { rs.msg = j.unavailable; rs.found = null; } } catch (err) { rs.found = []; rs.msg = err.message; }
     rs.searching = false; drawResources(); const qi = document.getElementById('rs-q'); if (qi) qi.value = q;
   }
 });

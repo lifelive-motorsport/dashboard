@@ -670,10 +670,17 @@ class OdooProvider:
     def contacts(self, q: str) -> list[dict]:
         """Contacts Odoo (personnes et sociétés) dont le nom, l'adresse ou la société contient `q` : prestataires à inviter aux événements."""
         q = q.strip()
-        rows = self._call("res.partner", "search_read",
-                          domain=["&", ("active", "=", True), "|", "|", ("name", "ilike", q), ("email", "ilike", q), ("parent_id.name", "ilike", q)],
-                          fields=["name", "email", "phone", "mobile", "is_company", "parent_id", "function"], limit=25, order="name")
-        return [{"id": r["id"], "name": r["name"], "email": (r.get("email") or "").strip(), "phone": r.get("mobile") or r.get("phone") or "",
+        domain = ["&", ("active", "=", True), "|", "|", ("name", "ilike", q), ("email", "ilike", q), ("parent_id.name", "ilike", q)]
+        rows, err = None, None
+        for fields in (["name", "email", "phone", "is_company", "parent_id", "function"], ["name", "email", "phone", "is_company", "parent_id"], ["name", "email", "is_company", "parent_id"]):
+            try:                                                        # les champs varient selon les versions d'Odoo : on retombe sur une liste plus courte si Odoo en refuse un
+                rows = self._call("res.partner", "search_read", domain=domain, fields=fields, limit=25, order="name")
+                break
+            except Exception as e:
+                err = e
+        if rows is None:
+            raise err
+        return [{"id": r["id"], "name": r["name"], "email": (r.get("email") or "").strip(), "phone": r.get("phone") or "",
                  "company": r["parent_id"][1] if r.get("parent_id") else (r["name"] if r.get("is_company") else ""), "function": r.get("function") or ""} for r in rows]
 
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:

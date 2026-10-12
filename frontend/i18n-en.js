@@ -1251,3 +1251,4 @@ EN_PATTERNS.push(
   [/^(\d+) prestataires? à inviter à la confirmation$/, m => m[1] + ' contractor' + (m[1] > 1 ? 's' : '') + ' to invite on confirmation'],
   [/^Supprimer « (.+) » de Google Agenda \? Les invités seront prévenus\.$/, m => 'Delete “' + m[1] + '” from Google Calendar? Guests will be notified.'],
 );
+EN_PATTERNS.push([/^Recherche momentanément indisponible : (.+)$/, m => 'Search temporarily unavailable: ' + m[1]]);

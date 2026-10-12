@@ -868,3 +868,29 @@ def test_margin_products_from_odoo_data(monkeypatch):
     rate = 2000.0 / (382.0 * 30 + 1000.0 * 24)                                  # transport réparti au prorata du prix de vente des unités achetées
     assert j["freight"]["pool"] == 2000.0 and abs(j["freight"]["rate"] - rate) < 1e-5 and abs(t["real"]["freight"] - rate * 382.0) < 1e-3
     assert z["margin"]["theoretical"] is None and z["gap"] is None and j["real_error"] is None             # coût nul : marge non calculable, pas 100 %
+
+
+def test_contacts_falls_back_when_odoo_refuses_a_field():
+    p = OdooProvider.__new__(OdooProvider)
+    seen = []
+
+    def call(model, method, **kw):
+        seen.append(kw["fields"])
+        if "function" in kw["fields"]:
+            raise RuntimeError("Invalid field 'function' on model 'res.partner'")
+        return [{"id": 7, "name": "Julien Garage", "email": " julien@garage.be ", "phone": False, "is_company": False, "parent_id": [3, "Garage SRL"]}]
+    p._call = call
+    r = p.contacts("juli")
+    assert r == [{"id": 7, "name": "Julien Garage", "email": "julien@garage.be", "phone": "", "company": "Garage SRL", "function": ""}]
+    assert len(seen) == 2 and "function" in seen[0] and "function" not in seen[1]
+
+
+def test_contacts_raises_when_odoo_fails_for_every_field_list():
+    p = OdooProvider.__new__(OdooProvider)
+
+    def call(model, method, **kw):
+        raise RuntimeError("accès refusé")
+    p._call = call
+    import pytest
+    with pytest.raises(RuntimeError, match="accès refusé"):
+        p.contacts("juli")

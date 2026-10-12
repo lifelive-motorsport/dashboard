@@ -768,9 +768,9 @@ def place_details(place_id: str, _user: str = Depends(super_user)):
 def resource_contacts(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(super_user)):
     try:
         return {"contacts": provider().contacts(q)}
-    except Exception:
+    except Exception as e:
         log.exception("Recherche de contacts impossible")
-        return {"contacts": [], "unavailable": "Recherche momentanément indisponible."}
+        return {"contacts": [], "unavailable": f"Recherche momentanément indisponible : {e}"}
 
 
 @app.get("/api/staff/invoices")

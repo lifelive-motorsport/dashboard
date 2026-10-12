@@ -163,3 +163,9 @@ def test_entry_takes_assignment_from_job(api):
     as_(api, MEC)
     e = api.post("/api/timesheets/entries", json=entry(jid, assignment="crash")).json()
     assert e["assignment"] == "setup"
+
+
+def test_sub_bu_jobs_belong_to_cars_chef(api):
+    assert mkjob(api, bu="MODERN_RALLY", title="Job MR").status_code == 200           # chef CARS : sous-BU CARS acceptées
+    as_(api, CHEF_XC)
+    assert api.post("/api/timesheets/jobs", json={"kind": "atelier", "title": "x", "bu": "HISTORIC_RACING"}).status_code == 403

@@ -37,7 +37,7 @@ class EventRef(BaseModel):
 class JobIn(BaseModel):
     kind: Literal["atelier", "event", "background"]
     title: str = Field(min_length=1, max_length=140)
-    bu: Literal["XC", "CARS", "ALL"] = "CARS"
+    bu: Literal["XC", "CARS", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "ALL"] = "CARS"       # CARS = toutes les BU CARS
     vehicle: VehicleRef | None = None
     event: EventRef | None = None
     open: bool = True
@@ -208,11 +208,16 @@ def role_of(email: str) -> dict:
     return {"role": "mechanic", "bus": [], "person": p, "super": False}
 
 
+def bu_group(bu: str) -> str:
+    """Chef d'atelier CARS : gère CARS et ses sous-BU (Modern Rally, Historic Rally, Historic Racing)."""
+    return bu if bu in ("XC", "ALL") else "CARS"
+
+
 def chef_for(r: dict, job: dict | None) -> bool:
     """Le chef d'atelier gère les jobs de sa BU (et ceux « ALL ») ; le Super User, tous."""
     if r["role"] != "chef":
         return False
-    return r["super"] or not job or job.get("bu") == "ALL" or job.get("bu") in r["bus"]
+    return r["super"] or not job or job.get("bu") == "ALL" or bu_group(job.get("bu", "CARS")) in r["bus"]
 
 
 def now() -> datetime:
@@ -397,7 +402,7 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
     have = {j["title"].lower() for j in jobs().all()}
     out: list[dict] = []
     for ev in view["events"]:
-        bu = "XC" if ev["bu"] == "XC" else "CARS"
+        bu = ev["bu"] if ev["bu"] in ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING") else "CARS"
         eref = {"id": ev["id"], "title": ev["title"]}
         out.append({"kind": "event", "title": ev["title"], "bu": bu, "vehicle": None, "event": eref, "when": ev["start"]})
         for v in ev["vehicles"]:
@@ -406,5 +411,5 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
                 continue
             vname = re.sub(r"^\s*[(\[][^)\]]*[)\]]\s*[-:]?\s*", "", r["name"]) or r["name"]
             for prefix, asg in (("Pre-event", "prepa"), ("Post-event", "revision")):
-                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": "CARS", "vehicle": {"id": "", "name": vname}, "event": eref, "assignment": asg, "when": ev["start"]})
+                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": bu, "vehicle": {"id": "", "name": vname}, "event": eref, "assignment": asg, "when": ev["start"]})
     return [s for s in out if s["title"].lower() not in have]

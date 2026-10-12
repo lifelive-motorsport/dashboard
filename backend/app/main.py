@@ -750,7 +750,7 @@ def ts_jobs(all: bool = False, user: str = Depends(require_user)):
 @app.post("/api/timesheets/jobs")
 def ts_create_job(body: timesheets.JobIn, user: str = Depends(require_user)):
     r = _ts_chef(user)
-    if not r["super"] and body.bu != "ALL" and body.bu not in r["bus"]:
+    if not r["super"] and body.bu != "ALL" and timesheets.bu_group(body.bu) not in r["bus"]:
         raise HTTPException(403, f"Vous gérez les jobs de la BU {', '.join(r['bus'])}")
     return timesheets.create_job(body, user)
 

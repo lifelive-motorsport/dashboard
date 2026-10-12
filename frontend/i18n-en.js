@@ -1252,3 +1252,4 @@ EN_PATTERNS.push(
   [/^Supprimer « (.+) » de Google Agenda \? Les invités seront prévenus\.$/, m => 'Delete “' + m[1] + '” from Google Calendar? Guests will be notified.'],
 );
 EN_PATTERNS.push([/^Recherche momentanément indisponible : (.+)$/, m => 'Search temporarily unavailable: ' + m[1]]);
+Object.assign(EN, {'jj/mm/aaaa': 'dd/mm/yyyy', 'Calendrier': 'Calendar', 'Date invalide : saisissez jj/mm/aaaa.': 'Invalid date: enter dd/mm/yyyy.'});

@@ -16,6 +16,9 @@ async function peLoad() {
   } catch (e) { pe.error = e.message; pe.loaded = true; }
 }
 
+// Champ date jj/mm/aaaa (le champ natif suit la langue du navigateur et ne peut pas être forcé) : saisie au clavier + calendrier natif ouvert par le bouton
+const peParse = t => { const m = /^\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\s*$/.exec(t || ''); if (!m) return null; const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])); return d.getUTCFullYear() === +m[3] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[1] ? d.toISOString().slice(0, 10) : null; };
+const peDate = (f, iso, min = '', max = '') => `<span class="datef"><input class="sdin pe-d" data-f="${f}" value="${iso ? fmtDate(iso) : ''}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="pe-cal" data-f="${f}" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="pe-dp" data-f="${f}" value="${iso || ''}" ${min ? `min="${min}"` : ''} ${max ? `max="${max}"` : ''} tabindex="-1" aria-hidden="true"></span>`;
 const peIn = (f, v, type = 'text', extra = '') => `<input class="sdin pe-f" data-f="${f}" type="${type}" value="${esc(v || '')}" ${extra}>`;
 const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).label || id;
 const peStaffList = () => rs.staff.filter(p => p.active).sort((a, b) => (pe.form.bu ? ((b.alloc || {})[pe.form.bu] > 0) - ((a.alloc || {})[pe.form.bu] > 0) : 0) || a.name.localeCompare(b.name));
@@ -55,8 +58,8 @@ function peFormHtml() {
     <div class="sdgrid"><label class="sdfield" style="grid-column:1/-1"><span>Titre</span>${peIn('title', f.title, 'text', 'maxlength="120"')}</label></div>
     <div class="sdfield"><span>BU</span><div class="bu-filter">${bus}</div></div>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-conf" ${f.confirmed ? 'checked' : ''}> Confirmé <small class="na">${f.confirmed ? '' : '(sinon « [TBC] » est ajouté au début du titre ; les prestataires sont invités à la confirmation)'}</small></label>
-    <div class="sdgrid"><label class="sdfield"><span>Début de l’événement</span>${peIn('start', f.start, 'date')}</label><label class="sdfield"><span>Fin de l’événement</span>${peIn('end', f.end, 'date', f.start ? `min="${f.start}"` : '')}</label>
-    <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peIn('immo_start', f.immo_start, 'date', f.start ? `max="${f.start}"` : '')}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peIn('immo_end', f.immo_end, 'date', f.end ? `min="${f.end}"` : '')}</label></div>
+    <div class="sdgrid"><label class="sdfield"><span>Début de l’événement</span>${peDate('start', f.start)}</label><label class="sdfield"><span>Fin de l’événement</span>${peDate('end', f.end, f.start)}</label>
+    <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peDate('immo_start', f.immo_start, '', f.start)}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peDate('immo_end', f.immo_end, f.end)}</label></div>
     <small class="na">Par défaut, l’immobilisation reprend les dates de l’événement élargies de ${c.travel_days} jour${c.travel_days > 1 ? 's' : ''} de trajet de chaque côté. Elle ne change que la réservation des véhicules.</small>
     <div class="sdfield" style="margin-top:10px"><span>Lieu (choisi dans la recherche Google)</span>${place}</div>
     <label class="sdfield" style="margin-top:10px"><span>Notes</span><textarea class="sdin pe-f" data-f="notes" rows="3" maxlength="2000">${esc(f.notes)}</textarea></label>
@@ -136,9 +139,12 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target; if (!t.classList || !document.getElementById('pe-view')) return;
   const f = pe.form;
-  if (t.classList.contains('pe-f') && ['start', 'end', 'immo_start', 'immo_end'].includes(t.dataset.f)) {
-    const k = t.dataset.f; f[k] = t.value;
+  if (t.classList.contains('pe-d') || t.classList.contains('pe-dp')) {
+    const k = t.dataset.f, iso = t.classList.contains('pe-dp') ? t.value : peParse(t.value);
+    if (!iso) { pe.msg = 'Date invalide : saisissez jj/mm/aaaa.'; pe.msgOk = false; peDraw(); return; }
+    pe.msg = null; f[k] = iso;
     if (k === 'start' && (!f.end || f.end < f.start)) f.end = f.start;
+    if (k === 'end' && f.end < f.start) f.start = f.end;
     if (k === 'immo_start' || k === 'immo_end') f.immoTouched = true;
     peWiden(); if (f.immo_start > f.start) f.immo_start = f.start; if (f.immo_end < f.end) f.immo_end = f.end;
     peDraw(); peCheckBusy();
@@ -153,6 +159,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('pe-view')) return;
   const f = pe.form;
   if (t.id === 'pe-new') peOpenNew();
+  else if (t.classList.contains('pe-cal')) { const dp = document.querySelector(`.pe-dp[data-f="${t.dataset.f}"]`); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } }
   else if (t.id === 'pe-cancel') { pe.open = false; pe.msg = null; peDraw(); }
   else if (t.classList.contains('pe-bu')) { f.bu = t.dataset.bu; peDraw(); }
   else if (t.classList.contains('pe-vcat')) { pe.vcat = t.dataset.c; peDraw(); }

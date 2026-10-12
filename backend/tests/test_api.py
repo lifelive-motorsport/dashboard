@@ -435,6 +435,10 @@ def test_resources_super_user_only_and_demo_flow(monkeypatch):
     assert ok.status_code == 200 and ok.json()["email"] == "test@lifelive-motorsport.com"
     assert c.put("/api/resources/staff/r1", json={"email": "pas-un-mail"}).status_code == 422
     assert c.put("/api/resources/staff/nope", json={"email": ""}).status_code == 404
+    both = c.put("/api/resources/staff/r1", json={"all_bus": True}).json()
+    assert both == {"id": "r1", "email": "test@lifelive-motorsport.com", "all_bus": True}          # seuls les champs fournis changent
+    assert c.get("/api/resources").json()["staff"][0]["all_bus"] is True
+    assert c.put("/api/resources/staff/r1", json={"all_bus": False}).json()["all_bus"] is False
     got = c.get("/api/resources").json()["staff"]
     assert got[0]["email"] == "test@lifelive-motorsport.com"
     # prestataires externes : liste, doublon refusé, conflit de version
@@ -572,3 +576,16 @@ def test_external_roles_are_read_from_odoo_and_override_stored_copy():
     from app import resources
     assert resources.store().get()["data"]["externals"][0]["role"] == "saisi à la main"          # la copie enregistrée n'est pas modifiée par la lecture
     c.put("/api/resources/externals", json={"data": {"externals": []}, "base": c.get("/api/resources").json()["externals"]["updated_at"]})
+
+
+def test_service_worker_lists_every_script_and_is_not_empty():
+    """Le service worker ne doit jamais être vide et doit mettre en cache tous les scripts de index.html (et seulement des fichiers qui existent)."""
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "frontend"
+    sw = (root / "sw.js").read_text()
+    assert re.search(r"const C = 'shell-v\d+'", sw)
+    shell = set(re.findall(r"'([A-Za-z0-9_./-]+\.(?:js|css|json|png|svg))'", sw))
+    scripts = set(re.findall(r'<script src="([^"]+)"', (root / "index.html").read_text()))
+    assert scripts <= shell, f"absents du cache : {scripts - shell}"
+    assert all((root / f).exists() for f in shell), [f for f in shell if not (root / f).exists()]

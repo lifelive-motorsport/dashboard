@@ -1,0 +1,4 @@
+// Tri alphabétique des personnes sur le NOM de famille (dernier mot du nom, particules « de », « van »… comprises), puis le prénom. Chargé avant resources.js, events.js et staffdata.js.
+const NAME_PARTICLES = new Set(['de', 'du', 'des', 'van', 'von', 'der', 'den', 'le', 'la', 'di', 'da', 'del', 'ten', 'ter', 'el']);
+function surnameOf(name) { const t = String(name || '').trim().split(/\s+/).filter(Boolean); if (!t.length) return ['', '']; let i = t.length - 1; while (i > 1 && NAME_PARTICLES.has(t[i - 1].toLowerCase())) i--; if (i === 0) return [t[0], '']; return [t.slice(i).join(' '), t.slice(0, i).join(' ')]; }
+const byName = (x, y) => { const a = surnameOf(x.name), b = surnameOf(y.name); return a[0].localeCompare(b[0], 'fr', {sensitivity: 'base'}) || a[1].localeCompare(b[1], 'fr', {sensitivity: 'base'}); };

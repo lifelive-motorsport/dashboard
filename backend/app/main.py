@@ -615,7 +615,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 def get_resources(user: str = Depends(super_user)):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
-        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {})}
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False))}
                   for p in staff.store().get()["data"]["people"]]
         res = copy.deepcopy(resources.store().get())
     except Exception:
@@ -653,7 +653,8 @@ def put_resource_externals(body: resources.SaveBody, user: str = Depends(super_u
 
 
 class StaffEmailBody(BaseModel):
-    email: str = Field(default="", max_length=120)
+    email: str | None = Field(default=None, max_length=120)         # seuls les champs fournis sont modifiés
+    all_bus: bool | None = None
 
 
 @app.put("/api/resources/staff/{pid}")
@@ -665,7 +666,10 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
         person = next((p for p in data["people"] if p["id"] == pid), None)
         if person is None:
             raise HTTPException(404, "Personne introuvable")
-        person["google_email"] = body.email
+        if body.email is not None:
+            person["google_email"] = body.email
+        if body.all_bus is not None:
+            person["all_bus"] = body.all_bus
         data = staff.StaffDoc.model_validate(data).model_dump()
         doc = staff.store().put(data, user, cur["updated_at"])
     except HTTPException:
@@ -677,7 +681,8 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
         raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
-    return {"id": pid, "email": next(p for p in doc["data"]["people"] if p["id"] == pid)["google_email"]}
+    saved = next(p for p in doc["data"]["people"] if p["id"] == pid)
+    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"]}
 
 
 @app.get("/api/resources/directory-users")

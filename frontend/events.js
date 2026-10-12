@@ -22,11 +22,11 @@ const peDate = (f, iso, min = '', max = '') => `<span class="datef"><input class
 const peIn = (f, v, type = 'text', extra = '') => `<input class="sdin pe-f" data-f="${f}" type="${type}" value="${esc(v || '')}" ${extra}>`;
 const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).label || id;
 // Staff et prestataires proposés : ceux de la BU choisie (imputation du personnel ; BU cochées sur la fiche du prestataire), plus ceux déjà sélectionnés ; « Afficher tout » lève le filtre
-const peStaffIn = p => !!pe.form.bu && ((p.alloc || {})[pe.form.bu] || 0) > 0;
+const peStaffIn = p => !!pe.form.bu && (p.all_bus || ((p.alloc || {})[pe.form.bu] || 0) > 0);
 const peExtIn = x => !!pe.form.bu && (x.bus || []).includes(pe.form.bu);
 const peStaffShown = () => peStaffList().filter(p => pe.showAll || peStaffIn(p) || pe.form.staff.includes(p.email));
 const peExtShown = () => rs.externals.filter(x => pe.showAll || peExtIn(x) || pe.form.externals.includes(x.email)).sort(peCmp);
-const peCmp = (a, b) => a.name.localeCompare(b.name, 'fr', {sensitivity: 'base'});
+const peCmp = byName;
 const peStaffList = () => rs.staff.filter(p => p.active).sort(peCmp);
 const peVehicles = () => ((rs.vehicles || {}).items || []).filter(v => v.email);
 
@@ -105,7 +105,7 @@ function peCheckBusy() {
 
 function peListHtml() {
   const rows = pe.events.map(e => {
-    const names = e.staff_and_external.map(m => (rs.staff.find(p => p.email === m) || rs.externals.find(x => x.email === m) || {}).name || m);
+    const names = e.staff_and_external.map(m => ({name: (rs.staff.find(p => p.email === m) || rs.externals.find(x => x.email === m) || {}).name || m})).sort(byName).map(x => x.name);
     const vnames = e.vehicles.map(m => (peVehicles().find(v => v.email === m) || {}).name || m);
     const sym = PE_BU_SYM[e.bu] ? BuSymbol(PE_BU_SYM[e.bu], {size: 14}) : '';
     return `<tr><td>${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</td><td class="prod">${sym} ${e.confirmed ? '' : '<span class="badge-profile">TBC</span> '}<b>${esc(e.title)}</b><br><small class="na">${esc(peBuLabel(e.bu))} · ${esc(e.place.address)}</small>${(e.via || []).map(v => `<br><small class="neg">⚠ ${esc(v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni')}</small>`).join('')}</td>`

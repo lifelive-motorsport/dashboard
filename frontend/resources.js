@@ -13,8 +13,8 @@ function rsMatch(users) {
   return out;
 }
 // Une personne relève d'une BU si une part de son imputation y va (le filtre « ALL » montre tout le monde, y compris le support et le management)
-const rsInBu = p => buSel === 'all' || (BU_KEYS[buSel] || []).some(k => ((p.alloc || {})[k] || 0) > 0);
-const rsCmp = (a, b) => a.name.localeCompare(b.name, 'fr', {sensitivity: 'base'});
+const rsInBu = p => buSel === 'all' || p.all_bus || (BU_KEYS[buSel] || []).some(k => ((p.alloc || {})[k] || 0) > 0);
+const rsCmp = byName;
 const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p)).sort(rsCmp);
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
@@ -46,10 +46,10 @@ function rsDrawStaff() {
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
   const vis = rsVisible();
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}</td><td>${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${esc(p.function || '')}</td>`
-    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td></tr>`;
+    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td><td><label class="chk" title="Proposée pour toutes les BU, quelle que soit son imputation"><input type="checkbox" class="rs-allbu" data-pid="${esc(p.id)}" ${p.all_bus ? 'checked' : ''}> <small class="na">toutes</small></label></td></tr>`;
   const nSugg = Object.keys(rs.sugg).length;
   a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
-    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
+    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google', 'Toutes les BU'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
 }
 function rsDrawExt() {
   const b = document.getElementById('rs-ext'); if (!b) return;
@@ -92,6 +92,11 @@ async function rsSaveExternals() {
 
 document.addEventListener('change', async e => {
   const t = e.target; if (!t.classList) return;
+  if (t.classList.contains('rs-allbu')) {
+    const p = rs.staff.find(x => x.id === t.dataset.pid); if (!p) return;
+    try { const j = await rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({all_bus: t.checked})}); p.all_bus = j.all_bus; rs.msg = null; } catch (err) { t.checked = !t.checked; alert(err.message); }
+    drawResources(); return;
+  }
   if (t.classList.contains('rs-mail')) {
     const pid = t.dataset.pid, st = document.getElementById('rs-st-' + pid), v = t.value.trim();
     if (!rsMail(v)) { if (st) st.innerHTML = '<small class="neg">adresse invalide</small>'; return; }

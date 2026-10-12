@@ -164,6 +164,12 @@ class DemoProvider:
     def staff_partners(self, q: str) -> list[dict]:
         return [{"id": 9001, "name": "Société exemple SRL", "vat": "BE0123456789", "city": "Liège"}, {"id": 9002, "name": "Consulting exemple SA", "vat": "", "city": "Namur"}]
 
+    def contacts(self, q: str) -> list[dict]:
+        base = [{"id": 9101, "name": "Julien Garage", "email": "julien@garage-exemple.be", "phone": "+32 470 00 00 01", "company": "Garage exemple SRL", "function": "Mécanicien"},
+                {"id": 9102, "name": "Sophie Transport", "email": "sophie@transport-exemple.be", "phone": "", "company": "Transport exemple SA", "function": "Chauffeur"},
+                {"id": 9103, "name": "Marc Sans Mail", "email": "", "phone": "+32 470 00 00 03", "company": "", "function": ""}]
+        return [c for c in base if q.lower() in (c["name"] + c["company"] + c["email"]).lower()]
+
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
         return [{"number": f"FACTU/{year}/0{i}", "ref": f"F{i}", "date": f"{year}-0{i}-15", "untaxed": 4500.0, "fees": 4000.0 if i % 2 else 4500.0, "total": 5445.0, "paid": i < 4, "partner": "Société exemple SRL", "refund": False} for i in range(1, 6)]
 

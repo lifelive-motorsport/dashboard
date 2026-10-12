@@ -97,5 +97,6 @@ CALENDAR_IDS = [x.strip() for x in re.split(r"[|;,]", os.getenv("CALENDAR_IDS", 
 CALENDAR_SERVICE_ACCOUNT = os.getenv("CALENDAR_SERVICE_ACCOUNT", "") or GA_SERVICE_ACCOUNT
 CALENDAR_EXCLUDE_REGEX = os.getenv("CALENDAR_EXCLUDE_REGEX", r"^\s*\((circuit|rally)\)")       # ressources à ignorer : par défaut les voitures de course (« (Circuit)-… », « (Rally)-… »), qui ne sont pas des véhicules de service
 CALENDAR_VEHICLE_REGEX = os.getenv("CALENDAR_VEHICLE_REGEX", "")                                       # ne garder que les ressources dont le nom correspond (vide : toutes les ressources)
+GOOGLE_DELEGATED_USER = os.getenv("GOOGLE_DELEGATED_USER", "")                                          # adresse Workspace (ex. planning@…) au nom de laquelle le compte de service agit : délégation à l'échelle du domaine (liste des ressources, puis création d'événements)
 FUEL_SUPPLIER_NAME = os.getenv("FUEL_SUPPLIER_NAME", "DKV Euro Service")                               # fournisseur des cartes carburant (recherche par nom)
 FUEL_BUFFER_DAYS = int(os.getenv("FUEL_BUFFER_DAYS", "3"))                                              # jours avant / après un événement pendant lesquels le véhicule est en déplacement

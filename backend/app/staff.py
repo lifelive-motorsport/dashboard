@@ -16,6 +16,7 @@ from . import settings
 SHARES = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "SHARED", "MANAGEMENT")     # les 4 BU + Shared Services (support) + Management (isolé pour afficher la marge nette avec ou sans)
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class Extra(BaseModel):
@@ -79,6 +80,15 @@ class Person(BaseModel):
     alloc: dict[str, float] = Field(default_factory=dict)               # % d'imputation : XC, MODERN_RALLY, HISTORIC_RALLY, HISTORIC_RACING, SHARED, MANAGEMENT
     common_split: dict[str, float] = Field(default_factory=dict)       # répartition (en %) de la part Shared Services + Management de cette personne sur les 4 BU ; vide = clé générale des frais communs
     note: str = Field(default="", max_length=500)
+    google_email: str = Field(default="", max_length=120)               # compte Google de la personne : invitée aux événements créés dans Google Agenda
+
+    @field_validator("google_email")
+    @classmethod
+    def _google_email(cls, v):
+        v = (v or "").strip().lower()
+        if v and not EMAIL.match(v):
+            raise ValueError("adresse e-mail invalide")
+        return v
 
     @field_validator("id")
     @classmethod

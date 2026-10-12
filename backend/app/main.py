@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import re
 import logging
 import time
@@ -10,7 +11,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Res
 from fastapi.responses import FileResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import adjustments, dkv, expenses, ga, gcal, settings, staff, stockvar, tn11
+from pydantic import BaseModel, Field
+
+from . import adjustments, dkv, expenses, ga, gauth, gcal, resources, settings, staff, stockvar, tn11
 from . import access, projection, users
 from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
 from .bu import aggregate
@@ -606,6 +609,73 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
     except Exception:
         log.exception("Recherche de sociétés impossible")
         return {"partners": [], "unavailable": "Recherche momentanément indisponible."}
+
+
+@app.get("/api/resources")
+def get_resources(user: str = Depends(super_user)):
+    """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
+    try:
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", "")}
+                  for p in staff.store().get()["data"]["people"]]
+        res = resources.store().get()
+    except Exception:
+        log.exception("Lecture des ressources impossible")
+        raise HTTPException(503, "Stockage des ressources inaccessible")
+    try:
+        veh = resources.vehicles()
+    except Exception:
+        log.exception("Véhicules de service (ressources Google) indisponibles")
+        veh = {"configured": False, "source": "none", "items": [], "message": "Liste des véhicules momentanément indisponible."}
+    return {"staff": people, "externals": res, "vehicles": veh, "delegation": gauth.configured() or settings.PROVIDER == "demo"}
+
+
+@app.put("/api/resources/externals")
+def put_resource_externals(body: resources.SaveBody, user: str = Depends(super_user)):
+    try:
+        doc = resources.store().put(body.data.model_dump(), user, body.base)
+    except Exception:
+        log.exception("Enregistrement des prestataires impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return doc
+
+
+class StaffEmailBody(BaseModel):
+    email: str = Field(default="", max_length=120)
+
+
+@app.put("/api/resources/staff/{pid}")
+def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super_user)):
+    """Compte Google d'une personne du staff : enregistré dans sa fiche (le reste de la fiche est conservé)."""
+    try:
+        cur = staff.store().get()
+        data = copy.deepcopy(cur["data"])                 # on modifie une copie : un refus de validation ne doit rien changer
+        person = next((p for p in data["people"] if p["id"] == pid), None)
+        if person is None:
+            raise HTTPException(404, "Personne introuvable")
+        person["google_email"] = body.email
+        data = staff.StaffDoc.model_validate(data).model_dump()
+        doc = staff.store().put(data, user, cur["updated_at"])
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(422, "Adresse e-mail invalide") from e
+    except Exception:
+        log.exception("Enregistrement du compte Google impossible")
+        raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
+    if doc is None:
+        raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
+    return {"id": pid, "email": next(p for p in doc["data"]["people"] if p["id"] == pid)["google_email"]}
+
+
+@app.get("/api/resources/contacts")
+def resource_contacts(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(super_user)):
+    try:
+        return {"contacts": provider().contacts(q)}
+    except Exception:
+        log.exception("Recherche de contacts impossible")
+        return {"contacts": [], "unavailable": "Recherche momentanément indisponible."}
 
 
 @app.get("/api/staff/invoices")

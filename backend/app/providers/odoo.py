@@ -667,6 +667,15 @@ class OdooProvider:
                           fields=["name", "vat", "city"], limit=20, order="name")
         return [{"id": r["id"], "name": r["name"], "vat": r.get("vat") or "", "city": r.get("city") or ""} for r in rows]
 
+    def contacts(self, q: str) -> list[dict]:
+        """Contacts Odoo (personnes et sociétés) dont le nom, l'adresse ou la société contient `q` : prestataires à inviter aux événements."""
+        q = q.strip()
+        rows = self._call("res.partner", "search_read",
+                          domain=["&", ("active", "=", True), "|", "|", ("name", "ilike", q), ("email", "ilike", q), ("parent_id.name", "ilike", q)],
+                          fields=["name", "email", "phone", "mobile", "is_company", "parent_id", "function"], limit=25, order="name")
+        return [{"id": r["id"], "name": r["name"], "email": (r.get("email") or "").strip(), "phone": r.get("mobile") or r.get("phone") or "",
+                 "company": r["parent_id"][1] if r.get("parent_id") else (r["name"] if r.get("is_company") else ""), "function": r.get("function") or ""} for r in rows]
+
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
         """Factures et avoirs fournisseurs comptabilisés des sociétés données (et de leurs contacts) sur l'année."""
         if not partner_ids:

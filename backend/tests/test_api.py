@@ -417,3 +417,31 @@ def test_legacy_host_redirect(monkeypatch):
     assert c.get("/api/health", headers={"host": "dashboard-app.lifelive-motorsport.com"}).status_code == 200
     assert c.get("/api/health", headers={"host": "logbook.lifelive-motorsport.com"}).status_code == 200
     assert c.get("/api/health", headers={"host": "dashboard-xyz.europe-west1.run.app"}).status_code == 200
+
+
+def test_resources_super_user_only_and_demo_flow(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    r = c.get("/api/resources")
+    assert r.status_code == 200 and {"staff", "externals", "vehicles", "delegation"} <= set(r.json())
+    assert r.json()["vehicles"]["items"]
+    # compte Google d'une personne du staff (créée à la volée)
+    from app import staff
+    cur = staff.store().get()
+    people = [{"id": "r1", "name": "Test Resource", "kind": "salarie"}]
+    assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
+    ok = c.put("/api/resources/staff/r1", json={"email": "Test@Lifelive-Motorsport.com"})
+    assert ok.status_code == 200 and ok.json()["email"] == "test@lifelive-motorsport.com"
+    assert c.put("/api/resources/staff/r1", json={"email": "pas-un-mail"}).status_code == 422
+    assert c.put("/api/resources/staff/nope", json={"email": ""}).status_code == 404
+    got = c.get("/api/resources").json()["staff"]
+    assert got[0]["email"] == "test@lifelive-motorsport.com"
+    # prestataires externes : liste, doublon refusé, conflit de version
+    base = c.get("/api/resources").json()["externals"]["updated_at"]
+    ext = {"partner_id": 9101, "name": "Julien Garage", "email": "julien@garage-exemple.be"}
+    assert c.put("/api/resources/externals", json={"data": {"externals": [ext, ext]}, "base": base}).status_code == 422
+    assert c.put("/api/resources/externals", json={"data": {"externals": [ext]}, "base": base}).status_code == 200
+    assert c.put("/api/resources/externals", json={"data": {"externals": []}, "base": base}).status_code == 409
+    q = c.get("/api/resources/contacts", params={"q": "garage"}).json()["contacts"]
+    assert q and q[0]["email"]

@@ -350,11 +350,14 @@ def listing(d_from: date, d_to: date) -> list[dict]:
         title = ev.get("summary", "")
         att = ev.get("attendees", [])
         vehicles = [a["email"] for a in att if a.get("resource")] + [a["email"] for a in (vehs[lbid].get("attendees", []) if lbid in vehs else []) if a.get("resource")]
+        responses = {a["email"]: a.get("responseStatus", "needsAction") for a in att}          # accepted | needsAction | declined | tentative
+        if lbid in vehs:
+            responses.update({a["email"]: a.get("responseStatus", "needsAction") for a in vehs[lbid].get("attendees", [])})
         imm = sh.get("immo", "").split("/")
         out.append({"id": lbid, "bu": sh.get("bu", ""), "title": title[len(TBC):] if title.startswith(TBC) else title, "confirmed": sh.get("confirmed") == "1",
                     "start": _start(ev), "end": _inc_end(ev), "immo_start": imm[0] if len(imm) == 2 else _start(ev), "immo_end": imm[1] if len(imm) == 2 else _inc_end(ev),
                     "place": {"id": sh.get("place", ""), "address": ev.get("location", "")}, "origin": {"id": sh["origin"], "address": sh.get("origin_addr", "")} if sh.get("origin") else None, "notes": notes, "km": int(sh["km"]) if sh.get("km", "").isdigit() else None,
-                    "via": [x for x in sh.get("via", "").split(",") if x], "staff_and_external": [a["email"] for a in att if not a.get("resource")], "externals_pending": [x for x in sh.get("pending", "").split(",") if x], "vehicles": vehicles})
+                    "via": [x for x in sh.get("via", "").split(",") if x], "staff_and_external": [a["email"] for a in att if not a.get("resource")], "externals_pending": [x for x in sh.get("pending", "").split(",") if x], "responses": responses, "vehicles": vehicles})
     return sorted(out, key=lambda x: (x["start"], x["title"]))
 
 

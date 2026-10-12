@@ -25,6 +25,9 @@ const peDiff = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + '
 const peIn = (f, v, type = 'text', extra = '') => `<input class="sdin pe-f" data-f="${f}" type="${type}" value="${esc(v || '')}" ${extra}>`;
 const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).label || id;
 // Staff et prestataires proposés : ceux de la BU choisie (imputation du personnel ; BU cochées sur la fiche du prestataire), plus ceux déjà sélectionnés ; « Afficher tout » lève le filtre
+// Réponse d'un invité dans Google Agenda : accepté, sans réponse, refusé (pour un véhicule : conflit de réservation), peut-être
+const PE_RSVP = {accepted: ['✓', 'ok', 'A accepté'], needsAction: ['…', 'wait', 'N’a pas encore répondu'], declined: ['✗', 'no', 'A refusé'], tentative: ['?', 'wait', 'Peut-être']};
+const peRsvp = st => { const [i, c, t] = PE_RSVP[st] || PE_RSVP.needsAction; return `<span class="rsvp ${c}" title="${t}" aria-label="${t}">${i}</span>`; };
 const peStaffIn = p => !!pe.form.bu && (p.all_bus || ((p.alloc || {})[pe.form.bu] || 0) > 0);
 const peExtIn = x => !!pe.form.bu && (x.bus || []).includes(pe.form.bu);
 const peStaffShown = () => peStaffList().filter(p => pe.showAll || peStaffIn(p) || pe.form.staff.includes(p.email));
@@ -108,13 +111,15 @@ function peCheckBusy() {
 
 function peListHtml() {
   const rows = pe.events.map(e => {
-    const names = e.staff_and_external.map(m => ({name: (rs.staff.find(p => p.email === m) || rs.externals.find(x => x.email === m) || {}).name || m})).sort(byName).map(x => x.name);
-    const vnames = e.vehicles.map(m => (peVehicles().find(v => v.email === m) || {}).name || m);
+    const rv = m => peRsvp((e.responses || {})[m]);
+    const names = e.staff_and_external.map(m => ({name: (rs.staff.find(p => p.email === m) || rs.externals.find(x => x.email === m) || {}).name || m, st: (e.responses || {})[m]})).sort(byName).map(x => `${peRsvp(x.st)} ${esc(x.name)}`);
+    const vnames = e.vehicles.map(m => `${peRsvp((e.responses || {})[m])} ${esc((peVehicles().find(v => v.email === m) || {}).name || m)}`);
+    const waiting = e.staff_and_external.filter(m => (e.responses || {})[m] !== 'accepted' && (e.responses || {})[m] !== 'declined').length, refused = Object.values(e.responses || {}).filter(x => x === 'declined').length;
     const sym = PE_BU_SYM[e.bu] ? BuSymbol(PE_BU_SYM[e.bu], {size: 14}) : '';
     return `<tr><td>${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</td><td class="prod">${sym} ${e.confirmed ? '' : '<span class="badge-profile">TBC</span> '}<b>${esc(e.title)}</b><br><small class="na">${esc(peBuLabel(e.bu))} · ${esc(e.place.address)}</small>${(e.via || []).map(v => `<br><small class="neg">⚠ ${esc(v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni')}</small>`).join('')}</td>`
-      + `<td>${e.km != null ? e.km + ' km' : '–'}</td><td><small>${esc(names.join(', ') || '–')}${e.externals_pending.length ? `<br><span class="na">${e.externals_pending.length} prestataire${e.externals_pending.length > 1 ? 's' : ''} à inviter à la confirmation</span>` : ''}</small></td><td><small>${esc(vnames.join(', ') || '–')}${vnames.length ? `<br><span class="na">${fmtDate(e.immo_start)} → ${fmtDate(e.immo_end)}</span>` : ''}</small></td>`
+      + `<td>${e.km != null ? e.km + ' km' : '–'}</td><td><small>${names.join(', ') || '–'}${waiting ? `<br><span class="na">${waiting} sans réponse</span>` : ''}${refused ? `<br><span class="neg">${refused} refus</span>` : ''}${e.externals_pending.length ? `<br><span class="na">${e.externals_pending.length} prestataire${e.externals_pending.length > 1 ? 's' : ''} à inviter à la confirmation</span>` : ''}</small></td><td><small>${vnames.join(', ') || '–'}${vnames.length ? `<br><span class="na">${fmtDate(e.immo_start)} → ${fmtDate(e.immo_end)}</span>` : ''}</small></td>`
       + `<td><button type="button" class="pe-edit" data-id="${e.id}">Modifier</button> <button type="button" class="pe-del" data-id="${e.id}">Supprimer</button></td></tr>`; });
-  return '<h4 class="sub">Événements à venir (depuis 30 jours)</h4>' + (pe.unavailable ? `<p class="neg">${esc(pe.unavailable)}</p>` : '')
+  return '<h4 class="sub">Événements à venir (depuis 30 jours) <button type="button" class="mini" id="pe-refresh" title="Relire Google Agenda (réponses des invités)">↻ Actualiser</button></h4><small class="na">Réponses des invités : ✓ accepté · … sans réponse · ✗ refusé (pour un véhicule : déjà réservé) · ? peut-être.</small>' + (pe.unavailable ? `<p class="neg">${esc(pe.unavailable)}</p>` : '')
     + (rows.length ? table(['Dates', 'Événement', 'Distance', 'Personnes invitées', 'Véhicules', ''], rows, 'prodtable') : '<p class="na">Aucun événement créé depuis Logbook.</p>');
 }
 
@@ -192,6 +197,7 @@ document.addEventListener('click', async e => {
   const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('pe-view')) return;
   const f = pe.form;
   if (t.id === 'pe-new') peOpenNew();
+  else if (t.id === 'pe-refresh') { t.disabled = true; await peLoad(); peDraw(); }
   else if (t.classList.contains('pe-cal')) { const dp = document.querySelector(`.pe-dp[data-f="${t.dataset.f}"]`); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } }
   else if (t.classList.contains('pe-step')) { const k = t.dataset.k; f[k] = Math.max(0, Math.min(60, f[k] + (+t.dataset.d))); peWiden(); peDraw(); peCheckBusy(); }
   else if (t.id === 'pe-cancel') { pe.open = false; pe.msg = null; peDraw(); }

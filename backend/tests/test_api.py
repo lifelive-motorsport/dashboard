@@ -491,6 +491,11 @@ def test_planned_events_full_cycle():
     assert got[0]["externals_pending"] == ["ext@garage.be"]
     assert got[0]["title"] == "Spa Classic" and not got[0]["confirmed"] and got[0]["notes"] == "Camion + 2 mécanos" and got[0]["vehicles"] == ["sprinter@resource.calendar.google.com"]
     assert (got[0]["immo_start"], got[0]["immo_end"]) == ("2026-06-18", "2026-06-24") and got[0]["km"] == 63
+    assert got[0]["responses"] == {"a@lifelive-motorsport.com": "needsAction", "sprinter@resource.calendar.google.com": "needsAction"}      # pas encore de réponse
+    main["attendees"][0]["responseStatus"] = "accepted"                                       # Google met à jour la réponse dans l'événement
+    veh["attendees"][0]["responseStatus"] = "declined"
+    got = c.get("/api/events", params={"from": "2026-06-01", "to": "2026-06-30"}).json()["events"]
+    assert got[0]["responses"] == {"a@lifelive-motorsport.com": "accepted", "sprinter@resource.calendar.google.com": "declined"}
     # confirmation : titre sans TBC, prestataires invités
     assert c.put(f"/api/events/{lbid}", json=_ev(confirmed=True)).status_code == 200
     main = next(e for e in be.events[cal].values() if e["extendedProperties"]["shared"]["kind"] == "main")

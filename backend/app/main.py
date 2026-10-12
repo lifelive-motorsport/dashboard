@@ -766,7 +766,19 @@ def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_
         raise HTTPException(404, "Job introuvable")
     if not timesheets.chef_for(r, old):
         raise HTTPException(403, "Ce job est géré par l'autre chef d'atelier")
-    doc = {**old, **body.model_dump(), "title": old["title"] if old.get("kind") == "event" else (body.title.strip() or old["title"])}
+    if not r["super"] and body.bu != "ALL" and timesheets.bu_group(body.bu) not in r["bus"]:
+        raise HTTPException(403, f"Vous gérez les jobs de la BU {', '.join(r['bus'])}")
+    new = body.model_dump()
+    if all(new[k] == old.get(k, "" if k == "nature" else None) for k in ("kind", "nature", "vehicle", "event")) and body.title in ("", old["title"]):
+        title = old["title"]                                              # simple clôture / réouverture ou changement de BU : l'intitulé ne change pas
+    else:
+        try:
+            title = timesheets.job_title(body)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        if any(j["id"] != jid and j["title"].lower() == title.lower() for j in timesheets.jobs().all()):
+            raise HTTPException(422, "Ce job existe déjà")
+    doc = {**old, **new, "title": title, "assignment": timesheets.N_ASSIGN.get(body.nature, body.assignment)}
     timesheets.jobs().put(jid, doc)
     return timesheets.job_view(doc)
 

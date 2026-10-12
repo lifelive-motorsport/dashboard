@@ -232,3 +232,16 @@ def test_remove_attachment(api):
     assert api.delete(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 200
     assert api.get(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 404
     assert api.delete(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 404
+
+
+def test_edit_job_recomputes_title_and_keeps_rights(api):
+    as_(api, CHEF)
+    v = {"id": "3", "name": "BMW M3"}
+    j = api.post("/api/timesheets/jobs", json={"kind": "atelier", "bu": "HISTORIC_RACING", "nature": "pre_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}}).json()
+    r = api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "HISTORIC_RACING", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}})
+    assert r.json()["title"] == "Post-event Spa / BMW M3" and r.json()["assignment"] == "revision"
+    r = api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "HISTORIC_RACING", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}, "open": False})
+    assert r.json()["open"] is False and r.json()["title"] == "Post-event Spa / BMW M3"
+    assert api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "XC", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}}).status_code == 403
+    as_(api, CHEF_XC)
+    assert api.put(f"/api/timesheets/jobs/{j['id']}", json={"kind": "atelier", "bu": "XC", "nature": "post_event", "vehicle": v, "event": {"id": "1", "title": "Spa"}}).status_code == 403

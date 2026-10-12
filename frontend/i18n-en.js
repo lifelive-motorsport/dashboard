@@ -1323,3 +1323,4 @@ Object.assign(EN, {
 Object.assign(EN, {'Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.': 'No workshop member for this BU: choose a role in the Workshop column (Plan › Resources › Internal staff) and fill in the Google account.', 'Atelier': 'Workshop', '— Hors atelier —': '— Not in workshop —', 'Chef d’atelier CARS': 'Workshop manager CARS', 'Chef d’atelier XC': 'Workshop manager XC', 'Chef d’atelier CARS + XC': 'Workshop manager CARS + XC'});
 Object.assign(EN, {'Date invalide : saisissez jj/mm/aaaa (pas dans le futur).': 'Invalid date: enter dd/mm/yyyy (not in the future).'});
 Object.assign(EN, {'CARS (toutes)': 'CARS (all)'});
+Object.assign(EN, {'Événement (Odoo)': 'Event (Odoo)', 'Commencez à taper le nom de l’événement': 'Start typing the event name'});

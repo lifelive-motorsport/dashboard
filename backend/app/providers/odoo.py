@@ -944,8 +944,8 @@ class OdooProvider:
         if exact:
             chosen = {p["id"] for p in plans if self._plain(p["name"]).strip() == wanted}
         else:
-            chosen = {p["id"] for p in plans if (wanted in self._plain(p["name"]) if wanted else
-                                                 any(k in self._plain(p["name"]) for k in ("event", "evenement")))}
+            keys = [k.strip() for k in wanted.split("|") if k.strip()] or ["event", "evenement"]        # « meeting|events » : plusieurs noms possibles
+            chosen = {p["id"] for p in plans if any(k in self._plain(p["name"]) for k in keys)}
         if not chosen:
             names = ", ".join(sorted(p["name"] for p in plans)) or "aucun"
             raise LookupError(f"Aucun plan analytique « {label} » trouvé (plans existants : {names}). "

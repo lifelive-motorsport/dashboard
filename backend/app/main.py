@@ -791,6 +791,19 @@ def ts_vehicles(user: str = Depends(require_user)):
         return {"vehicles": [], "unavailable": f"Véhicules Odoo momentanément indisponibles : {e}"}
 
 
+@app.get("/api/timesheets/events")
+def ts_events(user: str = Depends(require_user)):
+    """Événements (comptes analytiques de l'axe MEETING / EVENTS d'Odoo) proposés à la création d'un job événement."""
+    _ts_chef(user)
+    try:
+        today = date.today()
+        v = provider().events(date(today.year - 3, 1, 1), today + timedelta(days=366))["events"]
+        return {"events": sorted(({"id": str(x["id"]), "name": x["name"]} for x in v), key=lambda x: x["name"].lower())}
+    except Exception as e:
+        log.exception("Liste des événements indisponible")
+        return {"events": [], "unavailable": f"Événements Odoo momentanément indisponibles : {e}"}
+
+
 def _ts_week(user_email: str, start: date, viewer: str, r: dict) -> dict:
     jm = {j["id"]: j for j in timesheets.jobs().all()}
     ents = timesheets.week_entries(user_email, start)

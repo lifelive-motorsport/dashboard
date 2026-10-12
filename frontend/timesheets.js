@@ -1,7 +1,7 @@
 // Consigner › Pointages : « Mes pointages » (chaque mécanicien : saisie en durée sur un job, photos, mémo vocal, récapitulatif de la semaine) et « Équipe »
 // (chef d'atelier : heures de chaque mécanicien, taux d'occupation et taux facturable, validation, jobs et propositions d'après le planning).
 // Données : /api/timesheets (backend/app/timesheets.py). S'appuie sur les outils de dates de planning.js et sur rsCall (resources.js).
-let ts = {me: null, jobs: [], start: '', week: null, team: null, form: null, pend: {photos: [], audio: null}, rec: null, open: new Set(), err: null, msg: null, loading: false, jobsAll: [], sugg: null, veh: null, jobForm: null, busy: false};
+let ts = {me: null, jobs: [], start: '', week: null, team: null, form: null, pend: {photos: [], audio: null}, rec: null, open: new Set(), err: null, msg: null, loading: false, jobsAll: [], sugg: null, veh: null, evs: null, jobForm: null, busy: false};
 const TS_BU = {CARS: 'CARS (toutes)', MODERN_RALLY: 'CARS · Modern Rally', HISTORIC_RALLY: 'CARS · Historic Rally', HISTORIC_RACING: 'CARS · Historic Racing', XC: 'XC', ALL: 'Toutes'};
 const tsBuOpts = me => ['XC', 'CARS', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING'].filter(b => me.super || me.bus.includes(b === 'XC' ? 'XC' : 'CARS')).concat(['ALL']);
 const TS_KIND = {atelier: 'Job atelier', event: 'Job événement', background: 'Tâche de fond'};
@@ -93,7 +93,7 @@ function tsJobsHtml() {
     <label class="sdfield"><span>BU</span><select class="sdin" data-j="bu">${bus.map(b => `<option value="${b}"${f.bu === b ? ' selected' : ''}>${TS_BU[b]}</option>`).join('')}</select></label></div>
     <label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>
     ${f.kind === 'atelier' ? `<label class="sdfield"><span>Voiture (Odoo)</span><select class="sdin" data-j="vehicle"><option value="">— Aucune —</option>${(ts.veh || []).map(v => `<option value="${esc(v.id)}"${f.vehicle === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>` : ''}
-    ${f.kind === 'event' ? `<label class="sdfield"><span>Événement</span><input class="sdin" data-j="event" value="${esc(f.event)}" maxlength="160" placeholder="Spa Classic"></label>` : ''}
+    ${f.kind === 'event' ? `<label class="sdfield"><span>Événement (Odoo)</span><input class="sdin" data-j="event" list="ts-evl" value="${esc(f.event)}" maxlength="160" placeholder="Commencez à taper le nom de l’événement" autocomplete="off"><datalist id="ts-evl">${(ts.evs || []).map(v => `<option value="${esc(v.name)}"></option>`).join('')}</datalist></label>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="savejob">Créer le job</button><button type="button" data-ts="canceljob">Annuler</button></div></div>`;
   const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>Affectation</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${esc((ts.me.assignments.find(x => x.id === j.assignment) || {}).label || '')}</td><td>${TS_BU[j.bu] || j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button></td></tr>`).join('')}</tbody></table>` : '';
   return `<div class="block-head"><h3>Jobs</h3></div><h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}`;
@@ -185,11 +185,12 @@ document.addEventListener('click', async ev => {
   if (a === 'save') return tsSave();
   if (a === 'sugg') { ts.sugg = []; try { const j = await rsCall('/api/timesheets/suggestions'); ts.sugg = j.suggestions; if (j.unavailable) ts.msg = j.unavailable; } catch (e) { ts.sugg = null; ts.msg = e.message; } return tsDraw(); }
   if (a === 'mk') { const s = ts.sugg[+b.dataset.i]; return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: s.kind, title: s.title, bu: s.bu, assignment: s.assignment || 'autre', vehicle: s.vehicle, event: s.event})}); ts.sugg.splice(+b.dataset.i, 1); }); }
-  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', assignment: 'autre', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.veh) { ts.veh = []; rsCall('/api/timesheets/vehicles').then(j => { ts.veh = j.vehicles; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); } return tsDraw(); }
+  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', assignment: 'autre', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.evs) { ts.evs = []; rsCall('/api/timesheets/events').then(j => { ts.evs = j.events; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); }
+    if (!ts.veh) { ts.veh = []; rsCall('/api/timesheets/vehicles').then(j => { ts.veh = j.vehicles; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); } return tsDraw(); }
   if (a === 'canceljob') { ts.jobForm = null; return tsDraw(); }
   if (a === 'savejob') {
     tsReadJob(); const f = ts.jobForm, v = (ts.veh || []).find(x => x.id === f.vehicle);
-    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, bu: f.bu, assignment: f.assignment, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: '', title: f.event} : null})}); ts.jobForm = null; });
+    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, bu: f.bu, assignment: f.assignment, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: ((ts.evs || []).find(x => x.name === f.event) || {}).id || '', title: f.event} : null})}); ts.jobForm = null; });
   }
   if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, assignment: j.assignment || 'autre', vehicle: j.vehicle, event: j.event, open: !j.open})})); }
 });

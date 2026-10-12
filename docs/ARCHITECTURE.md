@@ -57,6 +57,6 @@ L'affichage des noms est uniformisé (`backend/app/names.py`), sans rien modifie
 CA · MB · Clients (CA facturé, solde ouvert, hit-parade clients) · Fournisseurs (achats HT, hit-parade fournisseurs).
 
 ## Pages « Par événement » (analytique Odoo)
-- Source : lignes analytiques (`account.analytic.line`) des comptes du plan (axe) **MEETING** et de ses sous-plans (réglable par `EVENT_PLAN`).
+- Source : lignes analytiques (`account.analytic.line`) des comptes du plan (axe) **MEETING** et de ses sous-plans (réglable par `EVENT_PLAN`, plusieurs noms possibles séparés par « | » ; défaut « meeting|events », donc le plan peut être renommé « EVENTS »).
 - Produits = comptes 7xx ; frais directs = 602/603/604 ; autres charges = autres comptes 6xx. Un événement est rattaché à XC ou à CARS d'après l'**axe analytique BU** renseigné sur les mêmes lignes (`BU_PLAN`, défaut « BU ») ; (obligatoire à la saisie : aucune déduction de secours — une ligne sans compte BU est signalée ; comptes reconnus : XC, Modern Rally, Historic Rally, Historic Racing, Others ; « OLD … » ignoré) ; « mixte » = l'autre groupe pèse ≥ 10 % ; sinon « sans BU identifiable ». Les lignes analytiques multi-axes n'ont qu'un compte principal : on filtre sur la colonne `x_plan<id>_id` de l'axe.
 - Seules les écritures ventilées analytiquement sur l'axe apparaissent : `scripts/odoo_analytique.py` mesure cette couverture.

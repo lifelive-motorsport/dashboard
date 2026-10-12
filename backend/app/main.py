@@ -4,7 +4,7 @@ import copy
 import re
 import logging
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
-from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, tn11
+from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
 from . import access, projection, users
 from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
 from .bu import aggregate
@@ -701,6 +701,190 @@ def planning_page(date_from: date = Query(..., alias="from"), date_to: date = Qu
     except Exception as e:
         log.exception("Planning indisponible")
         raise HTTPException(503, f"Planning momentanément indisponible : {e}")
+
+
+# ---- Consigner › Pointages ----------------------------------------------------------------------------------------------------------------
+
+def _ts_ctx(user: str) -> dict:
+    r = timesheets.role_of(user)
+    if r["role"] is None:
+        raise HTTPException(403, "Votre adresse Google n'est liée à aucune fiche du staff : demandez au Super User de la renseigner (Planifier › Ressources › Staff interne).")
+    return r
+
+
+def _ts_chef(user: str) -> dict:
+    r = _ts_ctx(user)
+    if r["role"] != "chef":
+        raise HTTPException(403, "Réservé au chef d'atelier")
+    return r
+
+
+def _ts_err(e: Exception):
+    if isinstance(e, PermissionError):
+        raise HTTPException(403, str(e))
+    if isinstance(e, KeyError):
+        raise HTTPException(404, "Pointage introuvable")
+    if isinstance(e, (LookupError, ValueError)):
+        raise HTTPException(422, str(e))
+    raise e
+
+
+@app.get("/api/timesheets/me")
+def ts_me(user: str = Depends(require_user)):
+    r = timesheets.role_of(user)
+    p = r["person"] or {}
+    return {"role": r["role"], "bus": r["bus"], "super": r["super"], "name": p.get("name", ""), "theoretical": timesheets.theoretical_minutes(r["person"]),
+            "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
+            "attachments": timesheets.blobs().enabled}
+
+
+@app.get("/api/timesheets/jobs")
+def ts_jobs(all: bool = False, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    return {"jobs": timesheets.list_jobs(open_only=not (all and r["role"] == "chef"))}
+
+
+@app.post("/api/timesheets/jobs")
+def ts_create_job(body: timesheets.JobIn, user: str = Depends(require_user)):
+    r = _ts_chef(user)
+    if not r["super"] and body.bu != "ALL" and body.bu not in r["bus"]:
+        raise HTTPException(403, f"Vous gérez les jobs de la BU {', '.join(r['bus'])}")
+    return timesheets.create_job(body, user)
+
+
+@app.put("/api/timesheets/jobs/{jid}")
+def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_user)):
+    r = _ts_chef(user)
+    old = timesheets.jobs().get(jid)
+    if not old:
+        raise HTTPException(404, "Job introuvable")
+    if not timesheets.chef_for(r, old):
+        raise HTTPException(403, "Ce job est géré par l'autre chef d'atelier")
+    doc = {**old, **body.model_dump()}
+    timesheets.jobs().put(jid, doc)
+    return timesheets.job_view(doc)
+
+
+@app.get("/api/timesheets/suggestions")
+def ts_suggestions(user: str = Depends(require_user)):
+    _ts_chef(user)
+    try:
+        return {"suggestions": timesheets.suggestions(date.today())}
+    except Exception as e:
+        log.exception("Propositions de jobs indisponibles")
+        return {"suggestions": [], "unavailable": f"Planning momentanément indisponible : {e}"}
+
+
+@app.get("/api/timesheets/vehicles")
+def ts_vehicles(user: str = Depends(require_user)):
+    """Voitures (comptes analytiques CARS d'Odoo) proposées à la création d'un job d'atelier."""
+    _ts_chef(user)
+    try:
+        today = date.today()
+        v = provider().vehicles(date(today.year - 3, 1, 1), today)["vehicles"]
+        return {"vehicles": sorted(({"id": str(x["id"]), "name": x["name"]} for x in v if x.get("group", "CARS") == "CARS"), key=lambda x: x["name"].lower())}
+    except Exception as e:
+        log.exception("Liste des véhicules indisponible")
+        return {"vehicles": [], "unavailable": f"Véhicules Odoo momentanément indisponibles : {e}"}
+
+
+def _ts_week(user_email: str, start: date, viewer: str, r: dict) -> dict:
+    jm = {j["id"]: j for j in timesheets.jobs().all()}
+    ents = timesheets.week_entries(user_email, start)
+    person = timesheets.person_of(user_email)
+    return {"start": start.isoformat(), "user": user_email, "name": (person or {}).get("name", user_email),
+            "entries": [timesheets.entry_view(timesheets.public_attachments(e), viewer, r, jm) for e in ents], "summary": timesheets.summary(ents, person, jm)}
+
+
+@app.get("/api/timesheets/week")
+def ts_week(start: date, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    return _ts_week(user.lower(), timesheets.monday(start), user, r)
+
+
+@app.get("/api/timesheets/team")
+def ts_team(start: date, user: str = Depends(require_user)):
+    """Chef d'atelier : heures de chaque mécanicien sur la semaine (taux d'occupation et taux facturable), pointages à valider."""
+    r = _ts_chef(user)
+    start = timesheets.monday(start)
+    a, b = start.isoformat(), (start + timedelta(days=6)).isoformat()
+    jm = {j["id"]: j for j in timesheets.jobs().all()}
+    all_ents = timesheets.entries().between("date", a, b)
+    people = [p for p in staff.store().get()["data"]["people"] if p.get("google_email") and p.get("active", True)
+              and timesheets.role_of(p["google_email"])["role"] == "mechanic"]
+    rows = []
+    for p in sorted(people, key=lambda p: p["name"].lower()):
+        ents = [e for e in all_ents if e["user"] == p["google_email"].lower() and timesheets.chef_for(r, jm.get(e["job_id"]))]
+        rows.append({"name": p["name"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
+                     "entries": [timesheets.entry_view(timesheets.public_attachments(e), user, r, jm) for e in sorted(ents, key=lambda e: (e["date"], e["created_at"]))]})
+    return {"start": a, "rows": rows}
+
+
+@app.post("/api/timesheets/entries")
+def ts_create_entry(body: timesheets.EntryIn, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        e = timesheets.create_entry(body, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
+
+
+@app.put("/api/timesheets/entries/{eid}")
+def ts_update_entry(eid: str, body: timesheets.EntryIn, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        e = timesheets.update_entry(eid, body, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
+
+
+@app.delete("/api/timesheets/entries/{eid}")
+def ts_delete_entry(eid: str, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        timesheets.delete_entry(eid, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return {"deleted": eid}
+
+
+@app.post("/api/timesheets/entries/{eid}/validate")
+def ts_validate_entry(eid: str, validated: bool = True, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        e = timesheets.validate_entry(eid, validated, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
+
+
+@app.post("/api/timesheets/entries/{eid}/attachments")
+async def ts_add_attachment(eid: str, request: Request, filename: str = Query("fichier", max_length=120), user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    if not timesheets.blobs().enabled:
+        raise HTTPException(503, "Stockage des photos et mémos non configuré (variable STAFF_BUCKET)")
+    data = await request.body()
+    try:
+        return timesheets.add_attachment(eid, filename, (request.headers.get("content-type") or "").lower(), data, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+
+
+@app.get("/api/timesheets/entries/{eid}/attachments/{aid}")
+def ts_get_attachment(eid: str, aid: str, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    e = timesheets.entries().get(eid)
+    att = next((a for a in (e or {}).get("attachments", []) if a["id"] == aid), None)
+    if not e or not att:
+        raise HTTPException(404, "Pièce jointe introuvable")
+    if e["user"] != user.lower() and not timesheets.chef_for(r, timesheets.jobs().get(e["job_id"])):
+        raise HTTPException(403, "Accès refusé")
+    got = timesheets.blobs().get(att["key"])
+    if not got:
+        raise HTTPException(404, "Fichier introuvable")
+    return RawResponse(got[0], media_type=got[1], headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/api/events/config")

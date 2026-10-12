@@ -1330,3 +1330,4 @@ Object.assign(EN, {'Pre-event': 'Pre-event', 'Post-event': 'Post-event', 'Autre 
 Object.assign(EN, {'Retirer': 'Remove', 'Supprimer cette pièce jointe ?': 'Delete this attachment?'});
 Object.assign(EN, {'Transcription en cours…': 'Transcribing…', '✓ Transcrit : relisez et corrigez le texte ci-dessus': '✓ Transcribed: please review and correct the text above', 'Aucune parole reconnue': 'No speech recognised'});
 Object.assign(EN, {'Fermer': 'Close', 'Photo précédente': 'Previous photo', 'Photo suivante': 'Next photo', 'Photo': 'Photo'});
+Object.assign(EN, {'🎙 Mémo supprimé (conservé 90 jours)': '🎙 Memo deleted (kept 90 days)', 'Photo supprimée': 'Photo deleted'});

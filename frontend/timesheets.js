@@ -37,7 +37,7 @@ const tsKpis = s => `<div class="ts-kpis"><div><small>Heures pointées</small><b
 
 function tsEntryHtml(e, mine) {
   const a = (ts.me.assignments.find(x => x.id === (e.job.assignment || e.assignment)) || {}).label, sy = (ts.me.systems.find(x => x.id === e.system) || {}).label;
-  const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<img class="ts-ph" src="${u}" loading="lazy" alt="Photo">` : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
+  const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<img class="ts-ph" src="${u}" loading="lazy" alt="Photo">` : x.expired ? '<span class="ts-n">🎙 Mémo supprimé (conservé 90 jours)</span>' : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
   const lock = e.validated ? '<span class="ts-lock ok">✓ Validé</span>' : e.can_edit && !(ts.me.role === 'chef') ? `<span class="ts-lock">Modifiable jusqu’à</span> <span class="ts-lock">${esc(tsStamp(e.editable_until))}</span>` : e.can_edit ? '' : '<span class="ts-lock bad">🔒 Verrouillé</span>';
   const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">Modifier</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
   const val = ts.me.role === 'chef' && !mine ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="${e.validated ? 0 : 1}">${e.validated ? 'Annuler la validation' : 'Valider'}</button>` : '';
@@ -55,7 +55,7 @@ function tsFormHtml() {
   const x = (k, i) => `<button type="button" class="ts-x" data-ts="rm" data-k="${k}" data-i="${i}" aria-label="Retirer" title="Retirer">✕</button>`;
   const photos = ts.pend.photos.map((p, i) => `<span class="ts-pp"><img class="ts-ph" src="${tsUrl(p)}" alt="Photo">${x('photo', i)}</span>`).join('');
   const audio = ts.pend.audio ? `<span class="ts-pp"><audio controls src="${tsUrl(ts.pend.audio)}"></audio>${x('audio', 0)}</span>${{busy: '<span class="ts-n">Transcription en cours…</span>', ok: '<span class="ts-n">✓ Transcrit : relisez et corrigez le texte ci-dessus</span>', empty: '<span class="ts-n">Aucune parole reconnue</span>'}[ts.pend.tr] || ''}` : '';
-  const saved = (f.atts || []).map(at => { const u = `/api/timesheets/entries/${f.id}/attachments/${at.id}`; return `<span class="ts-pp">${at.kind === 'photo' ? `<img class="ts-ph" src="${u}" alt="Photo">` : `<audio controls preload="none" src="${u}"></audio>`}<button type="button" class="ts-x" data-ts="rmsaved" data-id="${at.id}" aria-label="Supprimer" title="Supprimer">✕</button></span>`; }).join('');
+  const saved = (f.atts || []).map(at => { const u = `/api/timesheets/entries/${f.id}/attachments/${at.id}`; return `<span class="ts-pp">${at.kind === 'photo' ? `<img class="ts-ph" src="${u}" alt="Photo">` : at.expired ? '<span class="ts-n">🎙 Mémo supprimé (conservé 90 jours)</span>' : `<audio controls preload="none" src="${u}"></audio>`}<button type="button" class="ts-x" data-ts="rmsaved" data-id="${at.id}" aria-label="Supprimer" title="Supprimer">✕</button></span>`; }).join('');
   return `<div class="ts-form"><h4>${f.id ? 'Modifier le pointage' : 'Nouveau pointage'}</h4>
     <label class="sdfield"><span>Job</span>${tsJobSelect(f.job_id)}</label>
     <div class="sdgrid"><label class="sdfield"><span>Date</span><span class="datef"><input class="sdin ts-d" value="${fmtDate(f.date)}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="ts-cal" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="ts-dp" value="${f.date}" max="${plToday()}" tabindex="-1" aria-hidden="true"></span></label>
@@ -280,3 +280,6 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if (!tsLb) return; if (e.key === 'Escape') tsLbClose(); else if (e.key === 'ArrowLeft') tsLbShow(tsLb.i - 1); else if (e.key === 'ArrowRight') tsLbShow(tsLb.i + 1); });
 window.addEventListener('hashchange', tsLbClose);
+
+// Photo introuvable (fichier supprimé) : message à la place de l'image cassée
+document.addEventListener('error', e => { const im = e.target; if (im && im.tagName === 'IMG' && im.classList.contains('ts-ph') && im.closest('#ts-view') && /\/attachments\//.test(im.src)) { const m = document.createElement('span'); m.className = 'ts-n'; m.textContent = t('Photo supprimée'); im.replaceWith(m); } }, true);

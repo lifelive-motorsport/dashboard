@@ -295,3 +295,17 @@ def test_speech_request_shape(monkeypatch):
     assert seen["url"] == "https://europe-west4-speech.googleapis.com/v2/projects/mon-projet/locations/europe-west4/recognizers/_:recognize"
     c = seen["body"]["config"]
     assert c["model"] == "chirp_2" and c["languageCodes"] == ["fr-FR"] and c["explicitDecodingConfig"]["encoding"] == "LINEAR16"
+
+
+def test_old_voice_memos_are_flagged_expired_photos_are_not(api):
+    jid = mkjob(api).json()["id"]
+    as_(api, MEC)
+    eid = api.post("/api/timesheets/entries", json=entry(jid)).json()["id"]
+    api.post(f"/api/timesheets/entries/{eid}/attachments", content=b"voix", headers={"Content-Type": "audio/webm"})
+    api.post(f"/api/timesheets/entries/{eid}/attachments", content=b"\xff\xd8x", headers={"Content-Type": "image/jpeg"})
+    e = timesheets.entries().get(eid)
+    for a in e["attachments"]:
+        a["created_at"] = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+    timesheets.entries().put(eid, e)
+    atts = api.get("/api/timesheets/week", params={"start": date.today().isoformat()}).json()["entries"][0]["attachments"]
+    assert {a["kind"]: a["expired"] for a in atts} == {"audio": True, "photo": False}

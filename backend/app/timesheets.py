@@ -2,7 +2,7 @@
 
 Un pointage = une durée sur un job, avec affectation (Prépa, Révision…), système (Moteur…), texte, photos et mémo vocal. Le mécanicien (identifié par son compte Google, lié à sa fiche du
 staff) modifie ses pointages jusqu'à 24 h après leur création ; ensuite, ou une fois validés, seul le chef d'atelier peut les modifier. Le rôle à l'atelier (mécanicien, chef d'atelier CARS / XC / les deux) est un champ de la fiche staff (`workshop`), choisi dans Planifier › Ressources ; le Super User a les mêmes droits sur tout. Données dans Firestore (collections timesheet_jobs et timesheet_entries) ; photos et
-mémos vocaux dans le bucket privé STAFF_BUCKET (préfixe timesheets/). Rien n'est écrit dans Odoo à ce stade."""
+mémos vocaux dans le bucket privé TIMESHEETS_BUCKET (préfixe timesheets/). Rien n'est écrit dans Odoo à ce stade."""
 from __future__ import annotations
 
 import re
@@ -26,6 +26,7 @@ ATELIER_NATURES = [("pre_event", "Pre-event"), ("post_event", "Post-event"), ("c
 N_IDS = {**dict(EVENT_NATURES), **dict(ATELIER_NATURES)}
 N_ASSIGN = {"pre_event": "prepa", "post_event": "revision"}
 DEFAULT_BACKGROUND = ["Nettoyage atelier", "Rangement atelier", "Inventaire stock", "Réunion / briefing", "Formation", "Autre tâche de fond"]
+AUDIO_DAYS = 90                                                          # conservation des mémos vocaux (le texte transcrit reste) ; photos : 10 ans ; la règle de cycle de vie du bucket supprime à AUDIO_DAYS + 1 jours
 MAX_PHOTO, MAX_AUDIO = 8 * 1024 * 1024, 12 * 1024 * 1024
 
 
@@ -142,13 +143,13 @@ class Coll:
 
 
 class Blobs:
-    """Photos et mémos vocaux : Cloud Storage privé (STAFF_BUCKET, préfixe timesheets/) ; en démo / essais, mémoire."""
+    """Photos et mémos vocaux : Cloud Storage privé (TIMESHEETS_BUCKET, préfixe timesheets/) ; en démo / essais, mémoire."""
     def __init__(self):
         self._mem: dict[str, tuple[bytes, str]] = {}
         self._bucket = None
-        if settings.STAFF_BUCKET:
+        if settings.TIMESHEETS_BUCKET:
             from google.cloud import storage
-            self._bucket = storage.Client().bucket(settings.STAFF_BUCKET)
+            self._bucket = storage.Client().bucket(settings.TIMESHEETS_BUCKET)
 
     @property
     def enabled(self) -> bool:
@@ -430,8 +431,13 @@ def add_attachment(eid: str, name: str, ctype: str, data: bytes, user: str, r: d
     return {k: v for k, v in att.items() if k != "key"}
 
 
+def _expired(a: dict) -> bool:
+    """Mémo vocal au-delà de sa durée de conservation (la règle de cycle de vie du bucket supprime le fichier) ; les photos sont gardées 10 ans."""
+    return a.get("kind") == "audio" and now() - datetime.fromisoformat(a["created_at"]) > timedelta(days=AUDIO_DAYS)
+
+
 def public_attachments(e: dict) -> dict:
-    return {**e, "attachments": [{k: v for k, v in a.items() if k != "key"} for a in e.get("attachments", [])]}
+    return {**e, "attachments": [{**{k: v for k, v in a.items() if k != "key"}, "expired": _expired(a)} for a in e.get("attachments", [])]}
 
 
 # ---- Propositions de jobs d'après le planning --------------------------------------------------------------------------------------------

@@ -55,6 +55,7 @@ class JobIn(BaseModel):
             raise ValueError("nature de job inconnue")
         return v
 
+    template_id: str = ""                                                # job atelier : liste de contrôle copiée depuis ce modèle
     assignment: str = "autre"                                           # Prépa, Révision, Setup… : propre au job, reprise par chaque pointage
 
     @field_validator("assignment")
@@ -73,6 +74,7 @@ class EntryIn(BaseModel):
     system: str = "autre"
     text: str = Field(default="", max_length=3000)
     user: str | None = None                                              # pointage pour un autre mécanicien : chef d'atelier seulement
+    lines: list[str] = Field(default_factory=list, max_length=200)       # lignes de la liste de contrôle du job faites pendant ce pointage
 
     @field_validator("assignment")
     @classmethod
@@ -94,6 +96,23 @@ class EntryIn(BaseModel):
         if v % 5:
             raise ValueError("la durée doit être un multiple de 5 minutes")
         return v
+
+
+class LineIn(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+    note: str = Field(default="", max_length=200)
+
+
+class SectionIn(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    lines: list[LineIn] = Field(default_factory=list, max_length=100)
+
+
+class TemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    bu: Literal["XC", "CARS", "ALL"] = "CARS"
+    natures: list[Literal["pre_event", "post_event", "custom"]] = Field(default_factory=list)       # natures de job pour lesquelles ce modèle est proposé
+    sections: list[SectionIn] = Field(default_factory=list, max_length=30)
 
 
 # ---- Stockage : Firestore (production) ou mémoire (démo / essais) ---------------------------------------------------------------------
@@ -176,13 +195,19 @@ class Blobs:
             self._mem.pop(key, None)
 
 
-_jobs = _entries = _blobs = None
+_jobs = _entries = _blobs = _templates = None
 
 
 def jobs() -> Coll:
     global _jobs
     _jobs = _jobs or Coll("timesheet_jobs")
     return _jobs
+
+
+def templates() -> Coll:
+    global _templates
+    _templates = _templates or Coll("timesheet_templates")
+    return _templates
 
 
 def entries() -> Coll:
@@ -265,8 +290,86 @@ def billable(job: dict) -> bool:
     return job.get("kind") != "background" and bool(job.get("vehicle") or job.get("event"))
 
 
+def progress(j: dict) -> dict | None:
+    cl = j.get("checklist")
+    if not cl:
+        return None
+    lines = [ln for s in cl["sections"] for ln in s["lines"]]
+    return {"done": sum(1 for ln in lines if ln.get("done")), "total": len(lines)}
+
+
 def job_view(j: dict) -> dict:
-    return {**j, "billable": billable(j)}
+    return {**j, "billable": billable(j), "progress": progress(j)}
+
+
+# ---- Modèles de jobs et listes de contrôle ------------------------------------------------------------------------------------------------
+
+def _template_doc(data: TemplateIn, tid: str, user: str, created: str | None = None) -> dict:
+    secs = [{"id": f"s{i}", "title": s.title.strip(), "lines": [{"id": f"l{i}-{j}", "text": ln.text.strip(), "note": ln.note.strip()} for j, ln in enumerate(s.lines) if ln.text.strip()]}
+            for i, s in enumerate(data.sections)]
+    return {"id": tid, "name": data.name.strip(), "bu": data.bu, "natures": list(data.natures), "sections": [s for s in secs if s["lines"]],
+            "created_by": user.lower(), "created_at": created or now().isoformat(), "updated_at": now().isoformat()}
+
+
+def ensure_templates() -> None:
+    """Crée une seule fois le modèle de départ (ensuite, le chef d'atelier le modifie ou le supprime à sa guise)."""
+    if templates().get("_seeded"):
+        return
+    from .ts_seed import SEED_TEMPLATES
+    if not [t for t in templates().all() if t.get("id") != "_seeded"]:
+        for t in SEED_TEMPLATES:
+            tid = "t-" + uuid.uuid4().hex[:8]
+            templates().put(tid, _template_doc(TemplateIn.model_validate(t), tid, "system"))
+    templates().put("_seeded", {"id": "_seeded"})
+
+
+def list_templates() -> list[dict]:
+    ensure_templates()
+    return sorted((t for t in templates().all() if t.get("id") != "_seeded"), key=lambda t: t["name"].lower())
+
+
+def save_template(data: TemplateIn, user: str, tid: str | None = None) -> dict:
+    if not data.sections or not any(s.lines for s in data.sections):
+        raise ValueError("Le modèle doit contenir au moins une ligne de travail")
+    old = templates().get(tid) if tid else None
+    if tid and not old:
+        raise KeyError(tid)
+    if any(t["id"] != tid and t["name"].lower() == data.name.strip().lower() for t in list_templates()):
+        raise ValueError("Un modèle porte déjà ce nom")
+    doc = _template_doc(data, tid or "t-" + uuid.uuid4().hex[:8], user, (old or {}).get("created_at"))
+    templates().put(doc["id"], doc)
+    return doc
+
+
+def make_checklist(t: dict) -> dict:
+    """Copie du modèle dans le job : modifier le modèle plus tard ne change pas les jobs déjà créés."""
+    return {"template_id": t["id"], "template_name": t["name"], "sections": [{"id": s["id"], "title": s["title"], "lines": [
+        {"id": ln["id"], "text": ln["text"], "note": ln.get("note", ""), "done": False, "done_by": None, "done_at": None, "entry_id": None} for ln in s["lines"]]} for s in t["sections"]]}
+
+
+def person_name(email: str) -> str:
+    p = person_of(email)
+    return (p or {}).get("name") or email
+
+
+def sync_lines(job: dict | None, eid: str, user: str, ids: list[str]) -> None:
+    """Coche sur le job les lignes faites pendant ce pointage (et décoche celles que ce pointage ne revendique plus)."""
+    if not job or not job.get("checklist"):
+        return
+    want, known = set(ids), set()
+    for s in job["checklist"]["sections"]:
+        for ln in s["lines"]:
+            known.add(ln["id"])
+            if ln["id"] in want:
+                if ln.get("done") and ln.get("entry_id") != eid:
+                    raise ValueError(f"« {ln['text'][:60]} » est déjà faite par {ln.get('done_by') or 'un collègue'}")
+                if not ln.get("done"):
+                    ln.update(done=True, done_by=person_name(user), done_at=now().isoformat(), entry_id=eid)
+            elif ln.get("done") and ln.get("entry_id") == eid:
+                ln.update(done=False, done_by=None, done_at=None, entry_id=None)
+    if want - known:
+        raise ValueError("Ligne inconnue pour ce job")
+    jobs().put(job["id"], job)
 
 
 def ensure_defaults() -> None:
@@ -310,6 +413,12 @@ def create_job(data: JobIn, user: str) -> dict:
         raise ValueError("Ce job existe déjà")
     jid = "j-" + uuid.uuid4().hex[:10]
     doc = {"id": jid, **data.model_dump(), "created_by": user.lower(), "created_at": now().isoformat()}
+    doc.pop("template_id", None)
+    if data.kind == "atelier" and data.template_id:
+        t = templates().get(data.template_id)
+        if not t:
+            raise ValueError("Modèle introuvable")
+        doc["checklist"] = make_checklist(t)
     jobs().put(jid, doc)
     return job_view(doc)
 
@@ -322,7 +431,11 @@ def monday(d: date) -> date:
 
 def entry_view(e: dict, user: str, r: dict, jmap: dict) -> dict:
     job = jmap.get(e["job_id"])
-    return {**e, "job": job_view(job) if job else {"id": e["job_id"], "title": "(job supprimé)", "kind": "atelier", "billable": False},
+    lines = []
+    if job and job.get("checklist"):
+        by = {ln["id"]: (s["title"], ln["text"]) for s in job["checklist"]["sections"] for ln in s["lines"]}
+        lines = [{"id": i, "section": by[i][0], "text": by[i][1]} for i in e.get("lines", []) if i in by]
+    return {**e, "lines": lines, "line_ids": e.get("lines", []), "job": job_view(job) if job else {"id": e["job_id"], "title": "(job supprimé)", "kind": "atelier", "billable": False},
             "can_edit": can_edit(e, user, r, job), "editable_until": editable_until(e)}
 
 
@@ -362,6 +475,10 @@ def create_entry(data: EntryIn, user: str, r: dict) -> dict:
     eid = "e-" + uuid.uuid4().hex[:12]
     doc = {"id": eid, "user": target, "job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system if job.get("kind") == "atelier" else "autre", "text": data.text.strip(),
            "attachments": [], "validated": False, "created_at": now().isoformat(), "updated_at": now().isoformat(), "created_by": user.lower()}
+    sync_lines(job, eid, target, data.lines)
+    doc["lines"] = list(data.lines)
+    if job.get("checklist"):
+        doc["system"] = "autre"
     entries().put(eid, doc)
     return doc
 
@@ -378,7 +495,14 @@ def update_entry(eid: str, data: EntryIn, user: str, r: dict) -> dict:
         raise LookupError("Job introuvable")
     if data.job_id != e["job_id"] and not job.get("open", True):
         raise LookupError("Job clôturé")
+    prev_job = e["job_id"]
     e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system if job.get("kind") == "atelier" else "autre", "text": data.text.strip(), "updated_at": now().isoformat()})
+    if data.job_id != prev_job:
+        sync_lines(old_job, eid, e["user"], [])                       # on quitte l'ancien job : ses lignes redeviennent à faire
+    sync_lines(job, eid, e["user"], data.lines)
+    e["lines"] = list(data.lines)
+    if job.get("checklist"):
+        e["system"] = "autre"
     entries().put(eid, e)
     return e
 
@@ -391,6 +515,7 @@ def delete_entry(eid: str, user: str, r: dict) -> None:
         raise PermissionError("Ce pointage n'est plus modifiable (24 h écoulées ou validé) : voyez le chef d'atelier")
     for a in e.get("attachments", []):
         blobs().delete(a["key"])
+    sync_lines(jobs().get(e["job_id"]), eid, e["user"], [])
     entries().delete(eid)
 
 

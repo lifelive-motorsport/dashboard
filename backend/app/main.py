@@ -780,8 +780,61 @@ def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_
         if any(j["id"] != jid and j["title"].lower() == title.lower() for j in timesheets.jobs().all()):
             raise HTTPException(422, "Ce job existe déjà")
     doc = {**old, **new, "title": title, "assignment": timesheets.N_ASSIGN.get(body.nature, body.assignment)}
+    doc.pop("template_id", None)
+    if body.kind == "atelier" and body.template_id and not old.get("checklist"):         # une liste de contrôle peut être ajoutée, pas remplacée (les cases déjà cochées sont conservées)
+        t = timesheets.templates().get(body.template_id)
+        if not t:
+            raise HTTPException(422, "Modèle introuvable")
+        doc["checklist"] = timesheets.make_checklist(t)
     timesheets.jobs().put(jid, doc)
     return timesheets.job_view(doc)
+
+
+def _ts_tpl_rights(r: dict, bu: str):
+    if not r["super"] and bu != "ALL" and timesheets.bu_group(bu) not in r["bus"]:
+        raise HTTPException(403, f"Vous gérez les modèles de la BU {', '.join(r['bus'])}")
+
+
+@app.get("/api/timesheets/templates")
+def ts_templates(user: str = Depends(require_user)):
+    _ts_chef(user)
+    return {"templates": timesheets.list_templates()}
+
+
+@app.post("/api/timesheets/templates")
+def ts_create_template(body: timesheets.TemplateIn, user: str = Depends(require_user)):
+    r = _ts_chef(user)
+    _ts_tpl_rights(r, body.bu)
+    try:
+        return timesheets.save_template(body, user)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.put("/api/timesheets/templates/{tid}")
+def ts_update_template(tid: str, body: timesheets.TemplateIn, user: str = Depends(require_user)):
+    r = _ts_chef(user)
+    old = timesheets.templates().get(tid)
+    if not old:
+        raise HTTPException(404, "Modèle introuvable")
+    _ts_tpl_rights(r, old["bu"])
+    _ts_tpl_rights(r, body.bu)
+    try:
+        return timesheets.save_template(body, user, tid)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.delete("/api/timesheets/templates/{tid}")
+def ts_delete_template(tid: str, user: str = Depends(require_user)):
+    """Supprime le modèle ; les jobs déjà créés gardent leur copie de la liste."""
+    r = _ts_chef(user)
+    old = timesheets.templates().get(tid)
+    if not old:
+        raise HTTPException(404, "Modèle introuvable")
+    _ts_tpl_rights(r, old["bu"])
+    timesheets.templates().delete(tid)
+    return {"deleted": tid}
 
 
 @app.delete("/api/timesheets/jobs/{jid}")

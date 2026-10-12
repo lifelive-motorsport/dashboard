@@ -15,6 +15,7 @@ def api(monkeypatch):
     monkeypatch.setattr(timesheets, "_jobs", None)
     monkeypatch.setattr(timesheets, "_entries", None)
     monkeypatch.setattr(timesheets, "_blobs", None)
+    monkeypatch.setattr(timesheets, "_templates", None)
     monkeypatch.setattr(users, "is_super", lambda e: False)
     cur = staff.store().get()
     people = [{"id": "m1", "name": "Nolan Collinet", "kind": "salarie", "function": "Mechanic", "workshop": "mechanic", "google_email": MEC, "hours_week": 38, "fte": 100},
@@ -309,3 +310,50 @@ def test_old_voice_memos_are_flagged_expired_photos_are_not(api):
     timesheets.entries().put(eid, e)
     atts = api.get("/api/timesheets/week", params={"start": date.today().isoformat()}).json()["entries"][0]["attachments"]
     assert {a["kind"]: a["expired"] for a in atts} == {"audio": True, "photo": False}
+
+
+TPL = {"name": "Mini révision", "bu": "CARS", "natures": ["pre_event"], "sections": [{"title": "Moteur", "lines": [{"text": "Vidange"}, {"text": "Filtre à air", "note": "si besoin"}]}, {"title": "Freins", "lines": [{"text": "Purge"}]}]}
+
+
+def checklist_job(api, tid):
+    return mkjob(api, vehicle={"id": "1", "name": "P"}, nature="custom", title="Révision", template_id=tid).json()
+
+
+def test_seed_template_and_rights(api):
+    as_(api, CHEF)
+    ts_ = api.get("/api/timesheets/templates").json()["templates"]
+    assert [t["name"] for t in ts_] == ["Révision Circuit"] and sum(len(s["lines"]) for s in ts_[0]["sections"]) == 42
+    assert api.delete(f"/api/timesheets/templates/{ts_[0]['id']}").status_code == 200
+    assert api.get("/api/timesheets/templates").json()["templates"] == []                 # supprimé : le modèle de départ ne revient pas
+    as_(api, MEC)
+    assert api.get("/api/timesheets/templates").status_code == 403
+    assert api.post("/api/timesheets/templates", json=TPL).status_code == 403
+    as_(api, CHEF_XC)
+    assert api.post("/api/timesheets/templates", json=TPL).status_code == 403              # modèle CARS : pas le chef XC
+    as_(api, CHEF)
+    assert api.post("/api/timesheets/templates", json=TPL).status_code == 200
+    assert api.post("/api/timesheets/templates", json=TPL).status_code == 422              # nom déjà pris
+    assert api.post("/api/timesheets/templates", json={**TPL, "name": "Vide", "sections": [{"title": "X", "lines": []}]}).status_code == 422
+
+
+def test_job_gets_a_copy_of_the_checklist_and_lines_are_ticked_by_entries(api):
+    as_(api, CHEF)
+    t = api.post("/api/timesheets/templates", json=TPL).json()
+    job = checklist_job(api, t["id"])
+    assert job["progress"] == {"done": 0, "total": 3}
+    l0, l1, l2 = [ln["id"] for s in job["checklist"]["sections"] for ln in s["lines"]]
+    api.put(f"/api/timesheets/templates/{t['id']}", json={**TPL, "sections": [{"title": "Autre", "lines": [{"text": "Nouveau"}]}]})
+    assert api.get("/api/timesheets/jobs").json()["jobs"][0]["progress"]["total"] == 3     # la copie du job ne change pas
+    as_(api, MEC)
+    e = api.post("/api/timesheets/entries", json=entry(job["id"], lines=[l0, l2])).json()
+    assert [x["text"] for x in e["lines"]] == ["Vidange", "Purge"] and e["system"] == "autre"
+    j = next(j for j in api.get("/api/timesheets/jobs").json()["jobs"] if j["id"] == job["id"])
+    assert j["progress"]["done"] == 2 and j["checklist"]["sections"][0]["lines"][0]["done_by"] == "Nolan Collinet"
+    as_(api, CHEF)
+    assert api.post("/api/timesheets/entries", json=entry(job["id"], lines=[l0])).status_code == 422       # déjà faite par un collègue
+    as_(api, MEC)
+    api.put(f"/api/timesheets/entries/{e['id']}", json=entry(job["id"], lines=[l0]))                        # on décoche « Purge »
+    assert next(j for j in api.get("/api/timesheets/jobs").json()["jobs"] if j["id"] == job["id"])["progress"]["done"] == 1
+    assert api.put(f"/api/timesheets/entries/{e['id']}", json=entry(job["id"], lines=["inconnue"])).status_code == 422
+    api.delete(f"/api/timesheets/entries/{e['id']}")
+    assert next(j for j in api.get("/api/timesheets/jobs").json()["jobs"] if j["id"] == job["id"])["progress"]["done"] == 0

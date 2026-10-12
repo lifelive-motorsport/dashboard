@@ -1265,3 +1265,6 @@ Object.assign(EN, {
   "Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.": "Contractors chosen from the Odoo contacts. The email address (taken from Odoo, editable here) is used to send them the Google event invitation. Tick the BUs concerned: a contractor is only offered for events of those BUs. Nothing is written to Odoo.",
 });
 EN_PATTERNS.push([/^\((\d+) masqués?\)$/, m => '(' + m[1] + ' hidden)']);
+Object.assign(EN, {
+  "Lieu de départ": "Departure place", "Lieu de l’événement": "Event place", "Revenir à Lifelive": "Back to Lifelive", "Rechercher le lieu de départ": "Search for the departure place"});
+EN_PATTERNS.push([/^(\d+) km depuis (.+) \((\d+) h (\d+)\) à l’aller · (\d+) km aller-retour$/, m => m[1] + ' km from ' + m[2] + ' (' + m[3] + ' h ' + m[4] + ') one way · ' + m[5] + ' km round trip']);

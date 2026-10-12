@@ -535,3 +535,24 @@ def test_maps_countries_crossed_samples_only_watched_boxes(monkeypatch):
     assert maps.countries_crossed(pts) == {"CH"}
     assert all(45.7 <= p[0] <= 47.9 for p in calls)
     assert maps.countries_crossed([(50.2, 6.1), (49.5, 2.0)]) == set() and len(calls) == len(calls)
+
+
+def test_planned_event_with_custom_origin():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning
+    c = TestClient(app)
+    origin = {"id": "demo-ricard", "name": "Circuit Paul Ricard", "address": "Le Castellet, France", "country": "FR"}
+    r = c.get("/api/places/demo-silverstone", params={"origin": "demo-ricard"}).json()
+    assert r["route"]["origin_label"] == "Circuit Paul Ricard" and r["route"]["km"] == 250 and "depuis Circuit Paul Ricard" in r["route"]["alerts"][0]
+    assert c.get("/api/places/demo-spa", params={"route": "false"}).json()["route"] is None
+    assert c.get("/api/places/demo-spa", params={"origin": "inconnu"}).status_code == 404
+    lbid = c.post("/api/events", json=_ev(origin=origin, vehicles=[], externals=[])).json()["id"]
+    got = c.get("/api/events", params={"from": "2026-06-01", "to": "2026-06-30"}).json()["events"][0]
+    assert got["origin"] == {"id": "demo-ricard", "address": "Circuit Paul Ricard, Le Castellet, France"} and got["km"] == 250
+    cal = next(iter(planning.backend().events[planning.calendars_by_bu()["HISTORIC_RACING"]].values()))
+    assert "Départ : Circuit Paul Ricard, Le Castellet, France" in cal["description"] and "Distance depuis Circuit Paul Ricard" in cal["description"]
+    c.delete(f"/api/events/{lbid}")
+    lb2 = c.post("/api/events", json=_ev(vehicles=[], externals=[])).json()["id"]          # sans départ : Lifelive
+    assert c.get("/api/events", params={"from": "2026-06-01", "to": "2026-06-30"}).json()["events"][0]["origin"] is None
+    c.delete(f"/api/events/{lb2}")

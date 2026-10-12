@@ -14,7 +14,8 @@ function rsMatch(users) {
 }
 // Une personne relève d'une BU si une part de son imputation y va (le filtre « ALL » montre tout le monde, y compris le support et le management)
 const rsInBu = p => buSel === 'all' || (BU_KEYS[buSel] || []).some(k => ((p.alloc || {})[k] || 0) > 0);
-const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p));
+const rsCmp = (a, b) => a.name.localeCompare(b.name, 'fr', {sensitivity: 'base'});
+const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p)).sort(rsCmp);
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
 function resourcesBlocks() {
@@ -34,7 +35,7 @@ async function loadResources() {
   if (rs.dirty) return;                         // les modifications non enregistrées (prestataires) ne sont pas écrasées par un rechargement (ex. changement de filtre BU)
   try {
     const j = await rsCall('/api/resources');
-    rs = {...rs, loaded: true, error: null, staff: j.staff || [], externals: (j.externals.data || {}).externals || [], base: j.externals.updated_at || null, vehicles: j.vehicles || {items: []}, delegation: j.delegation, dirty: false};
+    rs = {...rs, loaded: true, error: null, staff: j.staff || [], externals: ((j.externals.data || {}).externals || []).slice().sort(rsCmp), base: j.externals.updated_at || null, vehicles: j.vehicles || {items: []}, delegation: j.delegation, dirty: false};
   } catch (e) { rs.error = e.message; rs.loaded = true; }
 }
 
@@ -98,7 +99,7 @@ document.addEventListener('click', async e => {
   if (t.classList.contains('rs-del')) { rs.externals.splice(+t.dataset.i, 1); rs.dirty = true; rs.msg = null; drawResources(); }
   else if (t.classList.contains('rs-add')) {
     const c = (rs.found || []).find(x => x.id === +t.dataset.id); if (!c) return;
-    rs.externals.push({partner_id: c.id, name: c.name, email: (c.email || '').toLowerCase(), company: c.company || '', phone: c.phone || '', role: c.function || '', bus: []}); rs.dirty = true; rs.msg = null; drawResources();
+    rs.externals.push({partner_id: c.id, name: c.name, email: (c.email || '').toLowerCase(), company: c.company || '', phone: c.phone || '', role: c.function || '', bus: []}); rs.externals.sort(rsCmp); rs.dirty = true; rs.msg = null; drawResources();
   } else if (t.id === 'rs-dir') {
     rs.suggBusy = true; rs.suggMsg = null; drawResources();
     try {

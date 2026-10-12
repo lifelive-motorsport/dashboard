@@ -136,13 +136,16 @@ def countries_crossed(points: list[tuple[float, float]], watch: tuple[str, ...] 
     return found
 
 
-def route(place: dict) -> dict:
-    """{km, minutes, via: ['CH', 'GB'], alerts: ['…']} : trajet en voiture depuis Lifelive jusqu'au lieu."""
+def route(place: dict, origin: dict | None = None) -> dict:
+    """{km, minutes, via: ['CH', 'GB'], alerts: ['…'], origin_label} : trajet en voiture jusqu'au lieu, depuis `origin` (lieu Google) ou, par défaut, depuis Lifelive."""
+    label = (origin.get("name") or origin.get("address") or "le lieu de départ") if origin and origin.get("id") else "Lifelive"
     if settings.PROVIDER == "demo":
         p = next((x for x in DEMO_PLACES if x["id"] == place.get("id")), None) or {"km": 100, "minutes": 90}
-        via = set(p.get("via", [])) | ({place.get("country")} & {"CH", "GB"})
-        return _result(p["km"], p["minutes"], via)
-    r = _post(ROUTES, {"origin": {"address": settings.LIFELIVE_ORIGIN}, "destination": {"placeId": place["id"]}, "travelMode": "DRIVE", "languageCode": "fr"},
+        km, minutes = (p["km"], p["minutes"]) if label == "Lifelive" else (250, 200)
+        via = (set(p.get("via", [])) if label == "Lifelive" else set()) | ({place.get("country")} & {"CH", "GB"})
+        return _result(km, minutes, via, label)
+    start = {"placeId": origin["id"]} if origin and origin.get("id") else {"address": settings.LIFELIVE_ORIGIN}
+    r = _post(ROUTES, {"origin": start, "destination": {"placeId": place["id"]}, "travelMode": "DRIVE", "languageCode": "fr"},
               {"X-Goog-FieldMask": "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline"})
     if r.status_code != 200:
         raise RuntimeError(f"Google Routes HTTP {r.status_code} — {_msg(r)}")
@@ -151,8 +154,8 @@ def route(place: dict) -> dict:
         raise RuntimeError("Aucun itinéraire trouvé")
     pts = decode_polyline((rt.get("polyline") or {}).get("encodedPolyline", ""))
     via = countries_crossed(pts) | ({place.get("country")} & {"CH", "GB"})
-    return _result(rt.get("distanceMeters", 0) / 1000, int(str(rt.get("duration", "0s")).rstrip("s") or 0) // 60, via)
+    return _result(rt.get("distanceMeters", 0) / 1000, int(str(rt.get("duration", "0s")).rstrip("s") or 0) // 60, via, label)
 
 
-def _result(km: float, minutes: int, via: set[str]) -> dict:
-    return {"km": round(km), "minutes": int(minutes), "via": sorted(via), "alerts": [f"L’itinéraire depuis Lifelive passe par {COUNTRY_NAMES[c]}." for c in sorted(via)]}
+def _result(km: float, minutes: int, via: set[str], label: str = "Lifelive") -> dict:
+    return {"km": round(km), "minutes": int(minutes), "via": sorted(via), "origin_label": label, "alerts": [f"L’itinéraire depuis {label} passe par {COUNTRY_NAMES[c]}." for c in sorted(via)]}

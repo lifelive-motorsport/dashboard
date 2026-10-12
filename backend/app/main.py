@@ -747,8 +747,8 @@ def places_autocomplete(q: str = Query(..., min_length=3, max_length=100), _user
 
 
 @app.get("/api/places/{place_id}")
-def place_details(place_id: str, _user: str = Depends(super_user)):
-    """Lieu choisi + trajet depuis Lifelive (distance, durée, alertes Suisse / Royaume-Uni)."""
+def place_details(place_id: str, origin: str | None = Query(None, max_length=300), route: bool = True, _user: str = Depends(super_user)):
+    """Lieu choisi + trajet (distance, durée, alertes Suisse / Royaume-Uni) depuis `origin` (identifiant de lieu Google) ou, par défaut, depuis Lifelive. `route=false` : le lieu seul."""
     try:
         place = maps.details(place_id)
     except KeyError:
@@ -756,12 +756,17 @@ def place_details(place_id: str, _user: str = Depends(super_user)):
     except Exception as e:
         log.exception("Détail du lieu impossible")
         raise HTTPException(503, f"Lieu indisponible : {e}")
+    if not route:
+        return {"place": place, "route": None}
     try:
-        route = maps.route(place)
+        start = maps.details(origin) if origin else None
+        rt = maps.route(place, start)
+    except KeyError:
+        raise HTTPException(404, "Lieu de départ introuvable")
     except Exception as e:
         log.exception("Calcul de l'itinéraire impossible")
-        route = {"km": None, "minutes": None, "via": [], "alerts": [], "unavailable": f"Itinéraire non calculé : {e}"}
-    return {"place": place, "route": route}
+        rt = {"km": None, "minutes": None, "via": [], "alerts": [], "unavailable": f"Itinéraire non calculé : {e}"}
+    return {"place": place, "route": rt}
 
 
 @app.get("/api/resources/contacts")

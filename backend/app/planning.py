@@ -40,6 +40,7 @@ class EventIn(BaseModel):
     immo_start: date
     immo_end: date
     place: Place
+    origin: Place | None = None                                        # lieu de départ (sinon Lifelive, LIFELIVE_ORIGIN)
     notes: str = Field(default="", max_length=2000)
     staff: list[str] = Field(default_factory=list, max_length=60)
     externals: list[str] = Field(default_factory=list, max_length=60)
@@ -198,11 +199,14 @@ def _day(d: date) -> dict:
     return {"date": d.isoformat()}
 
 
-def _description(notes: str, place: Place, route: dict | None) -> str:
+def _description(notes: str, place: Place, route: dict | None, origin: Place | None = None) -> str:
     lines = [f"Lieu : {place.name + ', ' if place.name else ''}{place.address}".strip()]
-    if route:
+    if origin:
+        lines.append(f"Départ : {origin.name + ', ' if origin.name else ''}{origin.address}".strip())
+    if route and route.get("km") is not None:
         h, m = divmod(route["minutes"], 60)
-        lines.append(f"Distance depuis Lifelive : {route['km']} km ({h} h {m:02d}) à l’aller")
+        lines.append(f"Distance depuis {route.get('origin_label', 'Lifelive')} : {route['km']} km ({h} h {m:02d}) à l’aller")
+    if route:
         lines += [f"⚠ {a}" for a in route["alerts"]]
     return (notes.strip() + SEP if notes.strip() else SEP.lstrip("\n")) + "\n".join(lines)
 
@@ -216,6 +220,9 @@ def _shared(e: EventIn, lbid: str, kind: str, route: dict | None) -> dict:
           "immo": f"{e.immo_start.isoformat()}/{e.immo_end.isoformat()}"}
     if not e.confirmed and e.externals:                                # prestataires prévus mais pas encore invités (événement TBC) : gardés ici pour la modification
         sh["pending"] = ",".join(e.externals)
+    if e.origin:
+        sh["origin"] = e.origin.id
+        sh["origin_addr"] = (e.origin.name + ", " if e.origin.name else "") + e.origin.address
     if route:
         sh["km"] = str(route["km"])
         sh["via"] = ",".join(route["via"])
@@ -226,7 +233,7 @@ def build_main(e: EventIn, lbid: str, route: dict | None) -> dict:
     single = e.vehicles and (e.immo_start, e.immo_end) == (e.start, e.end)
     att = [{"email": x} for x in e.staff] + ([{"email": x} for x in e.externals] if e.confirmed else [])
     att += [{"email": x, "resource": True} for x in e.vehicles] if single else []
-    return {"summary": _title(e), "description": _description(e.notes, e.place, route), "location": e.place.address or e.place.name, "colorId": BUS[e.bu][1],
+    return {"summary": _title(e), "description": _description(e.notes, e.place, route, e.origin), "location": e.place.address or e.place.name, "colorId": BUS[e.bu][1],
             "start": _day(e.start), "end": _day(e.end + timedelta(days=1)), "attendees": att,
             "extendedProperties": {"shared": _shared(e, lbid, "main", route)}}
 
@@ -241,9 +248,9 @@ def build_vehicles(e: EventIn, lbid: str) -> dict:
             "attendees": [{"email": x, "resource": True} for x in e.vehicles], "extendedProperties": {"shared": _shared(e, lbid, "vehicles", None)}}
 
 
-def _route(place: Place) -> dict | None:
+def _route(place: Place, origin: Place | None = None) -> dict | None:
     try:
-        return maps.route(place.model_dump())
+        return maps.route(place.model_dump(), origin.model_dump() if origin else None)
     except Exception:
         return None
 
@@ -272,7 +279,7 @@ def _find(lbid: str) -> tuple[dict | None, dict | None, str | None]:
 def create(e: EventIn, lbid: str | None = None) -> dict:
     cal = _cal(e.bu)
     lbid = lbid or uuid.uuid4().hex[:12]
-    route = _route(e.place)
+    route = _route(e.place, e.origin)
     main = build_main(e, lbid, route)
     backend().insert(cal, main, notify=bool(main["attendees"]))
     if wants_vehicle_event(e):
@@ -287,7 +294,7 @@ def update(lbid: str, e: EventIn) -> dict:
     if cal_main != _cal(e.bu):                                         # changement de BU = autre agenda : on supprime puis on recrée (même identifiant Logbook)
         remove(lbid)
         return create(e, lbid)
-    route = _route(e.place)
+    route = _route(e.place, e.origin)
     body = build_main(e, lbid, route)
     backend().patch(cal_main, main["id"], body, notify=True)
     if wants_vehicle_event(e):
@@ -343,7 +350,7 @@ def listing(d_from: date, d_to: date) -> list[dict]:
         imm = sh.get("immo", "").split("/")
         out.append({"id": lbid, "bu": sh.get("bu", ""), "title": title[len(TBC):] if title.startswith(TBC) else title, "confirmed": sh.get("confirmed") == "1",
                     "start": _start(ev), "end": _inc_end(ev), "immo_start": imm[0] if len(imm) == 2 else _start(ev), "immo_end": imm[1] if len(imm) == 2 else _inc_end(ev),
-                    "place": {"id": sh.get("place", ""), "address": ev.get("location", "")}, "notes": notes, "km": int(sh["km"]) if sh.get("km", "").isdigit() else None,
+                    "place": {"id": sh.get("place", ""), "address": ev.get("location", "")}, "origin": {"id": sh["origin"], "address": sh.get("origin_addr", "")} if sh.get("origin") else None, "notes": notes, "km": int(sh["km"]) if sh.get("km", "").isdigit() else None,
                     "via": [x for x in sh.get("via", "").split(",") if x], "staff_and_external": [a["email"] for a in att if not a.get("resource")], "externals_pending": [x for x in sh.get("pending", "").split(",") if x], "vehicles": vehicles})
     return sorted(out, key=lambda x: (x["start"], x["title"]))
 

@@ -20,6 +20,9 @@ SYSTEMS = [("moteur", "Moteur"), ("transmission", "Transmission"), ("suspension"
            ("carrosserie", "Châssis / Carrosserie"), ("habitacle", "Habitacle"), ("autre", "Autre")]
 A_IDS, S_IDS = {a for a, _ in ASSIGNMENTS}, {s for s, _ in SYSTEMS}
 EDIT_HOURS = 24
+EVENT_NATURES = [("reassort", "Réassort camion(s)"), ("chargement", "Chargement camion(s) et/ou camionnette(s)"), ("dechargement", "Déchargement camion(s) et/ou camionnette(s)"),
+                 ("nettoyage_equip", "Nettoyage équipements et/ou outillage"), ("nettoyage_veh", "Nettoyage camion(s) et/ou camionnette(s)")]
+N_IDS = dict(EVENT_NATURES)
 DEFAULT_BACKGROUND = ["Nettoyage atelier", "Rangement atelier", "Inventaire stock", "Réunion / briefing", "Formation", "Autre tâche de fond"]
 MAX_PHOTO, MAX_AUDIO = 8 * 1024 * 1024, 12 * 1024 * 1024
 
@@ -36,11 +39,19 @@ class EventRef(BaseModel):
 
 class JobIn(BaseModel):
     kind: Literal["atelier", "event", "background"]
-    title: str = Field(min_length=1, max_length=140)
+    title: str = Field(default="", max_length=140)                       # job événement : composé « nature — événement »
+    nature: str = ""                                                     # job événement : une des EVENT_NATURES
     bu: Literal["XC", "CARS", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING", "ALL"] = "CARS"       # CARS = toutes les BU CARS
     vehicle: VehicleRef | None = None
     event: EventRef | None = None
     open: bool = True
+    @field_validator("nature")
+    @classmethod
+    def _n(cls, v):
+        if v and v not in N_IDS:
+            raise ValueError("nature de job inconnue")
+        return v
+
     assignment: str = "autre"                                           # Prépa, Révision, Setup… : propre au job, reprise par chaque pointage
 
     @field_validator("assignment")
@@ -260,7 +271,20 @@ def list_jobs(open_only: bool = True) -> list[dict]:
     return sorted(out, key=lambda j: (order.get(j["kind"], 9), j["title"].lower()))
 
 
+def job_title(data: JobIn) -> str:
+    if data.kind == "event":
+        if not (data.event and data.nature):
+            raise ValueError("Choisissez l'événement et la nature du job")
+        return f"{N_IDS[data.nature]} — {data.event.title}"
+    if not data.title.strip():
+        raise ValueError("L'intitulé est obligatoire")
+    return data.title.strip()
+
+
 def create_job(data: JobIn, user: str) -> dict:
+    data = data.model_copy(update={"title": job_title(data)})
+    if any(j["title"].lower() == data.title.lower() for j in jobs().all()):
+        raise ValueError("Ce job existe déjà")
     jid = "j-" + uuid.uuid4().hex[:10]
     doc = {"id": jid, **data.model_dump(), "created_by": user.lower(), "created_at": now().isoformat()}
     jobs().put(jid, doc)
@@ -404,7 +428,9 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
     for ev in view["events"]:
         bu = ev["bu"] if ev["bu"] in ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING") else "CARS"
         eref = {"id": ev["id"], "title": ev["title"]}
-        out.append({"kind": "event", "title": ev["title"], "bu": bu, "vehicle": None, "event": eref, "when": ev["start"]})
+        todo = [n for n, label in EVENT_NATURES if f"{label} — {ev['title']}".lower() not in have]
+        if todo:
+            out.append({"kind": "event", "title": ev["title"], "bu": bu, "vehicle": None, "event": eref, "natures": todo, "when": ev["start"]})
         for v in ev["vehicles"]:
             r = res.get(v["rid"]) or {}
             if r.get("category") not in RACE:
@@ -412,4 +438,4 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
             vname = re.sub(r"^\s*[(\[][^)\]]*[)\]]\s*[-:]?\s*", "", r["name"]) or r["name"]
             for prefix, asg in (("Pre-event", "prepa"), ("Post-event", "revision")):
                 out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": bu, "vehicle": {"id": "", "name": vname}, "event": eref, "assignment": asg, "when": ev["start"]})
-    return [s for s in out if s["title"].lower() not in have]
+    return [s for s in out if s.get("natures") or s["title"].lower() not in have]

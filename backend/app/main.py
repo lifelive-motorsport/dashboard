@@ -737,7 +737,7 @@ def ts_me(user: str = Depends(require_user)):
     r = timesheets.role_of(user)
     p = r["person"] or {}
     return {"role": r["role"], "bus": r["bus"], "super": r["super"], "name": p.get("name", ""), "theoretical": timesheets.theoretical_minutes(r["person"]),
-            "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
+            "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "natures": [{"id": a, "label": l} for a, l in timesheets.EVENT_NATURES], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
             "attachments": timesheets.blobs().enabled}
 
 
@@ -752,7 +752,10 @@ def ts_create_job(body: timesheets.JobIn, user: str = Depends(require_user)):
     r = _ts_chef(user)
     if not r["super"] and body.bu != "ALL" and timesheets.bu_group(body.bu) not in r["bus"]:
         raise HTTPException(403, f"Vous gérez les jobs de la BU {', '.join(r['bus'])}")
-    return timesheets.create_job(body, user)
+    try:
+        return timesheets.create_job(body, user)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
 
 @app.put("/api/timesheets/jobs/{jid}")
@@ -763,7 +766,7 @@ def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_
         raise HTTPException(404, "Job introuvable")
     if not timesheets.chef_for(r, old):
         raise HTTPException(403, "Ce job est géré par l'autre chef d'atelier")
-    doc = {**old, **body.model_dump()}
+    doc = {**old, **body.model_dump(), "title": old["title"] if old.get("kind") == "event" else (body.title.strip() or old["title"])}
     timesheets.jobs().put(jid, doc)
     return timesheets.job_view(doc)
 
@@ -813,7 +816,11 @@ def ts_events(user: str = Depends(require_user)):
     try:
         today = date.today()
         v = provider().events(date(today.year - 3, 1, 1), today + timedelta(days=366))["events"]
-        return {"events": sorted(({"id": str(x["id"]), "name": x["name"]} for x in v), key=lambda x: x["name"].lower())}
+        to_bu = {"XC": "XC", "Modern Rally": "MODERN_RALLY", "Historic Rally": "HISTORIC_RALLY", "Historic Racing": "HISTORIC_RACING"}
+        def bu_of(x):                                   # BU principale de l'événement (axe BU d'Odoo) ; vide si inconnue
+            bus = sorted(x.get("bus") or [], key=lambda b: -b.get("share", 0))
+            return to_bu.get(bus[0]["bu"], "") if bus else ""
+        return {"events": sorted(({"id": str(x["id"]), "name": x["name"], "bu": bu_of(x)} for x in v), key=lambda x: x["name"].lower())}
     except Exception as e:
         log.exception("Liste des événements indisponible")
         return {"events": [], "unavailable": f"Événements Odoo momentanément indisponibles : {e}"}

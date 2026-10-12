@@ -40,7 +40,7 @@ function tsEntryHtml(e, mine) {
   const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">Modifier</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
   const val = ts.me.role === 'chef' && !mine ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="${e.validated ? 0 : 1}">${e.validated ? 'Annuler la validation' : 'Valider'}</button>` : '';
   return `<div class="ts-entry"><div class="ts-top"><b>${esc(e.job.title)}</b>${e.job.billable ? '<span class="ts-tag">Facturable</span>' : ''}<span class="ts-min">${tsDur(e.minutes)}</span></div>
-    <div class="ts-sub">${esc(a || '')} · ${esc(sy || '')}${e.text ? ' — ' + esc(e.text) : ''}</div>${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}</div></div>`;
+    <div class="ts-sub">${[a && (e.job.assignment || e.assignment) !== 'autre' ? a : '', sy && e.system !== 'autre' ? sy : ''].filter(Boolean).map(esc).join(' · ')}${e.text ? ' — ' + esc(e.text) : ''}</div>${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}</div></div>`;
 }
 
 function tsJobSelect(sel) {
@@ -86,16 +86,17 @@ function tsTeamHtml() {
 
 function tsJobsHtml() {
   const f = ts.jobForm, bus = tsBuOpts(ts.me);
-  const sug = ts.sugg == null ? '<button type="button" data-ts="sugg">Voir les propositions d’après le planning</button>' : ts.sugg.length ? `<table class="sdtable"><tbody>${ts.sugg.map((s, i) => `<tr><td><b>${esc(s.title)}</b></td><td>${esc(TS_KIND[s.kind])}</td><td>${esc(plFmt(s.when, {day: 'numeric', month: 'short'}))}</td><td class="num"><button type="button" data-ts="mk" data-i="${i}">Créer ce job</button></td></tr>`).join('')}</tbody></table>` : '<p class="na">Aucune proposition : tous les jobs des prochains événements existent déjà.</p>';
+  const sug = ts.sugg == null ? '<button type="button" data-ts="sugg">Voir les propositions d’après le planning</button>' : ts.sugg.length ? `<table class="sdtable"><tbody>${ts.sugg.map((s, i) => `<tr><td><b>${esc(s.title)}</b></td><td>${esc(TS_KIND[s.kind])}${s.natures ? ` · ${s.natures.length} jobs` : ''}</td><td>${esc(plFmt(s.when, {day: 'numeric', month: 'short'}))}</td><td class="num"><button type="button" data-ts="mk" data-i="${i}">Créer ce job</button></td></tr>`).join('')}</tbody></table>` : '<p class="na">Aucune proposition : tous les jobs des prochains événements existent déjà.</p>';
   const form = !f ? '<button type="button" data-ts="newjob">+ Nouveau job</button>' : `<div class="ts-form"><div class="sdgrid">
     <label class="sdfield"><span>Type</span><select class="sdin" data-j="kind">${Object.entries(TS_KIND).map(([k, l]) => `<option value="${k}"${f.kind === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-    <label class="sdfield"><span>Affectation</span><select class="sdin" data-j="assignment">${ts.me.assignments.map(x => `<option value="${x.id}"${f.assignment === x.id ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
     <label class="sdfield"><span>BU</span><select class="sdin" data-j="bu">${bus.map(b => `<option value="${b}"${f.bu === b ? ' selected' : ''}>${TS_BU[b]}</option>`).join('')}</select></label></div>
-    <label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>
+    ${f.kind === 'event' ? '' : `<label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>`}
     ${f.kind === 'atelier' ? `<label class="sdfield"><span>Voiture (Odoo)</span><select class="sdin" data-j="vehicle"><option value="">— Aucune —</option>${(ts.veh || []).map(v => `<option value="${esc(v.id)}"${f.vehicle === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>` : ''}
     ${f.kind === 'event' ? `<label class="sdfield"><span>Événement (Odoo)</span><input class="sdin" data-j="event" list="ts-evl" value="${esc(f.event)}" maxlength="160" placeholder="Commencez à taper le nom de l’événement" autocomplete="off"><datalist id="ts-evl">${(ts.evs || []).map(v => `<option value="${esc(v.name)}"></option>`).join('')}</datalist></label>` : ''}
+    ${f.kind === 'event' ? `<label class="sdfield"><span>Nature du job</span><select class="sdin" data-j="nature"><option value="">— Choisir —</option>${ts.me.natures.map(n => `<option value="${n.id}"${f.nature === n.id ? ' selected' : ''}>${esc(n.label)}</option>`).join('')}</select></label>` : ''}
+    ${f.kind === 'event' && f.event && f.nature ? `<p class="na">Intitulé : <b>${esc(ts.me.natures.find(n => n.id === f.nature).label)} — ${esc(f.event)}</b></p>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="savejob">Créer le job</button><button type="button" data-ts="canceljob">Annuler</button></div></div>`;
-  const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>Affectation</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${esc((ts.me.assignments.find(x => x.id === j.assignment) || {}).label || '')}</td><td>${TS_BU[j.bu] || j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button> <button type="button" class="danger" data-ts="deljob" data-id="${j.id}">Supprimer</button></td></tr>`).join('')}</tbody></table>` : '';
+  const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${TS_BU[j.bu] || j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button> <button type="button" class="danger" data-ts="deljob" data-id="${j.id}">Supprimer</button></td></tr>`).join('')}</tbody></table>` : '';
   return `<div class="block-head"><h3>Jobs</h3></div><h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}`;
 }
 
@@ -184,16 +185,16 @@ document.addEventListener('click', async ev => {
   if (a === 'rec') return tsToggleRec();
   if (a === 'save') return tsSave();
   if (a === 'sugg') { ts.sugg = []; try { const j = await rsCall('/api/timesheets/suggestions'); ts.sugg = j.suggestions; if (j.unavailable) ts.msg = j.unavailable; } catch (e) { ts.sugg = null; ts.msg = e.message; } return tsDraw(); }
-  if (a === 'mk') { const s = ts.sugg[+b.dataset.i]; return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: s.kind, title: s.title, bu: s.bu, assignment: s.assignment || 'autre', vehicle: s.vehicle, event: s.event})}); ts.sugg.splice(+b.dataset.i, 1); }); }
-  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', assignment: 'autre', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.evs) { ts.evs = []; rsCall('/api/timesheets/events').then(j => { ts.evs = j.events; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); }
+  if (a === 'mk') { const s = ts.sugg[+b.dataset.i]; return tsDo(async () => { for (const n of (s.natures || [''])) await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: s.kind, title: s.title, nature: n, bu: s.bu, assignment: s.assignment || 'autre', vehicle: s.vehicle, event: s.event})}); ts.sugg.splice(+b.dataset.i, 1); }); }
+  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', nature: '', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.evs) { ts.evs = []; rsCall('/api/timesheets/events').then(j => { ts.evs = j.events; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); }
     if (!ts.veh) { ts.veh = []; rsCall('/api/timesheets/vehicles').then(j => { ts.veh = j.vehicles; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); } return tsDraw(); }
   if (a === 'canceljob') { ts.jobForm = null; return tsDraw(); }
   if (a === 'savejob') {
     tsReadJob(); const f = ts.jobForm, v = (ts.veh || []).find(x => x.id === f.vehicle);
-    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, bu: f.bu, assignment: f.assignment, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: ((ts.evs || []).find(x => x.name === f.event) || {}).id || '', title: f.event} : null})}); ts.jobForm = null; });
+    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, nature: f.kind === 'event' ? f.nature : '', bu: f.bu, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: ((ts.evs || []).find(x => x.name === f.event) || {}).id || '', title: f.event} : null})}); ts.jobForm = null; });
   }
   if (a === 'deljob') { if (!confirm(t('Supprimer ce job ?'))) return; return tsDo(() => rsCall(`/api/timesheets/jobs/${b.dataset.id}`, {method: 'DELETE'})); }
-  if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, assignment: j.assignment || 'autre', vehicle: j.vehicle, event: j.event, open: !j.open})})); }
+  if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, nature: j.nature || '', assignment: j.assignment || 'autre', vehicle: j.vehicle, event: j.event, open: !j.open})})); }
 });
 document.addEventListener('change', async ev => {
   const el = ev.target; if (!document.getElementById('ts-view')) return;
@@ -204,4 +205,6 @@ document.addEventListener('change', async ev => {
   }
   if (el.matches && el.matches('[data-ts-file]')) { tsReadForm(); for (const f of el.files) ts.pend.photos.push(await tsImage(f)); return tsDraw(); }
   if (el.matches && el.matches('[data-j="kind"]')) { tsReadJob(); tsDraw(); }
+  if (el.matches && el.matches('[data-j="event"]')) { tsReadJob(); const v = (ts.evs || []).find(x => x.name === ts.jobForm.event); if (v && v.bu && tsBuOpts(ts.me).includes(v.bu)) ts.jobForm.bu = v.bu; tsDraw(); }
+  if (el.matches && el.matches('[data-j="nature"]')) { tsReadJob(); tsDraw(); }
 });

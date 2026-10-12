@@ -180,3 +180,13 @@ def test_delete_job_only_without_entries(api):
     as_(api, CHEF)
     assert api.delete(f"/api/timesheets/jobs/{j2}").status_code == 409
     assert api.delete(f"/api/timesheets/jobs/{j1}").status_code == 200
+
+
+def test_event_job_title_is_built_from_event_and_nature(api):
+    as_(api, CHEF)
+    body = {"kind": "event", "nature": "chargement", "bu": "HISTORIC_RACING", "event": {"id": "7", "title": "Imola Classic"}}
+    r = api.post("/api/timesheets/jobs", json=body)
+    assert r.status_code == 200 and r.json()["title"] == "Chargement camion(s) et/ou camionnette(s) — Imola Classic" and r.json()["billable"] is True
+    assert api.post("/api/timesheets/jobs", json=body).status_code == 422                       # doublon
+    assert api.post("/api/timesheets/jobs", json={**body, "nature": ""}).status_code == 422
+    assert api.post("/api/timesheets/jobs", json={**body, "nature": "x"}).status_code == 422

@@ -1325,3 +1325,4 @@ Object.assign(EN, {'Date invalide : saisissez jj/mm/aaaa (pas dans le futur).': 
 Object.assign(EN, {'CARS (toutes)': 'CARS (all)'});
 Object.assign(EN, {'Événement (Odoo)': 'Event (Odoo)', 'Commencez à taper le nom de l’événement': 'Start typing the event name'});
 Object.assign(EN, {'Supprimer ce job ?': 'Delete this job?'});
+Object.assign(EN, {'Nature du job': 'Job type', '— Choisir —': '— Choose —', 'Réassort camion(s)': 'Truck restocking', 'Chargement camion(s) et/ou camionnette(s)': 'Loading truck(s) and/or van(s)', 'Déchargement camion(s) et/ou camionnette(s)': 'Unloading truck(s) and/or van(s)', 'Nettoyage équipements et/ou outillage': 'Cleaning equipment and/or tooling', 'Nettoyage camion(s) et/ou camionnette(s)': 'Cleaning truck(s) and/or van(s)', 'Intitulé :': 'Title:'});

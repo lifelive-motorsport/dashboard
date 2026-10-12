@@ -42,6 +42,7 @@ function plLanes(items) { const ends = []; items.sort((x, y) => x.a - y.a || y.b
 const plBar = (e, a, b, lane, o = {}) => { const [bg, fg] = PL_BU[e.bu] || ['var(--mut)', '#fff'];
   return `<div class="pl-bar${e.confirmed ? '' : ' tbc'}${o.cutL ? ' cutl' : ''}${o.cutR ? ' cutr' : ''}${o.veh ? ' veh' : ''}${o.st === 'declined' ? ' declined' : ''}" data-id="${esc(e.id)}" style="grid-column:${a + 1} / ${b + 2};grid-row:${lane + 1};background:${bg};color:${fg}">${o.st === 'declined' ? '✗ ' : ''}${e.confirmed ? '' : '[TBC] '}${esc(e.title)}</div>`; };
 
+const plImmo = (e, a, b, lane) => `<div class="pl-immo" data-id="${esc(e.id)}" style="grid-column:${a + 1} / ${b + 2};grid-row:${lane + 1};background:${(PL_BU[e.bu] || ['var(--mut)'])[0]}" title=""></div>`;
 function plHead(days) { const t = plToday(); return days.map(d => { const we = [0, 6].includes(new Date(d + 'T12:00:00Z').getUTCDay());
   return `<div class="pl-day${we ? ' we' : ''}${d === t ? ' today' : ''}"><small>${esc(plFmt(d, {weekday: 'short'}))}</small><b>${+d.slice(8)}</b></div>`; }).join(''); }
 const plBg = days => days.map((d, i) => { const we = [0, 6].includes(new Date(d + 'T12:00:00Z').getUTCDay()); return `<div class="pl-cell${we ? ' we' : ''}${d === plToday() ? ' today' : ''}" style="grid-column:${i + 1};grid-row:1 / -1"></div>`; }).join('');
@@ -71,14 +72,19 @@ function plRowsHtml() {
 // ---- Vue « Calendrier » ----------------------------------------------------------------------------------------------------------------------------------
 function plCalHtml() {
   const days = plGridDays(), weeks = []; for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
-  const R = plRes(), grp = pl.res, evs = plEvents().filter(e => grp === 'all' || e.people.concat(e.vehicles).some(p => R[p.rid] && plGroup(R[p.rid]) === grp));
+  const R = plRes(), grp = pl.res, vehGroup = !['all', 'staff', 'external'].includes(grp), evs = plEvents().filter(e => grp === 'all' || e.people.concat(e.vehicles).some(p => R[p.rid] && plGroup(R[p.rid]) === grp));
   const t = plToday(), month = pl.anchor.slice(0, 7);
   return '<div class="pl-cal">' + `<div class="pl-calhd">${weeks[0].map(d => `<div>${esc(plFmt(d, {weekday: 'short'}))}</div>`).join('')}</div>` + weeks.map(w => {
     const s = w[0], en = w[6], items = [];
-    for (const e of evs) { if (e.end < s || e.start > en) continue; items.push({e, a: Math.max(0, plIdx(s, e.start)), b: Math.min(6, plIdx(s, e.end)), cutL: e.start < s, cutR: e.end > en}); }
+    // Filtre « véhicules » : la barre couvre l'immobilisation (comme dans la vue par ressource). Sinon : dates de l'événement, avec un trait fin sous la barre pour l'immobilisation des véhicules.
+    for (const e of evs) {
+      const hasV = e.vehicles.length > 0, vehFilter = vehGroup && hasV, s0 = vehFilter ? e.immo_start : e.start, e0 = vehFilter ? e.immo_end : e.end, wide = !vehFilter && hasV && (e.immo_start < e.start || e.immo_end > e.end);
+      const fs = wide ? e.immo_start : s0, fe = wide ? e.immo_end : e0; if (fe < s || fs > en) continue;
+      items.push({e, a: Math.max(0, plIdx(s, fs)), b: Math.min(6, plIdx(s, fe)), ea: Math.max(0, plIdx(s, s0)), eb: Math.min(6, plIdx(s, e0)), cutL: s0 < s, cutR: e0 > en, veh: vehFilter, ia: wide ? Math.max(0, plIdx(s, e.immo_start)) : null, ib: wide ? Math.min(6, plIdx(s, e.immo_end)) : null});
+    }
     const lanes = plLanes(items);
     const nums = w.map((d, i) => `<div class="pl-num${d === t ? ' today' : ''}${pl.span === 'month' && d.slice(0, 7) !== month ? ' out' : ''}" style="grid-column:${i + 1}">${+d.slice(8) === 1 || d === s ? esc(plFmt(d, {day: 'numeric', month: 'short'})) : +d.slice(8)}</div>`).join('');
-    return `<div class="pl-week${pl.span === 'week' ? ' big' : ''}"><div class="pl-nums">${nums}</div><div class="pl-wtrack" style="grid-template-rows:repeat(${lanes},24px)">${plBg(w)}${items.map(it => plBar(it.e, it.a, it.b, it.lane, it)).join('')}</div></div>`;
+    return `<div class="pl-week${pl.span === 'week' ? ' big' : ''}"><div class="pl-nums">${nums}</div><div class="pl-wtrack" style="grid-template-rows:repeat(${lanes},28px)">${plBg(w)}${items.map(it => (it.ia != null ? plImmo(it.e, it.ia, it.ib, it.lane) : '') + plBar(it.e, it.ea, it.eb, it.lane, it)).join('')}</div></div>`;
   }).join('') + '</div>';
 }
 
@@ -92,7 +98,7 @@ function plDraw() {
     + `<div class="sdbar"><div class="bu-filter" role="group" aria-label="Filtrer par ressource">${pill('pl-res', 'all', 'Tous', pl.res === 'all')}${cats.map(([id, l]) => pill('pl-res', id, l, pl.res === id)).join('')}</div>${pl.mode === 'rows' ? `<label class="chk"><input type="checkbox" id="pl-empty" ${pl.hideEmpty ? 'checked' : ''}> Seulement les ressources occupées</label>` : ''}${pl.loading ? '<small class="na">Chargement…</small>' : ''}</div>`
     + (pl.data.vehicles_message ? `<p class="na">${esc(pl.data.vehicles_message)}</p>` : '')
     + (pl.mode === 'rows' ? plRowsHtml() : plCalHtml())
-    + '<small class="na">Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation. Survolez une barre pour le détail.</small>';
+    + '<small class="na">Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation ; dans le calendrier, le trait fin sous une barre indique l’immobilisation des véhicules. Survolez une barre pour le détail.</small>';
 }
 
 // ---- Détail au survol -----------------------------------------------------------------------------------------------------------------------------------------
@@ -114,7 +120,7 @@ function plTipHtml(e) {
 function plTip(ev, show) {
   let t = document.getElementById('pl-tip');
   if (!show) { if (t) t.hidden = true; return; }
-  const bar = ev.target.closest && ev.target.closest('.pl-bar'); if (!bar) return;
+  const bar = ev.target.closest && ev.target.closest('.pl-bar, .pl-immo'); if (!bar) return;
   const e = pl.data.events.find(x => x.id === bar.dataset.id); if (!e) return;
   if (!t) { t = document.createElement('div'); t.id = 'pl-tip'; t.className = 'pl-tip'; document.body.appendChild(t); }
   t.innerHTML = plTipHtml(e);
@@ -122,12 +128,12 @@ function plTip(ev, show) {
   t.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px'; t.style.top = (r.bottom + 6 + h > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
 }
 document.addEventListener('mouseover', e => { if (document.getElementById('pl-view')) plTip(e, true); });
-document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('.pl-bar') && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.pl-bar'))) plTip(e, false); });
+document.addEventListener('mouseout', e => { if (e.target.closest && e.target.closest('.pl-bar, .pl-immo') && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.pl-bar, .pl-immo'))) plTip(e, false); });
 
 // ---- Interactions --------------------------------------------------------------------------------------------------------------------------------------------------
 document.addEventListener('click', e => {
   if (!document.getElementById('pl-view')) return;
-  const bar = e.target.closest('.pl-bar');
+  const bar = e.target.closest('.pl-bar, .pl-immo');
   if (bar) { if (superUser) { window.peEditAfter = bar.dataset.id; location.hash = '#/planifier/events'; } return; }
   const b = e.target.closest('button'); if (!b) return;
   if (b.classList.contains('pl-nav')) {

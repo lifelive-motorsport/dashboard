@@ -1299,3 +1299,4 @@ Object.assign(EN, {
 });
 Object.assign(EN_T, {'{} km depuis Lifelive': '{} km from Lifelive', 'Immobilisation véhicules : {} → {}': 'Vehicle immobilisation: {} → {}'});
 EN_PATTERNS.push([/^Semaine (\d+) · (.+)$/, m => 'Week ' + m[1] + ' · ' + m[2]], [/^(\d+) autres? invités?$/, m => m[1] + ' other guest' + (m[1] > 1 ? 's' : '')]);
+Object.assign(EN, {'Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation ; dans le calendrier, le trait fin sous une barre indique l’immobilisation des véhicules. Survolez une barre pour le détail.': 'Bars: BU colour · hatched = unconfirmed event (TBC) · ✗ = invitation declined. For a vehicle, the bar covers the whole immobilisation; in the calendar, the thin line under a bar shows the vehicles’ immobilisation. Hover over a bar for details.'});

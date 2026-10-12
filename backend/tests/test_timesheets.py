@@ -17,9 +17,9 @@ def api(monkeypatch):
     monkeypatch.setattr(timesheets, "_blobs", None)
     monkeypatch.setattr(users, "is_super", lambda e: False)
     cur = staff.store().get()
-    people = [{"id": "m1", "name": "Nolan Collinet", "kind": "salarie", "function": "Mécanicien", "google_email": MEC, "hours_week": 38, "fte": 100},
-              {"id": "c1", "name": "Julien Durbecq", "kind": "salarie", "function": "Chef d'atelier CARS", "google_email": CHEF},
-              {"id": "c2", "name": "Morgan Duyckaerts", "kind": "salarie", "function": "Chef d'atelier XC", "google_email": CHEF_XC}]
+    people = [{"id": "m1", "name": "Nolan Collinet", "kind": "salarie", "function": "Mechanic", "workshop": "mechanic", "google_email": MEC, "hours_week": 38, "fte": 100},
+              {"id": "c1", "name": "Julien Durbecq", "kind": "salarie", "function": "Workshop Manager", "workshop": "chef_cars", "google_email": CHEF},
+              {"id": "c2", "name": "Morgan Duyckaerts", "kind": "salarie", "function": "XC Workshop Manager", "workshop": "chef_xc", "google_email": CHEF_XC}]
     assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
     who = {"u": MEC}
     app.dependency_overrides[require_user] = lambda: who["u"]
@@ -47,6 +47,8 @@ def test_roles(api):
     assert timesheets.role_of(MEC)["role"] == "mechanic"
     assert timesheets.role_of(CHEF)["bus"] == ["CARS"] and timesheets.role_of(CHEF_XC)["bus"] == ["XC"]
     assert timesheets.role_of(NOBODY)["role"] is None
+    assert api.put("/api/resources/staff/m1", json={"workshop": "chef_all"}).status_code in (200, 403)
+    assert timesheets.role_of(MEC)["role"] in ("mechanic", "chef")
     as_(api, NOBODY)
     assert api.get("/api/timesheets/me").json()["role"] is None
     assert api.get("/api/timesheets/week", params={"start": "2026-06-01"}).status_code == 403

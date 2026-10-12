@@ -1,8 +1,7 @@
 """Consigner › Pointages : jobs d'atelier et heures passées par les mécaniciens.
 
 Un pointage = une durée sur un job, avec affectation (Prépa, Révision…), système (Moteur…), texte, photos et mémo vocal. Le mécanicien (identifié par son compte Google, lié à sa fiche du
-staff) modifie ses pointages jusqu'à 24 h après leur création ; ensuite, ou une fois validés, seul le chef d'atelier peut les modifier. Le chef d'atelier est reconnu à la fonction de sa
-fiche (« Chef d'atelier CARS », « Chef d'atelier XC ») ; le Super User a les mêmes droits sur tout. Données dans Firestore (collections timesheet_jobs et timesheet_entries) ; photos et
+staff) modifie ses pointages jusqu'à 24 h après leur création ; ensuite, ou une fois validés, seul le chef d'atelier peut les modifier. Le rôle à l'atelier (mécanicien, chef d'atelier CARS / XC / les deux) est un champ de la fiche staff (`workshop`), choisi dans Planifier › Ressources ; le Super User a les mêmes droits sur tout. Données dans Firestore (collections timesheet_jobs et timesheet_entries) ; photos et
 mémos vocaux dans le bucket privé STAFF_BUCKET (préfixe timesheets/). Rien n'est écrit dans Odoo à ce stade."""
 from __future__ import annotations
 
@@ -178,9 +177,6 @@ def blobs() -> Blobs:
 
 # ---- Identité et droits ----------------------------------------------------------------------------------------------------------------
 
-CHEF = re.compile(r"chef\s+d['’]?\s*atelier", re.I)
-
-
 def person_of(email: str) -> dict | None:
     from . import staff
     e = (email or "").lower()
@@ -195,10 +191,12 @@ def role_of(email: str) -> dict:
         return {"role": "chef", "bus": ["XC", "CARS"], "person": p, "super": True}
     if not p:
         return {"role": None, "bus": [], "person": None, "super": False}
-    fn = p.get("function") or ""
-    if CHEF.search(fn):
-        bus = [b for b in ("XC", "CARS") if re.search(rf"\b{b}\b", fn, re.I)] or ["XC", "CARS"]
+    w = p.get("workshop") or ""
+    if w.startswith("chef_"):
+        bus = {"chef_cars": ["CARS"], "chef_xc": ["XC"]}.get(w, ["XC", "CARS"])
         return {"role": "chef", "bus": bus, "person": p, "super": False}
+    if w != "mechanic":
+        return {"role": None, "bus": [], "person": p, "super": False}
     return {"role": "mechanic", "bus": [], "person": p, "super": False}
 
 

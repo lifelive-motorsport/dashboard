@@ -615,7 +615,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 def get_resources(user: str = Depends(super_user)):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
-        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False))}
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", "")}
                   for p in staff.store().get()["data"]["people"]]
         res = copy.deepcopy(resources.store().get())
     except Exception:
@@ -656,6 +656,7 @@ def put_resource_externals(body: resources.SaveBody, user: str = Depends(super_u
 class StaffEmailBody(BaseModel):
     email: str | None = Field(default=None, max_length=120)         # seuls les champs fournis sont modifiés
     all_bus: bool | None = None
+    workshop: str | None = None
 
 
 @app.put("/api/resources/staff/{pid}")
@@ -671,19 +672,21 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
             person["google_email"] = body.email
         if body.all_bus is not None:
             person["all_bus"] = body.all_bus
+        if body.workshop is not None:
+            person["workshop"] = body.workshop
         data = staff.StaffDoc.model_validate(data).model_dump()
         doc = staff.store().put(data, user, cur["updated_at"])
     except HTTPException:
         raise
     except ValueError as e:
-        raise HTTPException(422, "Adresse e-mail invalide") from e
+        raise HTTPException(422, "Valeur invalide (adresse e-mail ou rôle d'atelier)") from e
     except Exception:
         log.exception("Enregistrement du compte Google impossible")
         raise HTTPException(503, "Enregistrement impossible (stockage non configuré ou inaccessible)")
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
     saved = next(p for p in doc["data"]["people"] if p["id"] == pid)
-    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"]}
+    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"], "workshop": saved.get("workshop", "")}
 
 
 @app.get("/api/resources/directory-users")
@@ -708,7 +711,7 @@ def planning_page(date_from: date = Query(..., alias="from"), date_to: date = Qu
 def _ts_ctx(user: str) -> dict:
     r = timesheets.role_of(user)
     if r["role"] is None:
-        raise HTTPException(403, "Votre adresse Google n'est liée à aucune fiche du staff : demandez au Super User de la renseigner (Planifier › Ressources › Staff interne).")
+        raise HTTPException(403, "Vous n'êtes pas inscrit à l'atelier : le Super User doit renseigner votre compte Google et votre rôle (Planifier › Ressources › Staff interne › Atelier).")
     return r
 
 

@@ -80,7 +80,7 @@ function tsTeamHtml() {
   const rows = tm.rows.map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
       + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" data-ts="valall" data-u="${esc(r.user)}">Valider toute la semaine</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
-  return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun mécanicien trouvé (fonction du staff différente de « Chef d’atelier » et compte Google renseigné).</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
+  return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun mécanicien trouvé : choisissez « Mécanicien » dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez leur compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
 }
 
 function tsJobsHtml() {
@@ -103,7 +103,7 @@ function tsDraw() {
   let h = '';
   if (ts.err) h = `<p class="err">${esc(ts.err)}</p>`;
   else if (!ts.me) h = '<p class="na">Chargement…</p>';
-  else if (!ts.me.role) h = '<p class="na">Votre adresse Google n’est liée à aucune fiche du staff : demandez au Super User de la renseigner (Planifier › Ressources › Staff interne).</p>';
+  else if (!ts.me.role) h = '<p class="na">Vous n’êtes pas encore inscrit à l’atelier : demandez au Super User de renseigner votre compte Google et votre rôle (Planifier › Ressources › Staff interne › Atelier).</p>';
   else if (page === 'team' && ts.me.role !== 'chef') h = '<p class="na">Cette page est réservée au chef d’atelier.</p>';
   else h = (ts.msg ? `<p class="ts-msg">${esc(ts.msg)}</p>` : '') + (page === 'team' ? tsTeamHtml() : tsMineHtml());
   v.innerHTML = h;

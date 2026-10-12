@@ -81,7 +81,15 @@ class Person(BaseModel):
     common_split: dict[str, float] = Field(default_factory=dict)       # répartition (en %) de la part Shared Services + Management de cette personne sur les 4 BU ; vide = clé générale des frais communs
     note: str = Field(default="", max_length=500)
     google_email: str = Field(default="", max_length=120)               # compte Google de la personne : invitée aux événements créés dans Google Agenda
+    workshop: str = ""                                                  # rôle à l'atelier (Pointages) : "", mechanic, chef_cars, chef_xc, chef_all ; choisi dans Planifier › Ressources, indépendant du libellé de la fonction
     all_bus: bool = False                                               # proposée pour toutes les BU (filtres de Ressources et d'Événements), quelle que soit son imputation
+
+    @field_validator("workshop")
+    @classmethod
+    def _workshop(cls, v):
+        if v not in ("", "mechanic", "chef_cars", "chef_xc", "chef_all"):
+            raise ValueError("rôle d'atelier inconnu")
+        return v
 
     @field_validator("google_email")
     @classmethod

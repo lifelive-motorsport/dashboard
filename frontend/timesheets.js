@@ -32,7 +32,7 @@ const tsNav = () => `<div class="ts-nav"><button type="button" data-ts="prev" ar
 const tsKpis = s => `<div class="ts-kpis"><div><small>Heures pointées</small><b>${tsDur(s.total)}</b></div><div><small>Facturables</small><b>${tsDur(s.billable)}</b></div><div><small>Taux d’occupation</small><b>${tsPct(s.occupancy)}</b></div><div><small>Taux facturable</small><b>${tsPct(s.billable_rate)}</b></div><div><small>Horaire théorique</small><b>${s.theoretical ? tsDur(s.theoretical) : '–'}</b></div></div>`;
 
 function tsEntryHtml(e, mine) {
-  const a = (ts.me.assignments.find(x => x.id === e.assignment) || {}).label, sy = (ts.me.systems.find(x => x.id === e.system) || {}).label;
+  const a = (ts.me.assignments.find(x => x.id === (e.job.assignment || e.assignment)) || {}).label, sy = (ts.me.systems.find(x => x.id === e.system) || {}).label;
   const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<a href="${u}" target="_blank" rel="noopener"><img class="ts-ph" src="${u}" loading="lazy" alt="Photo"></a>` : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
   const lock = e.validated ? '<span class="ts-lock ok">✓ Validé</span>' : e.can_edit && !(ts.me.role === 'chef') ? `<span class="ts-lock">Modifiable jusqu’à</span> <span class="ts-lock">${esc(tsStamp(e.editable_until))}</span>` : e.can_edit ? '' : '<span class="ts-lock bad">🔒 Verrouillé</span>';
   const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">Modifier</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
@@ -48,7 +48,6 @@ function tsJobSelect(sel) {
 function tsFormHtml() {
   const f = ts.form; if (!f) return '';
   const chips = [30, 60, 120, 240, 480].map(m => `<button type="button" class="ts-chip${f.minutes === m ? ' sel' : ''}" data-ts="dur" data-m="${m}">${tsDur(m)}</button>`).join('');
-  const pills = ts.me.assignments.map(a => `<button type="button" class="ts-chip${f.assignment === a.id ? ' sel' : ''}" data-ts="asg" data-a="${a.id}">${esc(a.label)}</button>`).join('');
   const photos = ts.pend.photos.length ? `<span class="ts-n">${ts.pend.photos.length} <span>photo(s) à envoyer</span></span>` : '';
   const audio = ts.pend.audio ? '<span class="ts-n">🎙 <span>Mémo vocal prêt</span></span>' : '';
   return `<div class="ts-form"><h4>${f.id ? 'Modifier le pointage' : 'Nouveau pointage'}</h4>
@@ -56,7 +55,6 @@ function tsFormHtml() {
     <div class="sdgrid"><label class="sdfield"><span>Date</span><span class="datef"><input class="sdin ts-d" value="${fmtDate(f.date)}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="ts-cal" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="ts-dp" value="${f.date}" max="${plToday()}" tabindex="-1" aria-hidden="true"></span></label>
     <div class="sdfield"><span>Rapide</span><div class="ts-chips"><button type="button" class="ts-chip" data-ts="day" data-d="0">Aujourd’hui</button><button type="button" class="ts-chip" data-ts="day" data-d="-1">Hier</button></div></div></div>
     <div class="sdfield"><span>Durée</span><div class="ts-dur"><button type="button" data-ts="step" data-n="-15" aria-label="Moins 15 minutes">−</button><b id="ts-dur">${tsDur(f.minutes)}</b><button type="button" data-ts="step" data-n="15" aria-label="Plus 15 minutes">+</button></div><div class="ts-chips">${chips}</div></div>
-    <div class="sdfield"><span>Affectation</span><div class="ts-chips">${pills}</div></div>
     <label class="sdfield"><span>Système</span><select class="sdin" data-f="system">${ts.me.systems.map(s => `<option value="${s.id}"${f.system === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>
     <label class="sdfield"><span>Intervention</span><textarea class="sdin" data-f="text" rows="3" maxlength="3000" placeholder="Ce qui a été fait…">${esc(f.text)}</textarea></label>
     ${ts.me.attachments ? `<div class="ts-media"><label class="btn">📷 Photo<input type="file" accept="image/*" capture="environment" multiple hidden data-ts-file></label>
@@ -89,12 +87,13 @@ function tsJobsHtml() {
   const sug = ts.sugg == null ? '<button type="button" data-ts="sugg">Voir les propositions d’après le planning</button>' : ts.sugg.length ? `<table class="sdtable"><tbody>${ts.sugg.map((s, i) => `<tr><td><b>${esc(s.title)}</b></td><td>${esc(TS_KIND[s.kind])}</td><td>${esc(plFmt(s.when, {day: 'numeric', month: 'short'}))}</td><td class="num"><button type="button" data-ts="mk" data-i="${i}">Créer ce job</button></td></tr>`).join('')}</tbody></table>` : '<p class="na">Aucune proposition : tous les jobs des prochains événements existent déjà.</p>';
   const form = !f ? '<button type="button" data-ts="newjob">+ Nouveau job</button>' : `<div class="ts-form"><div class="sdgrid">
     <label class="sdfield"><span>Type</span><select class="sdin" data-j="kind">${Object.entries(TS_KIND).map(([k, l]) => `<option value="${k}"${f.kind === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <label class="sdfield"><span>Affectation</span><select class="sdin" data-j="assignment">${ts.me.assignments.map(x => `<option value="${x.id}"${f.assignment === x.id ? ' selected' : ''}>${esc(x.label)}</option>`).join('')}</select></label>
     <label class="sdfield"><span>BU</span><select class="sdin" data-j="bu">${bus.map(b => `<option value="${b}"${f.bu === b ? ' selected' : ''}>${b === 'ALL' ? 'Toutes' : b}</option>`).join('')}</select></label></div>
     <label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>
     ${f.kind === 'atelier' ? `<label class="sdfield"><span>Voiture (Odoo)</span><select class="sdin" data-j="vehicle"><option value="">— Aucune —</option>${(ts.veh || []).map(v => `<option value="${esc(v.id)}"${f.vehicle === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>` : ''}
     ${f.kind === 'event' ? `<label class="sdfield"><span>Événement</span><input class="sdin" data-j="event" value="${esc(f.event)}" maxlength="160" placeholder="Spa Classic"></label>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="savejob">Créer le job</button><button type="button" data-ts="canceljob">Annuler</button></div></div>`;
-  const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${j.bu === 'ALL' ? 'Toutes' : j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button></td></tr>`).join('')}</tbody></table>` : '';
+  const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>Affectation</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${esc((ts.me.assignments.find(x => x.id === j.assignment) || {}).label || '')}</td><td>${j.bu === 'ALL' ? 'Toutes' : j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button></td></tr>`).join('')}</tbody></table>` : '';
   return `<div class="block-head"><h3>Jobs</h3></div><h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}`;
 }
 
@@ -112,7 +111,7 @@ function tsDraw() {
 }
 
 // ---- Formulaire ---------------------------------------------------------------------------------------------------------------------------------------------------
-const tsBlank = () => ({id: null, job_id: '', date: plToday(), minutes: 60, assignment: 'autre', system: 'autre', text: ''});
+const tsBlank = () => ({id: null, job_id: '', date: plToday(), minutes: 60, system: 'autre', text: ''});
 function tsReadForm() {
   const v = document.getElementById('ts-view'); if (!v || !ts.form) return;
   v.querySelectorAll('[data-f]').forEach(el => { ts.form[el.dataset.f] = el.value; });
@@ -147,7 +146,7 @@ async function tsSave() {
   if (!f.job_id) { ts.msg = 'Choisissez un job.'; tsDraw(); return; }
   ts.busy = true; ts.msg = null; tsDraw();
   try {
-    const body = JSON.stringify({job_id: f.job_id, date: f.date, minutes: f.minutes, assignment: f.assignment, system: f.system, text: f.text});
+    const body = JSON.stringify({job_id: f.job_id, date: f.date, minutes: f.minutes, system: f.system, text: f.text});
     const e = await rsCall(f.id ? `/api/timesheets/entries/${f.id}` : '/api/timesheets/entries', {method: f.id ? 'PUT' : 'POST', body});
     let i = 1;
     for (const p of ts.pend.photos) await tsUpload(e.id, p, `photo-${i++}.jpg`);
@@ -170,27 +169,27 @@ document.addEventListener('click', async ev => {
   if (a === 'prev' || a === 'next' || a === 'today') { ts.start = a === 'today' ? plMonday(plToday()) : plAdd(ts.start, a === 'next' ? 7 : -7); return tsLoad(page); }
   if (a === 'open') { const u = b.dataset.u; ts.open.has(u) ? ts.open.delete(u) : ts.open.add(u); return tsDraw(); }
   if (a === 'new') { ts.form = tsBlank(); ts.pend = {photos: [], audio: null}; return tsDraw(); }
-  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, assignment: e.assignment, system: e.system, text: e.text}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
+  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
   if (a === 'cancel') { if (ts.rec) ts.rec.stop(); ts.form = null; ts.msg = null; return tsDraw(); }
   if (a === 'del') { if (!confirm(t('Supprimer ce pointage ?'))) return; return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}`, {method: 'DELETE'})); }
   if (a === 'val') return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}));
   if (a === 'valall') { const r = ts.team.rows.find(x => x.user === b.dataset.u); return tsDo(async () => { for (const e of r.entries.filter(x => !x.validated)) await rsCall(`/api/timesheets/entries/${e.id}/validate?validated=true`, {method: 'POST'}); }); }
-  if (['dur', 'step', 'asg', 'day'].includes(a)) {
+  if (['dur', 'step', 'day'].includes(a)) {
     tsReadForm(); const f = ts.form;
-    if (a === 'dur') f.minutes = +b.dataset.m; else if (a === 'step') f.minutes = Math.min(960, Math.max(15, f.minutes + +b.dataset.n)); else if (a === 'asg') f.assignment = b.dataset.a; else f.date = plAdd(plToday(), +b.dataset.d);
+    if (a === 'dur') f.minutes = +b.dataset.m; else if (a === 'step') f.minutes = Math.min(960, Math.max(15, f.minutes + +b.dataset.n)); else f.date = plAdd(plToday(), +b.dataset.d);
     return tsDraw();
   }
   if (a === 'rec') return tsToggleRec();
   if (a === 'save') return tsSave();
   if (a === 'sugg') { ts.sugg = []; try { const j = await rsCall('/api/timesheets/suggestions'); ts.sugg = j.suggestions; if (j.unavailable) ts.msg = j.unavailable; } catch (e) { ts.sugg = null; ts.msg = e.message; } return tsDraw(); }
-  if (a === 'mk') { const s = ts.sugg[+b.dataset.i]; return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: s.kind, title: s.title, bu: s.bu, vehicle: s.vehicle, event: s.event})}); ts.sugg.splice(+b.dataset.i, 1); }); }
-  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.veh) { ts.veh = []; rsCall('/api/timesheets/vehicles').then(j => { ts.veh = j.vehicles; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); } return tsDraw(); }
+  if (a === 'mk') { const s = ts.sugg[+b.dataset.i]; return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: s.kind, title: s.title, bu: s.bu, assignment: s.assignment || 'autre', vehicle: s.vehicle, event: s.event})}); ts.sugg.splice(+b.dataset.i, 1); }); }
+  if (a === 'newjob') { ts.jobForm = {kind: 'atelier', assignment: 'autre', bu: ts.me.bus[0] || 'CARS', title: '', vehicle: '', event: ''}; if (!ts.veh) { ts.veh = []; rsCall('/api/timesheets/vehicles').then(j => { ts.veh = j.vehicles; if (j.unavailable) ts.msg = j.unavailable; tsReadJob(); tsDraw(); }).catch(() => {}); } return tsDraw(); }
   if (a === 'canceljob') { ts.jobForm = null; return tsDraw(); }
   if (a === 'savejob') {
     tsReadJob(); const f = ts.jobForm, v = (ts.veh || []).find(x => x.id === f.vehicle);
-    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, bu: f.bu, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: '', title: f.event} : null})}); ts.jobForm = null; });
+    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, bu: f.bu, assignment: f.assignment, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: '', title: f.event} : null})}); ts.jobForm = null; });
   }
-  if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, vehicle: j.vehicle, event: j.event, open: !j.open})})); }
+  if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, assignment: j.assignment || 'autre', vehicle: j.vehicle, event: j.event, open: !j.open})})); }
 });
 document.addEventListener('change', async ev => {
   const el = ev.target; if (!document.getElementById('ts-view')) return;

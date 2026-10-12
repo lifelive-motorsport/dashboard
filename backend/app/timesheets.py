@@ -41,6 +41,14 @@ class JobIn(BaseModel):
     vehicle: VehicleRef | None = None
     event: EventRef | None = None
     open: bool = True
+    assignment: str = "autre"                                           # Prépa, Révision, Setup… : propre au job, reprise par chaque pointage
+
+    @field_validator("assignment")
+    @classmethod
+    def _a(cls, v):
+        if v not in A_IDS:
+            raise ValueError("affectation inconnue")
+        return v
 
 
 class EntryIn(BaseModel):
@@ -300,7 +308,7 @@ def create_entry(data: EntryIn, user: str, r: dict) -> dict:
     if target != user.lower() and not chef_for(r, job):
         raise PermissionError("Seul le chef d'atelier peut pointer pour un autre mécanicien")
     eid = "e-" + uuid.uuid4().hex[:12]
-    doc = {"id": eid, "user": target, "job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": data.assignment, "system": data.system, "text": data.text.strip(),
+    doc = {"id": eid, "user": target, "job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system, "text": data.text.strip(),
            "attachments": [], "validated": False, "created_at": now().isoformat(), "updated_at": now().isoformat(), "created_by": user.lower()}
     entries().put(eid, doc)
     return doc
@@ -318,7 +326,7 @@ def update_entry(eid: str, data: EntryIn, user: str, r: dict) -> dict:
         raise LookupError("Job introuvable")
     if data.job_id != e["job_id"] and not job.get("open", True):
         raise LookupError("Job clôturé")
-    e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": data.assignment, "system": data.system, "text": data.text.strip(), "updated_at": now().isoformat()})
+    e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system, "text": data.text.strip(), "updated_at": now().isoformat()})
     entries().put(eid, e)
     return e
 
@@ -397,6 +405,6 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
             if r.get("category") not in RACE:
                 continue
             vname = re.sub(r"^\s*[(\[][^)\]]*[)\]]\s*[-:]?\s*", "", r["name"]) or r["name"]
-            for prefix in ("Pre-event", "Post-event"):
-                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": "CARS", "vehicle": {"id": "", "name": vname}, "event": eref, "when": ev["start"]})
+            for prefix, asg in (("Pre-event", "prepa"), ("Post-event", "revision")):
+                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": "CARS", "vehicle": {"id": "", "name": vname}, "event": eref, "assignment": asg, "when": ev["start"]})
     return [s for s in out if s["title"].lower() not in have]

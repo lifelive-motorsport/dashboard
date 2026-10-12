@@ -156,3 +156,10 @@ def test_suggestions_from_planning(api):
 def test_pointages_pages_are_grantable():
     from app import access
     assert access.path_ok("/api/timesheets/week", {"consigner/timesheets"}) and not access.path_ok("/api/timesheets/week", {"overview/ca"})
+
+
+def test_entry_takes_assignment_from_job(api):
+    jid = mkjob(api, assignment="setup").json()["id"]
+    as_(api, MEC)
+    e = api.post("/api/timesheets/entries", json=entry(jid, assignment="crash")).json()
+    assert e["assignment"] == "setup"

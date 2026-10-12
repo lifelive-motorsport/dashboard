@@ -37,7 +37,7 @@ const tsKpis = s => `<div class="ts-kpis"><div><small>Heures pointées</small><b
 
 function tsEntryHtml(e, mine) {
   const a = (ts.me.assignments.find(x => x.id === (e.job.assignment || e.assignment)) || {}).label, sy = (ts.me.systems.find(x => x.id === e.system) || {}).label;
-  const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<a href="${u}" target="_blank" rel="noopener"><img class="ts-ph" src="${u}" loading="lazy" alt="Photo"></a>` : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
+  const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<img class="ts-ph" src="${u}" loading="lazy" alt="Photo">` : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
   const lock = e.validated ? '<span class="ts-lock ok">✓ Validé</span>' : e.can_edit && !(ts.me.role === 'chef') ? `<span class="ts-lock">Modifiable jusqu’à</span> <span class="ts-lock">${esc(tsStamp(e.editable_until))}</span>` : e.can_edit ? '' : '<span class="ts-lock bad">🔒 Verrouillé</span>';
   const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">Modifier</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
   const val = ts.me.role === 'chef' && !mine ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="${e.validated ? 0 : 1}">${e.validated ? 'Annuler la validation' : 'Valider'}</button>` : '';
@@ -255,3 +255,28 @@ document.addEventListener('change', async ev => {
   if (el.matches && el.matches('[data-j="nature"]')) { tsReadJob(); tsDraw(); }
   if (el.matches && el.matches('[data-j="vehicle"]')) { tsReadJob(); const v = (ts.veh || []).find(x => x.id === ts.jobForm.vehicle); if (v && v.bu && !ts.jobForm.event && tsBuOpts(ts.me).includes(v.bu)) ts.jobForm.bu = v.bu; tsDraw(); }
 });
+
+// ---- Visionneuse de photos : s'ouvre dans la page (pas d'onglet), flèches et balayage pour parcourir les photos du même pointage ----------------------
+let tsLb = null;
+function tsLbShow(i) {
+  const L = tsLb; L.i = (i + L.urls.length) % L.urls.length;
+  L.el.querySelector('img').src = L.urls[L.i]; L.el.querySelector('.lb-n').textContent = L.urls.length > 1 ? `${L.i + 1} / ${L.urls.length}` : '';
+  L.el.classList.toggle('one', L.urls.length < 2);
+}
+function tsLbOpen(urls, i) {
+  tsLbClose();
+  const el = document.createElement('div'); el.className = 'ts-lb'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Photo');
+  el.innerHTML = '<button type="button" class="lb-x" aria-label="Fermer" title="Fermer">✕</button><button type="button" class="lb-p" aria-label="Photo précédente" title="Photo précédente">‹</button><img alt="Photo"><button type="button" class="lb-s" aria-label="Photo suivante" title="Photo suivante">›</button><span class="lb-n"></span>';
+  document.body.appendChild(el); tsLb = {el, urls, i}; tsLbShow(i);
+  let x0 = null;
+  el.addEventListener('click', e => { if (e.target.closest('.lb-x') || e.target === el) tsLbClose(); else if (e.target.closest('.lb-p')) tsLbShow(tsLb.i - 1); else if (e.target.closest('.lb-s')) tsLbShow(tsLb.i + 1); });
+  el.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; }, {passive: true});
+  el.addEventListener('touchend', e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 50) tsLbShow(tsLb.i + (dx < 0 ? 1 : -1)); });
+}
+function tsLbClose() { if (tsLb) { tsLb.el.remove(); tsLb = null; } }
+document.addEventListener('click', e => {
+  const im = e.target.closest && e.target.closest('#ts-view img.ts-ph'); if (!im) return;
+  const all = [...(im.closest('.ts-att') || im.parentElement).querySelectorAll('img.ts-ph')]; tsLbOpen(all.map(x => x.src), all.indexOf(im));
+});
+document.addEventListener('keydown', e => { if (!tsLb) return; if (e.key === 'Escape') tsLbClose(); else if (e.key === 'ArrowLeft') tsLbShow(tsLb.i - 1); else if (e.key === 'ArrowRight') tsLbShow(tsLb.i + 1); });
+window.addEventListener('hashchange', tsLbClose);

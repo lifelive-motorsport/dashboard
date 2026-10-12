@@ -1324,3 +1324,4 @@ Object.assign(EN, {'Aucun membre de l’atelier pour cette BU : choisissez un r�
 Object.assign(EN, {'Date invalide : saisissez jj/mm/aaaa (pas dans le futur).': 'Invalid date: enter dd/mm/yyyy (not in the future).'});
 Object.assign(EN, {'CARS (toutes)': 'CARS (all)'});
 Object.assign(EN, {'Événement (Odoo)': 'Event (Odoo)', 'Commencez à taper le nom de l’événement': 'Start typing the event name'});
+Object.assign(EN, {'Supprimer ce job ?': 'Delete this job?'});

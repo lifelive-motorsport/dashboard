@@ -169,3 +169,14 @@ def test_sub_bu_jobs_belong_to_cars_chef(api):
     assert mkjob(api, bu="MODERN_RALLY", title="Job MR").status_code == 200           # chef CARS : sous-BU CARS acceptées
     as_(api, CHEF_XC)
     assert api.post("/api/timesheets/jobs", json={"kind": "atelier", "title": "x", "bu": "HISTORIC_RACING"}).status_code == 403
+
+
+def test_delete_job_only_without_entries(api):
+    j1 = mkjob(api, title="A").json()["id"]
+    j2 = mkjob(api, title="B").json()["id"]
+    as_(api, MEC)
+    api.post("/api/timesheets/entries", json=entry(j2))
+    assert api.delete(f"/api/timesheets/jobs/{j1}").status_code == 403
+    as_(api, CHEF)
+    assert api.delete(f"/api/timesheets/jobs/{j2}").status_code == 409
+    assert api.delete(f"/api/timesheets/jobs/{j1}").status_code == 200

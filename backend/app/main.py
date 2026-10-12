@@ -768,6 +768,21 @@ def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_
     return timesheets.job_view(doc)
 
 
+@app.delete("/api/timesheets/jobs/{jid}")
+def ts_delete_job(jid: str, user: str = Depends(require_user)):
+    """Suppression d'un job sans aucun pointage (sinon : le clôturer, pour garder l'historique)."""
+    r = _ts_chef(user)
+    job = timesheets.jobs().get(jid)
+    if not job:
+        raise HTTPException(404, "Job introuvable")
+    if not timesheets.chef_for(r, job):
+        raise HTTPException(403, "Ce job est géré par l'autre chef d'atelier")
+    if any(e["job_id"] == jid for e in timesheets.entries().all()):
+        raise HTTPException(409, "Ce job a déjà des pointages : clôturez-le plutôt que de le supprimer.")
+    timesheets.jobs().delete(jid)
+    return {"deleted": jid}
+
+
 @app.get("/api/timesheets/suggestions")
 def ts_suggestions(user: str = Depends(require_user)):
     _ts_chef(user)

@@ -895,3 +895,10 @@ def test_contacts_raises_when_odoo_fails_for_every_field_list():
     import pytest
     with pytest.raises(RuntimeError, match="accès refusé"):
         p.contacts("juli")
+
+
+def test_partner_functions_returns_job_positions_and_empty_strings():
+    p = OdooProvider.__new__(OdooProvider)
+    p._call = lambda model, method, **kw: [{"id": 7, "function": " Mécanicien "}, {"id": 8, "function": False}]
+    assert p.partner_functions([7, 8, 9]) == {7: "Mécanicien", 8: ""}
+    assert p.partner_functions([]) == {}

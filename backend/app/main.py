@@ -617,16 +617,27 @@ def get_resources(user: str = Depends(super_user)):
     try:
         people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {})}
                   for p in staff.store().get()["data"]["people"]]
-        res = resources.store().get()
+        res = copy.deepcopy(resources.store().get())
     except Exception:
         log.exception("Lecture des ressources impossible")
         raise HTTPException(503, "Stockage des ressources inaccessible")
+    roles_ok = True
+    ext = res["data"]["externals"]
+    if ext:                                                    # Odoo reste la référence : la fonction (Job Position) est relue à chaque ouverture et écrase la copie enregistrée
+        try:
+            funcs = provider().partner_functions([e["partner_id"] for e in ext])
+            for e in ext:
+                if e["partner_id"] in funcs:
+                    e["role"] = funcs[e["partner_id"]]
+        except Exception:
+            log.exception("Job Position des prestataires illisible dans Odoo")
+            roles_ok = False
     try:
         veh = resources.vehicles()
     except Exception:
         log.exception("Véhicules de service (ressources Google) indisponibles")
         veh = {"configured": False, "source": "none", "items": [], "message": "Liste des véhicules momentanément indisponible."}
-    return {"staff": people, "externals": res, "vehicles": veh, "delegation": gauth.configured() or settings.PROVIDER == "demo"}
+    return {"staff": people, "externals": res, "roles_from_odoo": roles_ok, "vehicles": veh, "delegation": gauth.configured() or settings.PROVIDER == "demo"}
 
 
 @app.put("/api/resources/externals")

@@ -170,6 +170,10 @@ class DemoProvider:
                 {"id": 9103, "name": "Marc Sans Mail", "email": "", "phone": "+32 470 00 00 03", "company": "", "function": ""}]
         return [c for c in base if q.lower() in (c["name"] + c["company"] + c["email"]).lower()]
 
+    def partner_functions(self, ids: list[int]) -> dict[int, str]:
+        known = {9101: "Mécanicien", 9102: "Chauffeur", 9103: ""}
+        return {i: known[i] for i in ids if i in known}
+
     def staff_invoices(self, partner_ids: list[int], year: int) -> list[dict]:
         return [{"number": f"FACTU/{year}/0{i}", "ref": f"F{i}", "date": f"{year}-0{i}-15", "untaxed": 4500.0, "fees": 4000.0 if i % 2 else 4500.0, "total": 5445.0, "paid": i < 4, "partner": "Société exemple SRL", "refund": False} for i in range(1, 6)]
 

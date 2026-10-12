@@ -363,3 +363,52 @@ def listing(d_from: date, d_to: date) -> list[dict]:
 
 def busy(emails: list[str], d_from: date, d_to: date) -> dict[str, list[dict]]:
     return backend().busy(emails, d_from, d_to)
+
+
+# ---- Vue Planning (lecture seule, tous les utilisateurs) -----------------------------------------------------------------------------------
+
+BU_KEYS = tuple(BUS)
+
+
+def planning_view(d_from: date, d_to: date) -> dict:
+    """Événements de la période et ressources, sans adresses e-mail ni données de paie : les invités sont désignés par un identifiant de ressource
+    (`s:` staff interne, `x:` staff externe, `v:` véhicule) ; {resources, events, categories}."""
+    from . import resources, staff
+    res, by_email = [], {}
+    for p in staff.store().get()["data"]["people"]:
+        if not p.get("active", True):
+            continue
+        rid = "s:" + p["id"]
+        res.append({"id": rid, "kind": "staff", "name": p["name"], "bus": [k for k in BU_KEYS if (p.get("alloc") or {}).get(k, 0) > 0], "all_bus": bool(p.get("all_bus")), "function": p.get("function", "")})
+        if p.get("google_email"):
+            by_email[p["google_email"].lower()] = rid
+    for x in resources.store().get()["data"]["externals"]:
+        rid = "x:" + str(x["partner_id"])
+        res.append({"id": rid, "kind": "external", "name": x["name"], "bus": list(x.get("bus") or []), "all_bus": False, "company": x.get("company", "")})
+        if x.get("email"):
+            by_email[x["email"].lower()] = rid
+    veh = resources.vehicles()
+    for i, v in enumerate(veh.get("items", [])):
+        rid = f"v:{i}"
+        res.append({"id": rid, "kind": "vehicle", "name": v["name"], "category": v.get("category", "other"), "type": v.get("type", ""), "bus": [], "all_bus": False})
+        if v.get("email"):
+            by_email[v["email"].lower()] = rid
+    events = []
+    for e in listing(d_from, d_to):
+        people, vehicles, other = [], [], 0
+        resp = e.get("responses", {})
+        for email in e["staff_and_external"]:
+            rid = by_email.get(email.lower())
+            if rid:
+                people.append({"rid": rid, "status": resp.get(email, "needsAction")})
+            else:
+                other += 1
+        for email in e["vehicles"]:
+            rid = by_email.get(email.lower())
+            if rid:
+                vehicles.append({"rid": rid, "status": resp.get(email, "needsAction")})
+        pending = [by_email.get(x.lower()) for x in e.get("externals_pending", [])]
+        events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
+                       "place": e["place"]["address"], "km": e["km"], "via": e["via"], "notes": e["notes"], "people": people, "vehicles": vehicles,
+                       "pending": [r for r in pending if r], "other_guests": other})
+    return {"resources": res, "events": events, "categories": veh.get("categories", []), "vehicles_message": veh.get("message")}

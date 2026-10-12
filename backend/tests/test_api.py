@@ -670,3 +670,39 @@ def test_busy_check_handles_more_than_50_resources_in_chunks(monkeypatch):
     from fastapi.testclient import TestClient
     from app.main import app
     assert TestClient(app).post("/api/events/busy", json={"emails": [f"{i}@r.be" for i in range(80)], "start": "2027-04-01", "end": "2027-04-04"}).status_code == 200
+
+
+def test_planning_view_is_open_to_all_users_and_hides_emails():
+    import json
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning, staff
+    c = TestClient(app)
+    cur = staff.store().get()
+    people = [{"id": "pp1", "name": "Nolan Collinet", "kind": "salarie", "google_email": "nolan@lifelive-motorsport.com", "alloc": {"HISTORIC_RACING": 100}},
+              {"id": "pp2", "name": "Alain Neuville", "kind": "salarie", "google_email": "alain@lifelive-motorsport.com", "all_bus": True}]
+    assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
+    body = {"title": "Spa Classic", "bu": "HISTORIC_RACING", "confirmed": True, "start": "2026-06-20", "end": "2026-06-22", "immo_start": "2026-06-18", "immo_end": "2026-06-24",
+            "place": {"id": "demo-spa", "name": "Circuit", "address": "Stavelot", "country": "BE"}, "notes": "RAS", "staff": ["nolan@lifelive-motorsport.com", "inconnu@x.be"],
+            "externals": [], "vehicles": ["sprinter@resource.calendar.google.com"]}
+    lbid = c.post("/api/events", json=body).json()["id"]
+    r = c.get("/api/planning", params={"from": "2026-06-01", "to": "2026-06-30"})
+    assert r.status_code == 200
+    j = r.json()
+    assert "@" not in json.dumps(j)                                                            # aucune adresse e-mail dans la réponse
+    names = {x["id"]: x for x in j["resources"]}
+    ev = j["events"][0]
+    assert names[ev["people"][0]["rid"]]["name"] == "Nolan Collinet" and ev["other_guests"] == 1
+    assert names[ev["vehicles"][0]["rid"]]["name"] == "Sprinter" and names[ev["vehicles"][0]["rid"]]["category"] == "sv"
+    assert names["s:pp2"]["all_bus"] is True and names["s:pp1"]["bus"] == ["HISTORIC_RACING"]
+    assert (ev["immo_start"], ev["immo_end"]) == ("2026-06-18", "2026-06-24") and ev["place"] == "Stavelot"
+    assert c.get("/api/planning", params={"from": "2026-06-30", "to": "2026-06-01"}).status_code == 422
+    assert c.get("/api/planning", params={"from": "2026-01-01", "to": "2026-12-31"}).status_code == 422
+    c.delete(f"/api/events/{lbid}")
+
+
+def test_planning_page_is_allowed_for_categories_that_tick_it():
+    from app import access
+    assert access.path_ok("/api/planning", {"planifier/planning"}) and not access.path_ok("/api/planning", {"overview/ca"})
+    assert not access.path_ok("/api/resources", {"planifier/planning"}) and not access.path_ok("/api/events", {"planifier/planning"})
+    assert "planifier/planning" in access.PAGES and "planifier/events" not in access.PAGES

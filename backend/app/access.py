@@ -25,6 +25,7 @@ PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
     "marketing/site": ((), {"mkt_site"}), "marketing/expenses": (("/api/expenses",), {"mkt"}),
     "others/tags": (("/api/tags",), set()),
     # modules à venir : droits prêts à être donnés dès maintenant (aucune donnée à ce stade)
+    "planifier/planning": (("/api/planning",), set()),      # lecture seule, ouverte à tous les rôles (aucune donnée de paie ni adresse e-mail)
     # « planifier/events » et « planifier/res_* » (Ressources) : réservées au Super User (comme « others/users »), donc jamais attribuables à une catégorie
     "consigner/timesheets": ((), set()), "consigner/rides": ((), set()), "consigner/consumables": ((), set()),
 }

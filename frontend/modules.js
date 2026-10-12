@@ -4,6 +4,7 @@ const CHAPTERS = [
   {id: 'piloter', n: '01', label: 'Piloter', modules: [
     {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']}]},
   {id: 'planifier', n: '02', label: 'Planifier', modules: [
+    {id: 'planning', label: 'Planning', source: 'Google Agenda', pages: ['planifier/planning']},
     {id: 'events', label: 'Événements', source: 'Google Agenda', pages: ['planifier/events']},
     {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', sub: true, pages: ['planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']}]},
   {id: 'consigner', n: '03', label: 'Consigner', modules: [

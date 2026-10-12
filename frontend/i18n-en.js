@@ -1280,3 +1280,22 @@ Object.assign(EN_T, {'{} j avant': '{} d before', '{} j après': '{} d after'});
 EN_PATTERNS.push([/^(.+) : trop long \(maximum (\d+) caractères\)$/, m => (EN[m[1]] || m[1]) + ': too long (maximum ' + m[2] + ' characters)'], [/^(.+) : obligatoire$/, m => (EN[m[1]] || m[1]) + ': required'], [/^(.+) : date invalide$/, m => (EN[m[1]] || m[1]) + ': invalid date']);
 Object.assign(EN, {"A accepté": "Accepted", "N’a pas encore répondu": "Has not replied yet", "A refusé": "Declined", "Peut-être": "Maybe", "Relire Google Agenda (réponses des invités)": "Re-read Google Calendar (guests’ replies)", "↻ Actualiser": "↻ Refresh", "Réponses des invités : ✓ accepté · … sans réponse · ✗ refusé (pour un véhicule : déjà réservé) · ? peut-être.": "Guests’ replies: ✓ accepted · … no reply · ✗ declined (for a vehicle: already booked) · ? maybe."});
 EN_PATTERNS.push([/^(\d+) sans réponse$/, m => m[1] + ' no reply'], [/^(\d+) refus$/, m => m[1] + ' declined']);
+Object.assign(EN, {
+  "Planning": "Schedule",
+  "Par ressource": "By resource",
+  "Semaine": "Week",
+  "Mois": "Month",
+  "Aujourd’hui": "Today",
+  "Précédent": "Previous",
+  "Suivant": "Next",
+  "Seulement les ressources occupées": "Only booked resources",
+  "Aucune ressource à afficher pour ces filtres.": "No resource to show for these filters.",
+  "Filtrer par ressource": "Filter by resource",
+  "Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation. Survolez une barre pour le détail.": "Bars: BU colour · hatched = unconfirmed event (TBC) · ✗ = invitation declined. For a vehicle, the bar covers the whole immobilisation. Hover over a bar for details.",
+  "Lieu": "Place",
+  "À inviter à la confirmation": "To invite on confirmation",
+  "Itinéraire par la Suisse": "Route through Switzerland",
+  "Itinéraire par le Royaume-Uni": "Route through the United Kingdom",
+});
+Object.assign(EN_T, {'{} km depuis Lifelive': '{} km from Lifelive', 'Immobilisation véhicules : {} → {}': 'Vehicle immobilisation: {} → {}'});
+EN_PATTERNS.push([/^Semaine (\d+) · (.+)$/, m => 'Week ' + m[1] + ' · ' + m[2]], [/^(\d+) autres? invités?$/, m => m[1] + ' other guest' + (m[1] > 1 ? 's' : '')]);

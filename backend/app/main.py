@@ -691,6 +691,18 @@ def resource_directory_users(_user: str = Depends(super_user)):
     return resources.directory_users()
 
 
+@app.get("/api/planning")
+def planning_page(date_from: date = Query(..., alias="from"), date_to: date = Query(..., alias="to"), _user: str = Depends(require_user)):
+    """Vue Planning (tous les utilisateurs, lecture seule) : événements de la période et ressources, sans adresse e-mail ni donnée de paie."""
+    if date_to < date_from or (date_to - date_from).days > 130:
+        raise HTTPException(422, "Période invalide (130 jours au maximum)")
+    try:
+        return planning.planning_view(date_from, date_to)
+    except Exception as e:
+        log.exception("Planning indisponible")
+        raise HTTPException(503, f"Planning momentanément indisponible : {e}")
+
+
 @app.get("/api/events/config")
 def events_config(_user: str = Depends(super_user)):
     cals = planning.calendars_by_bu()

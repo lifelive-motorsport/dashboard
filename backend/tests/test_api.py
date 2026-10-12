@@ -452,3 +452,84 @@ def test_resources_directory_users_demo():
     from app.main import app
     j = TestClient(app).get("/api/resources/directory-users").json()
     assert j["configured"] and j["items"][0]["email"].endswith("@lifelive-motorsport.com")
+
+
+def _ev(**kw):
+    base = {"title": "Spa Classic", "bu": "HISTORIC_RACING", "confirmed": False, "start": "2026-06-20", "end": "2026-06-22", "immo_start": "2026-06-18", "immo_end": "2026-06-24",
+            "place": {"id": "demo-spa", "name": "Circuit de Spa-Francorchamps", "address": "Route du Circuit 55, 4970 Stavelot", "country": "BE"},
+            "notes": "Camion + 2 mécanos", "staff": ["a@lifelive-motorsport.com"], "externals": ["ext@garage.be"], "vehicles": ["sprinter@resource.calendar.google.com"]}
+    base.update(kw)
+    return base
+
+
+def test_planned_events_full_cycle():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning
+    c = TestClient(app)
+    assert c.get("/api/events/config").json()["maps"] is True
+    r = c.post("/api/events", json=_ev())
+    assert r.status_code == 200, r.text
+    lbid = r.json()["id"]
+    be = planning.backend()
+    cal = planning.calendars_by_bu()["HISTORIC_RACING"]
+    evs = list(be.events[cal].values())
+    main = next(e for e in evs if e["extendedProperties"]["shared"]["kind"] == "main")
+    veh = next(e for e in evs if e["extendedProperties"]["shared"]["kind"] == "vehicles")
+    assert main["summary"] == "[TBC] Spa Classic" and main["colorId"] == "10"
+    assert [a["email"] for a in main["attendees"]] == ["a@lifelive-motorsport.com"]            # prestataires pas encore invités (TBC)
+    assert main["end"]["date"] == "2026-06-23" and veh["start"]["date"] == "2026-06-18" and veh["end"]["date"] == "2026-06-25"
+    assert veh["attendees"] == [{"email": "sprinter@resource.calendar.google.com", "resource": True}]
+    assert "63 km" in main["description"] and main["description"].startswith("Camion + 2 mécanos")
+    got = c.get("/api/events", params={"from": "2026-06-01", "to": "2026-06-30"}).json()["events"]
+    assert got[0]["externals_pending"] == ["ext@garage.be"]
+    assert got[0]["title"] == "Spa Classic" and not got[0]["confirmed"] and got[0]["notes"] == "Camion + 2 mécanos" and got[0]["vehicles"] == ["sprinter@resource.calendar.google.com"]
+    assert (got[0]["immo_start"], got[0]["immo_end"]) == ("2026-06-18", "2026-06-24") and got[0]["km"] == 63
+    # confirmation : titre sans TBC, prestataires invités
+    assert c.put(f"/api/events/{lbid}", json=_ev(confirmed=True)).status_code == 200
+    main = next(e for e in be.events[cal].values() if e["extendedProperties"]["shared"]["kind"] == "main")
+    assert main["summary"] == "Spa Classic" and "ext@garage.be" in [a["email"] for a in main["attendees"]]
+    # dates d'immobilisation identiques : un seul événement, véhicules sur l'événement principal
+    assert c.put(f"/api/events/{lbid}", json=_ev(confirmed=True, immo_start="2026-06-20", immo_end="2026-06-22")).status_code == 200
+    kinds = [e["extendedProperties"]["shared"]["kind"] for e in be.events[cal].values()]
+    assert kinds == ["main"]
+    main = next(iter(be.events[cal].values()))
+    assert {"email": "sprinter@resource.calendar.google.com", "resource": True} in main["attendees"]
+    # changement de BU : déplacé dans l'autre agenda
+    assert c.put(f"/api/events/{lbid}", json=_ev(bu="XC")).status_code == 200
+    assert not be.events[cal] and len(be.events[planning.calendars_by_bu()["XC"]]) == 2
+    assert c.delete(f"/api/events/{lbid}").status_code == 200
+    assert c.delete(f"/api/events/{lbid}").status_code == 404
+    assert c.get("/api/events", params={"from": "2026-06-01", "to": "2026-06-30"}).json()["events"] == []
+
+
+def test_planned_events_validation_and_places():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    assert c.post("/api/events", json=_ev(place={"id": ""})).status_code == 422                # lieu obligatoire
+    assert c.post("/api/events", json=_ev(immo_start="2026-06-21")).status_code == 422          # l'immobilisation doit couvrir l'événement
+    assert c.post("/api/events", json=_ev(end="2026-06-19")).status_code == 422
+    assert c.post("/api/events", json=_ev(bu="MARS")).status_code == 422
+    assert c.post("/api/events", json=_ev(staff=["pas-un-mail"])).status_code == 422
+    s = c.get("/api/places/autocomplete", params={"q": "silver"}).json()["suggestions"]
+    assert s[0]["id"] == "demo-silverstone"
+    uk = c.get("/api/places/demo-silverstone").json()
+    assert "le Royaume-Uni" in uk["route"]["alerts"][0] and uk["route"]["km"] == 780
+    ch = c.get("/api/places/demo-monza").json()
+    assert ch["route"]["via"] == ["CH"] and "la Suisse" in ch["route"]["alerts"][0]
+    assert c.get("/api/places/demo-spa").json()["route"]["alerts"] == []
+    assert c.get("/api/places/inconnu").status_code == 404
+    b = c.post("/api/events/busy", json={"emails": ["sprinter@resource.calendar.google.com", "citan@resource.calendar.google.com"], "start": "2026-06-20", "end": "2026-06-22"}).json()["busy"]
+    assert b["sprinter@resource.calendar.google.com"] and not b["citan@resource.calendar.google.com"]
+
+
+def test_maps_countries_crossed_samples_only_watched_boxes(monkeypatch):
+    from app import maps
+    calls = []
+    monkeypatch.setattr(maps, "_country_at", lambda p: (calls.append(p), "CH" if p[0] > 46.5 else "FR")[1])
+    # trajet Belgique -> Suisse -> Italie : seuls les points dans la zone suisse sont vérifiés
+    pts = [(50.2, 6.1), (49.0, 6.5), (47.6, 7.6), (47.1, 8.0), (46.8, 8.3), (46.0, 8.9), (45.6, 9.2)]
+    assert maps.countries_crossed(pts) == {"CH"}
+    assert all(45.7 <= p[0] <= 47.9 for p in calls)
+    assert maps.countries_crossed([(50.2, 6.1), (49.5, 2.0)]) == set() and len(calls) == len(calls)

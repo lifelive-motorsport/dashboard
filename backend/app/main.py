@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
-from . import adjustments, dkv, expenses, ga, gauth, gcal, resources, settings, staff, stockvar, tn11
+from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, tn11
 from . import access, projection, users
 from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
 from .bu import aggregate
@@ -672,6 +672,96 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
 @app.get("/api/resources/directory-users")
 def resource_directory_users(_user: str = Depends(super_user)):
     return resources.directory_users()
+
+
+@app.get("/api/events/config")
+def events_config(_user: str = Depends(super_user)):
+    cals = planning.calendars_by_bu()
+    return {"bus": [{"id": k, "label": v[0], "calendar": k in cals} for k, v in planning.BUS.items()], "travel_days": settings.EVENT_TRAVEL_DAYS,
+            "maps": maps.configured(), "origin": settings.LIFELIVE_ORIGIN, "calendar": gcal.configured() or settings.PROVIDER == "demo", "delegation": gauth.configured() or settings.PROVIDER == "demo"}
+
+
+@app.get("/api/events")
+def list_planned_events(date_from: date = Query(..., alias="from"), date_to: date = Query(..., alias="to"), _user: str = Depends(super_user)):
+    try:
+        return {"events": planning.listing(date_from, date_to)}
+    except Exception as e:
+        log.exception("Lecture des événements impossible")
+        return {"events": [], "unavailable": f"Agendas Google momentanément indisponibles : {e}"}
+
+
+def _plan_error(e: Exception):
+    if isinstance(e, KeyError):
+        raise HTTPException(404, "Événement introuvable")
+    if isinstance(e, LookupError):
+        raise HTTPException(422, str(e))
+    log.exception("Écriture dans Google Agenda impossible")
+    raise HTTPException(503, f"Google Agenda indisponible : {e}")
+
+
+@app.post("/api/events")
+def create_planned_event(body: planning.EventIn, _user: str = Depends(super_user)):
+    try:
+        return planning.create(body)
+    except Exception as e:
+        _plan_error(e)
+
+
+@app.put("/api/events/{lbid}")
+def update_planned_event(lbid: str, body: planning.EventIn, _user: str = Depends(super_user)):
+    try:
+        return planning.update(lbid, body)
+    except Exception as e:
+        _plan_error(e)
+
+
+@app.delete("/api/events/{lbid}")
+def delete_planned_event(lbid: str, _user: str = Depends(super_user)):
+    try:
+        if not planning.remove(lbid):
+            raise KeyError(lbid)
+        return {"deleted": lbid}
+    except Exception as e:
+        _plan_error(e)
+
+
+@app.post("/api/events/busy")
+def events_busy(body: planning.BusyBody, _user: str = Depends(super_user)):
+    """Réservations existantes des ressources sur la période : {adresse: [{start, end}]}"""
+    try:
+        return {"busy": planning.busy(body.emails, body.start, body.end)}
+    except Exception as e:
+        log.exception("Disponibilité des ressources indisponible")
+        return {"busy": {}, "unavailable": f"Disponibilité momentanément indisponible : {e}"}
+
+
+@app.get("/api/places/autocomplete")
+def places_autocomplete(q: str = Query(..., min_length=3, max_length=100), _user: str = Depends(super_user)):
+    if not maps.configured():
+        raise HTTPException(503, "La recherche de lieux n’est pas configurée (clé GOOGLE_MAPS_API_KEY).")
+    try:
+        return {"suggestions": maps.autocomplete(q)}
+    except Exception as e:
+        log.exception("Recherche de lieux impossible")
+        raise HTTPException(503, f"Recherche de lieux indisponible : {e}")
+
+
+@app.get("/api/places/{place_id}")
+def place_details(place_id: str, _user: str = Depends(super_user)):
+    """Lieu choisi + trajet depuis Lifelive (distance, durée, alertes Suisse / Royaume-Uni)."""
+    try:
+        place = maps.details(place_id)
+    except KeyError:
+        raise HTTPException(404, "Lieu introuvable")
+    except Exception as e:
+        log.exception("Détail du lieu impossible")
+        raise HTTPException(503, f"Lieu indisponible : {e}")
+    try:
+        route = maps.route(place)
+    except Exception as e:
+        log.exception("Calcul de l'itinéraire impossible")
+        route = {"km": None, "minutes": None, "via": [], "alerts": [], "unavailable": f"Itinéraire non calculé : {e}"}
+    return {"place": place, "route": route}
 
 
 @app.get("/api/resources/contacts")

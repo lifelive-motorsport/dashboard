@@ -10,7 +10,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
 let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
-const allowedPage = k => k === 'home/welcome' || (((k !== 'others/users' && k !== 'planifier/resources') || superUser) && (!pagesList || pagesList.has(k)));
+const allowedPage = k => k === 'home/welcome' || (((k !== 'others/users' && k !== 'planifier/resources' && k !== 'planifier/events') || superUser) && (!pagesList || pagesList.has(k)));
 const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
 const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
@@ -29,7 +29,7 @@ const MENU = [
   ['consigner', 'Consigner', [['timesheets','Pointages'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','planifier/resources','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','planifier/resources','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -493,6 +493,7 @@ const PAGES = {
   'others/tags': () => tagsBlocks(),
   'others/users': () => usersBlocks(),
   'planifier/resources': () => resourcesBlocks(),
+  'planifier/events': () => eventsBlocks(),
   'expenses/source': () => expensesSourceBlocks(),
   'expenses/general': () => expensesGeneralBlocks(),
   'expenses/rules': () => expensesRulesBlocks(),
@@ -652,6 +653,7 @@ function render(force) {
   if (key === 'others/tags') { drawTags(); loadTags().then(drawTags); }
   if (key === 'others/users') { drawUsers(); loadUsers().then(drawUsers); }
   if (key === 'planifier/resources') { drawResources(); loadResources().then(drawResources); }
+  if (key === 'planifier/events') { peDraw(); peLoad().then(peDraw); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;
 }

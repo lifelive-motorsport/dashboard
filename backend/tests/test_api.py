@@ -590,3 +590,13 @@ def test_service_worker_lists_every_script_and_is_not_empty():
     scripts = set(re.findall(r'<script src="([^"]+)"', (root / "index.html").read_text()))
     assert scripts <= shell, f"absents du cache : {scripts - shell}"
     assert all((root / f).exists() for f in shell), [f for f in shell if not (root / f).exists()]
+
+
+def test_maps_api_key_is_cleaned_and_rejected_when_corrupted(monkeypatch):
+    import pytest
+    from app import maps, settings
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", ' "AIzaSyABC123\u200b"\n')
+    assert maps.api_key() == "AIzaSyABC123"
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "AIzaSyD8\uff21\uff22\u2026")
+    with pytest.raises(RuntimeError, match="caractères non valides"):
+        maps.api_key()

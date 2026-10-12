@@ -4,6 +4,7 @@ Nécessite GOOGLE_MAPS_API_KEY (restreinte aux API Places, Routes et Geocoding).
 from __future__ import annotations
 
 import math
+import re
 import threading
 
 from . import settings
@@ -25,18 +26,26 @@ DEMO_PLACES = [
 ]
 
 
+def api_key() -> str:
+    """Clé d'API nettoyée (espaces, guillemets et caractères invisibles du copier-coller retirés) ; erreur claire si elle contient encore des caractères non valides."""
+    k = re.sub(r"[\u200b-\u200f\u2060\ufeff\s]", "", (settings.GOOGLE_MAPS_API_KEY or "")).strip("\"'“”‘’")
+    if not k.isascii():
+        raise RuntimeError("la clé GOOGLE_MAPS_API_KEY contient des caractères non valides (copier-coller) : enregistrez-la à nouveau sur le service")
+    return k
+
+
 def configured() -> bool:
-    return bool(settings.GOOGLE_MAPS_API_KEY) or settings.PROVIDER == "demo"
+    return bool(settings.GOOGLE_MAPS_API_KEY.strip()) or settings.PROVIDER == "demo"
 
 
 def _get(url: str, **kw):
     import requests
-    return requests.get(url, headers={"X-Goog-Api-Key": settings.GOOGLE_MAPS_API_KEY, **kw.pop("headers", {})}, timeout=20, **kw)
+    return requests.get(url, headers={"X-Goog-Api-Key": api_key(), **kw.pop("headers", {})}, timeout=20, **kw)
 
 
 def _post(url: str, json: dict, headers: dict):
     import requests
-    return requests.post(url, json=json, headers={"X-Goog-Api-Key": settings.GOOGLE_MAPS_API_KEY, **headers}, timeout=30)
+    return requests.post(url, json=json, headers={"X-Goog-Api-Key": api_key(), **headers}, timeout=30)
 
 
 def autocomplete(q: str) -> list[dict]:
@@ -105,7 +114,7 @@ def _country_at(pt: tuple[float, float]) -> str:
         if key in _geo_cache:
             return _geo_cache[key]
     import requests
-    r = requests.get(GEOCODE, params={"latlng": f"{pt[0]},{pt[1]}", "result_type": "country", "key": settings.GOOGLE_MAPS_API_KEY}, timeout=15)
+    r = requests.get(GEOCODE, params={"latlng": f"{pt[0]},{pt[1]}", "result_type": "country", "key": api_key()}, timeout=15)
     code = ""
     if r.status_code == 200:
         res = r.json().get("results", [])

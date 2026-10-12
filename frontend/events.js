@@ -1,7 +1,7 @@
 // Planifier › Événements : création et suivi des événements dans les agendas Google des BU (Super User). S'appuie sur les ressources de resources.js. Chargé après resources.js.
 const PE_BU_SYM = {XC: 'xc', MODERN_RALLY: 'mr', HISTORIC_RALLY: 'hrl', HISTORIC_RACING: 'hrc'};
-const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, start: '', end: '', immo_start: '', immo_end: '', immoTouched: false, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
-let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: {dest: '', origin: ''}, sugg: {dest: [], origin: []}, suggMsg: {dest: null, origin: null}, originEdit: false, busy: {}, busyMsg: null, vcat: 'all', showAll: false};
+const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, start: '', end: '', immo_start: '', immo_end: '', before: 1, after: 1, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
+let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: {dest: '', origin: ''}, sugg: {dest: [], origin: []}, suggMsg: {dest: null, origin: null}, originEdit: false, searching: {dest: false, origin: false}, busy: {}, busyMsg: null, vcat: 'all', showAll: false};
 const peDay = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const peToday = () => new Date().toISOString().slice(0, 10);
 let peTimer = null, peBusyTimer = null;
@@ -19,6 +19,9 @@ async function peLoad() {
 // Champ date jj/mm/aaaa (le champ natif suit la langue du navigateur et ne peut pas être forcé) : saisie au clavier + calendrier natif ouvert par le bouton
 const peParse = t => { const m = /^\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\s*$/.exec(t || ''); if (!m) return null; const d = new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])); return d.getUTCFullYear() === +m[3] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[1] ? d.toISOString().slice(0, 10) : null; };
 const peDate = (f, iso, min = '', max = '') => `<span class="datef"><input class="sdin pe-d" data-f="${f}" value="${iso ? fmtDate(iso) : ''}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="pe-cal" data-f="${f}" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="pe-dp" data-f="${f}" value="${iso || ''}" ${min ? `min="${min}"` : ''} ${max ? `max="${max}"` : ''} tabindex="-1" aria-hidden="true"></span>`;
+// Jours ajoutés avant / après l'événement pour l'immobilisation des véhicules : boutons − et +
+const peStep = (k, n) => `<span class="pe-stepper"><button type="button" class="mini pe-step" data-k="${k}" data-d="-1" aria-label="Un jour de moins" title="Un jour de moins" ${n <= 0 ? 'disabled' : ''}>−</button><b>${n} j ${k === 'before' ? 'avant' : 'après'}</b><button type="button" class="mini pe-step" data-k="${k}" data-d="1" aria-label="Un jour de plus" title="Un jour de plus" ${n >= 60 ? 'disabled' : ''}>+</button></span>`;
+const peDiff = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 86400000);
 const peIn = (f, v, type = 'text', extra = '') => `<input class="sdin pe-f" data-f="${f}" type="${type}" value="${esc(v || '')}" ${extra}>`;
 const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).label || id;
 // Staff et prestataires proposés : ceux de la BU choisie (imputation du personnel ; BU cochées sur la fiche du prestataire), plus ceux déjà sélectionnés ; « Afficher tout » lève le filtre
@@ -52,7 +55,7 @@ function peFormHtml() {
   const f = pe.form, c = pe.cfg, ok = peValid();
   const bus = c.bus.map(b => `<button type="button" class="rs-pill pe-bu" data-bu="${b.id}" aria-pressed="${f.bu === b.id}" ${b.calendar ? '' : 'disabled title="Aucun agenda configuré"'}>${BuSymbol(PE_BU_SYM[b.id], {size: 15})}<span>${esc(b.label)}</span></button>`).join('');
   const routeInfo = r => r ? (r.km != null ? `<br><small>${r.km} km depuis ${esc(r.origin_label || 'Lifelive')} (${Math.floor(r.minutes / 60)} h ${String(r.minutes % 60).padStart(2, '0')}) à l’aller · ${r.km * 2} km aller-retour</small>` : `<br><small class="neg">${esc(r.unavailable || 'Itinéraire non calculé')}</small>`) : '<br><small class="na">Calcul de l’itinéraire…</small>';
-  const picker = (role, placeholder) => `<input class="sdin pe-q" data-role="${role}" id="pe-q-${role}" value="${esc(pe.q[role])}" placeholder="${placeholder}" autocomplete="off" style="min-width:320px">${pe.suggMsg[role] ? `<small class="${pe.sugg[role].length ? 'na' : 'neg'}">${esc(pe.suggMsg[role])}</small>` : ''}${pe.sugg[role].map(x => `<div class="sdres"><span>${esc(x.text)}</span> <button type="button" class="pe-pick" data-role="${role}" data-id="${esc(x.id)}">Choisir</button></div>`).join('')}`;
+  const picker = (role, placeholder) => `<input class="sdin pe-q" data-role="${role}" id="pe-q-${role}" value="${esc(pe.q[role])}" placeholder="${c.maps ? placeholder : 'Recherche de lieux non configurée'}" autocomplete="off" style="min-width:320px" ${c.maps ? '' : 'disabled'}>${pe.searching[role] ? '<small class="na">Recherche…</small>' : pe.q[role].trim().length > 0 && pe.q[role].trim().length < 3 ? '<small class="na">Tapez au moins 3 caractères.</small>' : ''}${pe.suggMsg[role] ? `<small class="${pe.sugg[role].length ? 'na' : 'neg'}">${esc(pe.suggMsg[role])}</small>` : ''}${pe.sugg[role].map(x => `<div class="sdres"><span>${esc(x.text)}</span> <button type="button" class="pe-pick" data-role="${role}" data-id="${esc(x.id)}">Choisir</button></div>`).join('')}`;
   const place = f.place
     ? `<div class="note"><b>${esc(f.place.name || f.place.address)}</b><br><small class="na">${esc(f.place.address)}</small>${routeInfo(f.route)}${(f.route && f.route.alerts || []).map(a => `<br><b class="neg">⚠ ${esc(a)}</b>`).join('')} <button type="button" class="mini" id="pe-unplace">Changer</button></div>`
     : picker('dest', 'Rechercher le lieu (circuit, ville, adresse…)');
@@ -71,8 +74,8 @@ function peFormHtml() {
     <div class="sdfield"><span>BU</span><div class="bu-filter">${bus}</div></div>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-conf" ${f.confirmed ? 'checked' : ''}> Confirmé <small class="na">${f.confirmed ? '' : '(sinon « [TBC] » est ajouté au début du titre ; les prestataires sont invités à la confirmation)'}</small></label>
     <div class="sdgrid"><label class="sdfield"><span>Début de l’événement</span>${peDate('start', f.start)}</label><label class="sdfield"><span>Fin de l’événement</span>${peDate('end', f.end, f.start)}</label>
-    <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peDate('immo_start', f.immo_start, '', f.start)}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peDate('immo_end', f.immo_end, f.end)}</label></div>
-    <small class="na">Par défaut, l’immobilisation reprend les dates de l’événement élargies de ${c.travel_days} jour${c.travel_days > 1 ? 's' : ''} de trajet de chaque côté. Elle ne change que la réservation des véhicules.</small>
+    <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peDate('immo_start', f.immo_start, '', f.start)}${peStep('before', f.before)}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peDate('immo_end', f.immo_end, f.end)}${peStep('after', f.after)}</label></div>
+    <small class="na">L’immobilisation reprend les dates de l’événement élargies de jours de trajet : ajustez-les avec + et − (ou saisissez directement les dates). Ces jours restent les mêmes si vous déplacez l’événement. Elle ne change que la réservation des véhicules.</small>
     <div class="sdfield" style="margin-top:10px"><span>Lieu de départ</span>${origin}</div>
     <div class="sdfield" style="margin-top:10px"><span>Lieu de l’événement</span>${place}</div>
     <label class="sdfield" style="margin-top:10px"><span>Notes</span><textarea class="sdin pe-f" data-f="notes" rows="3" maxlength="2000">${esc(f.notes)}</textarea></label>
@@ -115,18 +118,19 @@ function peListHtml() {
     + (rows.length ? table(['Dates', 'Événement', 'Distance', 'Personnes invitées', 'Véhicules', ''], rows, 'prodtable') : '<p class="na">Aucun événement créé depuis Logbook.</p>');
 }
 
-function peOpenNew() { pe.form = peBlank(); pe.orig = null; pe.open = true; pe.msg = null; pe.q = {dest: '', origin: ''}; pe.sugg = {dest: [], origin: []}; pe.suggMsg = {dest: null, origin: null}; pe.originEdit = false; pe.busy = {}; peDraw(); }
+function peOpenNew() { pe.form = peBlank(); pe.form.before = pe.form.after = pe.cfg.travel_days; pe.orig = null; pe.open = true; pe.msg = null; pe.q = {dest: '', origin: ''}; pe.sugg = {dest: [], origin: []}; pe.suggMsg = {dest: null, origin: null}; pe.originEdit = false; pe.busy = {}; peDraw(); }
 function peOpenEdit(id) {
   const e = pe.events.find(x => x.id === id); if (!e) return;
   const sEmails = new Set(rs.staff.map(p => p.email).filter(Boolean)), att = e.staff_and_external;
-  pe.form = {id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, immoTouched: true,
+  pe.form = {id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, before: Math.max(0, peDiff(e.immo_start, e.start)), after: Math.max(0, peDiff(e.end, e.immo_end)),
     place: e.place.id ? {id: e.place.id, name: '', address: e.place.address, lat: null, lng: null, country: ''} : null, origin: e.origin ? {id: e.origin.id, name: '', address: e.origin.address, lat: null, lng: null, country: ''} : null, route: e.km != null ? {km: e.km, minutes: 0, alerts: (e.via || []).map(v => `L’itinéraire depuis le départ passe par ${v === 'CH' ? 'la Suisse' : 'le Royaume-Uni'}.`)} : null,
     notes: e.notes, staff: att.filter(m => sEmails.has(m)), externals: att.filter(m => !sEmails.has(m)).concat(e.externals_pending), vehicles: e.vehicles.slice()};
   pe.orig = {immo_start: e.immo_start, immo_end: e.immo_end, vehicles: e.vehicles.slice()};
   pe.open = true; pe.msg = null; pe.originEdit = false; pe.busy = {}; peDraw(); peCheckBusy();
   if (e.place.id) peChoose(e.place.id, 'dest');
 }
-function peWiden() { const f = pe.form; if (f.immoTouched) return; const n = pe.cfg.travel_days; f.immo_start = f.start ? peDay(f.start, -n) : ''; f.immo_end = f.end ? peDay(f.end, n) : ''; }
+// Les dates d'immobilisation se déduisent des dates de l'événement et des jours avant / après (qui restent fixes quand l'événement se déplace)
+function peWiden() { const f = pe.form; f.immo_start = f.start ? peDay(f.start, -f.before) : ''; f.immo_end = f.end ? peDay(f.end, f.after) : ''; }
 
 // Lieu choisi dans la recherche : `role` = 'dest' (lieu de l'événement, avec itinéraire) ou 'origin' (lieu de départ, l'itinéraire est recalculé)
 const peOriginQuery = () => pe.form.origin ? '?origin=' + encodeURIComponent(pe.form.origin.id) : '';
@@ -152,10 +156,12 @@ document.addEventListener('input', e => {
   const t = e.target; if (!t.classList || !document.getElementById('pe-view')) return;
   if (t.classList.contains('pe-q')) {
     const role = t.dataset.role; pe.q[role] = t.value; clearTimeout(peTimer);
-    if (pe.q[role].trim().length < 3) { pe.sugg[role] = []; pe.suggMsg[role] = null; peDraw(); return; }
+    pe.sugg[role] = []; pe.suggMsg[role] = null;
+    if (pe.q[role].trim().length < 3) { peDraw(); return; }
     peTimer = setTimeout(async () => {
+      pe.searching[role] = true; peDraw();
       try { const j = await rsCall('/api/places/autocomplete?q=' + encodeURIComponent(pe.q[role].trim())); pe.sugg[role] = j.suggestions || []; pe.suggMsg[role] = pe.sugg[role].length ? null : 'Aucun lieu trouvé.'; } catch (err) { pe.sugg[role] = []; pe.suggMsg[role] = err.message; }
-      peDraw();
+      pe.searching[role] = false; peDraw();
     }, 350);
   } else if (t.classList.contains('pe-f') && t.dataset.f === 'notes') pe.form.notes = t.value;
   else if (t.classList.contains('pe-f') && t.dataset.f === 'title') { pe.form.title = t.value; const b = document.getElementById('pe-save'); if (b) b.disabled = !peValid() || pe.saving; }
@@ -170,8 +176,9 @@ document.addEventListener('change', e => {
     pe.msg = null; f[k] = iso;
     if (k === 'start' && (!f.end || f.end < f.start)) f.end = f.start;
     if (k === 'end' && f.end < f.start) f.start = f.end;
-    if (k === 'immo_start' || k === 'immo_end') f.immoTouched = true;
-    peWiden(); if (f.immo_start > f.start) f.immo_start = f.start; if (f.immo_end < f.end) f.immo_end = f.end;
+    if (k === 'immo_start') f.before = Math.max(0, Math.min(60, peDiff(f.immo_start, f.start)));
+    if (k === 'immo_end') f.after = Math.max(0, Math.min(60, peDiff(f.end, f.immo_end)));
+    peWiden();
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
   else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }
@@ -186,6 +193,7 @@ document.addEventListener('click', async e => {
   const f = pe.form;
   if (t.id === 'pe-new') peOpenNew();
   else if (t.classList.contains('pe-cal')) { const dp = document.querySelector(`.pe-dp[data-f="${t.dataset.f}"]`); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } }
+  else if (t.classList.contains('pe-step')) { const k = t.dataset.k; f[k] = Math.max(0, Math.min(60, f[k] + (+t.dataset.d))); peWiden(); peDraw(); peCheckBusy(); }
   else if (t.id === 'pe-cancel') { pe.open = false; pe.msg = null; peDraw(); }
   else if (t.classList.contains('pe-bu')) { f.bu = t.dataset.bu; peDraw(); }
   else if (t.classList.contains('pe-vcat')) { pe.vcat = t.dataset.c; peDraw(); }

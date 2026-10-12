@@ -367,3 +367,4 @@ textarea.sdin{width:100%;font:inherit;resize:vertical}
 .ts-msg{background:var(--card);border:1px solid var(--neg);color:var(--neg);border-radius:8px;padding:8px 12px}.ts-row{cursor:pointer}.ts-closed{opacity:.55}.ts-team td.num,.ts-team th.num{white-space:nowrap}
 .ts-detail{display:flex;flex-direction:column;gap:6px;padding:6px 0}.ts-dline small{color:var(--mut);text-transform:capitalize}
 @media(max-width:700px){.ts-nav b{order:-1;flex-basis:100%}.ts-form{padding:12px}}
+.ts-pp{position:relative;display:inline-flex;align-items:center}.ts-x{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--fg);font-size:11px;line-height:1;cursor:pointer;padding:0}

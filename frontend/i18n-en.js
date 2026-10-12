@@ -1327,3 +1327,4 @@ Object.assign(EN, {'Événement (Odoo)': 'Event (Odoo)', 'Commencez à taper le 
 Object.assign(EN, {'Supprimer ce job ?': 'Delete this job?'});
 Object.assign(EN, {'Nature du job': 'Job type', '— Choisir —': '— Choose —', 'Réassort camion(s)': 'Truck restocking', 'Chargement camion(s) et/ou camionnette(s)': 'Loading truck(s) and/or van(s)', 'Déchargement camion(s) et/ou camionnette(s)': 'Unloading truck(s) and/or van(s)', 'Nettoyage équipements et/ou outillage': 'Cleaning equipment and/or tooling', 'Nettoyage camion(s) et/ou camionnette(s)': 'Cleaning truck(s) and/or van(s)', 'Intitulé :': 'Title:'});
 Object.assign(EN, {'Pre-event': 'Pre-event', 'Post-event': 'Post-event', 'Autre intervention': 'Other work', 'Indiquez l’intervention': 'Enter the work'});
+Object.assign(EN, {'Retirer': 'Remove', 'Supprimer cette pièce jointe ?': 'Delete this attachment?'});

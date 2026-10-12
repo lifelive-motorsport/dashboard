@@ -5,6 +5,8 @@ let ts = {me: null, jobs: [], start: '', week: null, team: null, form: null, pen
 const TS_BU = {CARS: 'CARS (toutes)', MODERN_RALLY: 'CARS · Modern Rally', HISTORIC_RALLY: 'CARS · Historic Rally', HISTORIC_RACING: 'CARS · Historic Racing', XC: 'XC', ALL: 'Toutes'};
 const tsBuOpts = me => ['XC', 'CARS', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING'].filter(b => me.super || me.bus.includes(b === 'XC' ? 'XC' : 'CARS')).concat(['ALL']);
 const TS_KIND = {atelier: 'Job atelier', event: 'Job événement', background: 'Tâche de fond'};
+const tsUrls = new WeakMap();
+const tsUrl = blob => { if (!tsUrls.has(blob)) tsUrls.set(blob, URL.createObjectURL(blob)); return tsUrls.get(blob); };
 const tsDur = m => { const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`) : `${r} min`; };
 const tsPct = x => x == null ? '–' : Math.round(x * 100) + ' %';
 const tsStamp = iso => new Date(iso).toLocaleString(LOCALE(), {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
@@ -50,8 +52,10 @@ function tsJobSelect(sel) {
 function tsFormHtml() {
   const f = ts.form; if (!f) return '';
   const chips = [30, 60, 120, 240, 480].map(m => `<button type="button" class="ts-chip${f.minutes === m ? ' sel' : ''}" data-ts="dur" data-m="${m}">${tsDur(m)}</button>`).join('');
-  const photos = ts.pend.photos.length ? `<span class="ts-n">${ts.pend.photos.length} <span>photo(s) à envoyer</span></span>` : '';
-  const audio = ts.pend.audio ? '<span class="ts-n">🎙 <span>Mémo vocal prêt</span></span>' : '';
+  const x = (k, i) => `<button type="button" class="ts-x" data-ts="rm" data-k="${k}" data-i="${i}" aria-label="Retirer" title="Retirer">✕</button>`;
+  const photos = ts.pend.photos.map((p, i) => `<span class="ts-pp"><img class="ts-ph" src="${tsUrl(p)}" alt="Photo">${x('photo', i)}</span>`).join('');
+  const audio = ts.pend.audio ? `<span class="ts-pp"><audio controls src="${tsUrl(ts.pend.audio)}"></audio>${x('audio', 0)}</span>` : '';
+  const saved = (f.atts || []).map(at => { const u = `/api/timesheets/entries/${f.id}/attachments/${at.id}`; return `<span class="ts-pp">${at.kind === 'photo' ? `<img class="ts-ph" src="${u}" alt="Photo">` : `<audio controls preload="none" src="${u}"></audio>`}<button type="button" class="ts-x" data-ts="rmsaved" data-id="${at.id}" aria-label="Supprimer" title="Supprimer">✕</button></span>`; }).join('');
   return `<div class="ts-form"><h4>${f.id ? 'Modifier le pointage' : 'Nouveau pointage'}</h4>
     <label class="sdfield"><span>Job</span>${tsJobSelect(f.job_id)}</label>
     <div class="sdgrid"><label class="sdfield"><span>Date</span><span class="datef"><input class="sdin ts-d" value="${fmtDate(f.date)}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="ts-cal" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="ts-dp" value="${f.date}" max="${plToday()}" tabindex="-1" aria-hidden="true"></span></label>
@@ -60,7 +64,7 @@ function tsFormHtml() {
     ${(ts.jobs.find(j => j.id === f.job_id) || {}).kind === 'atelier' ? `<label class="sdfield"><span>Système</span><select class="sdin" data-f="system">${ts.me.systems.map(s => `<option value="${s.id}"${f.system === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>` : ''}
     <label class="sdfield"><span>Intervention</span><textarea class="sdin" data-f="text" rows="3" maxlength="3000" placeholder="Ce qui a été fait…">${esc(f.text)}</textarea></label>
     ${ts.me.attachments ? `<div class="ts-media"><label class="btn">📷 Photo<input type="file" accept="image/*" capture="environment" multiple hidden data-ts-file></label>
-      <button type="button" data-ts="rec" class="${ts.rec ? 'rec' : ''}">${ts.rec ? '⏹ Arrêter' : '🎙 Mémo vocal'}</button>${photos}${audio}</div>` : ''}
+      <button type="button" data-ts="rec" class="${ts.rec ? 'rec' : ''}">${ts.rec ? '⏹ Arrêter' : '🎙 Mémo vocal'}</button></div><div class="ts-att">${saved}${photos}${audio}</div>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="save"${ts.busy ? ' disabled' : ''}>Enregistrer</button><button type="button" data-ts="cancel">Annuler</button></div></div>`;
 }
 
@@ -181,7 +185,7 @@ document.addEventListener('click', async ev => {
   if (a === 'prev' || a === 'next' || a === 'today') { ts.start = a === 'today' ? plMonday(plToday()) : plAdd(ts.start, a === 'next' ? 7 : -7); return tsLoad(page); }
   if (a === 'open') { const u = b.dataset.u; ts.open.has(u) ? ts.open.delete(u) : ts.open.add(u); return tsDraw(); }
   if (a === 'new') { ts.form = tsBlank(); ts.pend = {photos: [], audio: null}; return tsDraw(); }
-  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
+  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text, atts: e.attachments || []}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
   if (a === 'cancel') { if (ts.rec) ts.rec.stop(); ts.form = null; ts.msg = null; return tsDraw(); }
   if (a === 'del') { if (!confirm(t('Supprimer ce pointage ?'))) return; return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}`, {method: 'DELETE'})); }
   if (a === 'val') return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}));
@@ -191,6 +195,8 @@ document.addEventListener('click', async ev => {
     if (a === 'dur') f.minutes = +b.dataset.m; else if (a === 'step') f.minutes = Math.min(960, Math.max(15, f.minutes + +b.dataset.n)); else f.date = plAdd(plToday(), +b.dataset.d);
     return tsDraw();
   }
+  if (a === 'rm') { tsReadForm(); if (b.dataset.k === 'audio') ts.pend.audio = null; else ts.pend.photos.splice(+b.dataset.i, 1); return tsDraw(); }
+  if (a === 'rmsaved') { if (!confirm(t('Supprimer cette pièce jointe ?'))) return; tsReadForm(); try { await rsCall(`/api/timesheets/entries/${ts.form.id}/attachments/${b.dataset.id}`, {method: 'DELETE'}); ts.form.atts = ts.form.atts.filter(x => x.id !== b.dataset.id); } catch (e) { ts.msg = e.message; } return tsDraw(); }
   if (a === 'rec') return tsToggleRec();
   if (a === 'save') return tsSave();
   if (a === 'sugg') { ts.sugg = []; try { const j = await rsCall('/api/timesheets/suggestions'); ts.sugg = j.suggestions; if (j.unavailable) ts.msg = j.unavailable; } catch (e) { ts.sugg = null; ts.msg = e.message; } return tsDraw(); }

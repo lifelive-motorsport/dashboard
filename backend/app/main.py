@@ -913,6 +913,16 @@ async def ts_add_attachment(eid: str, request: Request, filename: str = Query("f
         _ts_err(ex)
 
 
+@app.delete("/api/timesheets/entries/{eid}/attachments/{aid}")
+def ts_remove_attachment(eid: str, aid: str, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        timesheets.remove_attachment(eid, aid, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return {"deleted": aid}
+
+
 @app.get("/api/timesheets/entries/{eid}/attachments/{aid}")
 def ts_get_attachment(eid: str, aid: str, user: str = Depends(require_user)):
     r = _ts_ctx(user)

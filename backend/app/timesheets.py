@@ -461,3 +461,18 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
             for prefix, nat in (("Pre-event", "pre_event"), ("Post-event", "post_event")):
                 out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "nature": nat, "bu": bu, "vehicle": {"id": "", "name": vname}, "event": eref, "when": ev["start"]})
     return [s for s in out if s.get("natures") or s["title"].lower() not in have]
+
+
+def remove_attachment(eid: str, aid: str, user: str, r: dict) -> None:
+    e = entries().get(eid)
+    if not e:
+        raise KeyError(eid)
+    if not can_edit(e, user, r, jobs().get(e["job_id"])):
+        raise PermissionError("Ce pointage n'est plus modifiable")
+    att = next((a for a in e.get("attachments", []) if a["id"] == aid), None)
+    if not att:
+        raise KeyError(aid)
+    blobs().delete(att["key"])
+    e["attachments"] = [a for a in e["attachments"] if a["id"] != aid]
+    e["updated_at"] = now().isoformat()
+    entries().put(eid, e)

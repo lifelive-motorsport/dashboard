@@ -219,3 +219,16 @@ def test_team_hours_follow_bu_filter(api):
     as_(api, CHEF)
     tot = lambda bu: next(r for r in api.get("/api/timesheets/team", params={"start": date.today().isoformat(), "bu": bu}).json()["rows"] if r["name"] == "Nolan Collinet")["summary"]["total"]
     assert (tot("all"), tot("cars"), tot("hrc"), tot("hrl"), tot("xc")) == (180, 120, 120, 0, 0)
+
+
+def test_remove_attachment(api):
+    jid = mkjob(api).json()["id"]
+    as_(api, MEC)
+    eid = api.post("/api/timesheets/entries", json=entry(jid)).json()["id"]
+    aid = api.post(f"/api/timesheets/entries/{eid}/attachments", content=b"voix", headers={"Content-Type": "audio/webm"}).json()["id"]
+    as_(api, CHEF_XC)
+    assert api.delete(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 403
+    as_(api, MEC)
+    assert api.delete(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 200
+    assert api.get(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 404
+    assert api.delete(f"/api/timesheets/entries/{eid}/attachments/{aid}").status_code == 404

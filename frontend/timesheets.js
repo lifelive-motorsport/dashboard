@@ -64,7 +64,8 @@ function tsFormHtml() {
     <div class="sdfield"><span>Durée</span><div class="ts-dur"><button type="button" data-ts="step" data-n="-15" aria-label="Moins 15 minutes">−</button><b id="ts-dur">${tsDur(f.minutes)}</b><button type="button" data-ts="step" data-n="15" aria-label="Plus 15 minutes">+</button></div><div class="ts-chips">${chips}</div></div>
     ${(ts.jobs.find(j => j.id === f.job_id) || {}).kind === 'atelier' ? `<label class="sdfield"><span>Système</span><select class="sdin" data-f="system">${tsSystems().map(s => `<option value="${s.id}"${f.system === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select></label>` : ''}
     <label class="sdfield"><span>Intervention</span><textarea class="sdin" data-f="text" rows="3" maxlength="3000" placeholder="Ce qui a été fait…">${esc(f.text)}</textarea></label>
-    ${ts.me.attachments ? `<div class="ts-media"><label class="btn">📷 Photo<input type="file" accept="image/*" capture="environment" multiple hidden data-ts-file></label>
+    ${ts.me.attachments ? `<div class="ts-media"><label class="btn">📷 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-ts-file></label>
+      <label class="btn">🖼 Galerie<input type="file" accept="image/*" multiple hidden data-ts-file></label>
       <button type="button" data-ts="rec" class="${ts.rec ? 'rec' : ''}">${ts.rec ? '⏹ Arrêter' : '🎙 Mémo vocal'}</button></div><div class="ts-att">${saved}${photos}${audio}</div>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="save"${ts.busy ? ' disabled' : ''}>Enregistrer</button><button type="button" data-ts="cancel">Annuler</button></div></div>`;
 }

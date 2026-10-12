@@ -17,6 +17,9 @@ DIRECTORY_URL = "https://admin.googleapis.com/admin/directory/v1/customer/my_cus
 USERS_URL = "https://admin.googleapis.com/admin/directory/v1/users"
 
 
+BU_IDS = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING")      # BU auxquelles un prestataire peut être rattaché (mêmes clés que l'imputation du personnel)
+
+
 class External(BaseModel):
     partner_id: int
     name: str = Field(min_length=1, max_length=160)
@@ -24,6 +27,14 @@ class External(BaseModel):
     company: str = Field(default="", max_length=160)
     phone: str = Field(default="", max_length=60)
     role: str = Field(default="", max_length=120)                       # fonction ou spécialité (ex. mécanicien, chauffeur)
+    bus: list[str] = Field(default_factory=list, max_length=4)          # BU concernées : le prestataire n'est proposé que pour les événements de ces BU
+
+    @field_validator("bus")
+    @classmethod
+    def _bus(cls, v):
+        if any(b not in BU_IDS for b in v) or len(set(v)) != len(v):
+            raise ValueError("BU inconnue")
+        return v
 
     @field_validator("email")
     @classmethod

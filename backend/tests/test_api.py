@@ -439,9 +439,11 @@ def test_resources_super_user_only_and_demo_flow(monkeypatch):
     assert got[0]["email"] == "test@lifelive-motorsport.com"
     # prestataires externes : liste, doublon refusé, conflit de version
     base = c.get("/api/resources").json()["externals"]["updated_at"]
-    ext = {"partner_id": 9101, "name": "Julien Garage", "email": "julien@garage-exemple.be"}
+    ext = {"partner_id": 9101, "name": "Julien Garage", "email": "julien@garage-exemple.be", "bus": ["XC", "HISTORIC_RACING"]}
+    assert c.put("/api/resources/externals", json={"data": {"externals": [{**ext, "bus": ["MARS"]}]}, "base": base}).status_code == 422
     assert c.put("/api/resources/externals", json={"data": {"externals": [ext, ext]}, "base": base}).status_code == 422
     assert c.put("/api/resources/externals", json={"data": {"externals": [ext]}, "base": base}).status_code == 200
+    assert c.get("/api/resources").json()["externals"]["data"]["externals"][0]["bus"] == ["XC", "HISTORIC_RACING"]
     assert c.put("/api/resources/externals", json={"data": {"externals": []}, "base": base}).status_code == 409
     q = c.get("/api/resources/contacts", params={"q": "garage"}).json()["contacts"]
     assert q and q[0]["email"]

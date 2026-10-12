@@ -1,7 +1,7 @@
 // Planifier › Événements : création et suivi des événements dans les agendas Google des BU (Super User). S'appuie sur les ressources de resources.js. Chargé après resources.js.
 const PE_BU_SYM = {XC: 'xc', MODERN_RALLY: 'mr', HISTORIC_RALLY: 'hrl', HISTORIC_RACING: 'hrc'};
 const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, start: '', end: '', immo_start: '', immo_end: '', immoTouched: false, place: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
-let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: '', sugg: [], suggMsg: null, busy: {}, busyMsg: null, vcat: 'all'};
+let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: '', sugg: [], suggMsg: null, busy: {}, busyMsg: null, vcat: 'all', showAll: false};
 const peDay = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const peToday = () => new Date().toISOString().slice(0, 10);
 let peTimer = null, peBusyTimer = null;
@@ -21,6 +21,11 @@ const peParse = t => { const m = /^\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})\s*
 const peDate = (f, iso, min = '', max = '') => `<span class="datef"><input class="sdin pe-d" data-f="${f}" value="${iso ? fmtDate(iso) : ''}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"><button type="button" class="pe-cal" data-f="${f}" aria-label="Calendrier" title="Calendrier"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="pe-dp" data-f="${f}" value="${iso || ''}" ${min ? `min="${min}"` : ''} ${max ? `max="${max}"` : ''} tabindex="-1" aria-hidden="true"></span>`;
 const peIn = (f, v, type = 'text', extra = '') => `<input class="sdin pe-f" data-f="${f}" type="${type}" value="${esc(v || '')}" ${extra}>`;
 const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).label || id;
+// Staff et prestataires proposés : ceux de la BU choisie (imputation du personnel ; BU cochées sur la fiche du prestataire), plus ceux déjà sélectionnés ; « Afficher tout » lève le filtre
+const peStaffIn = p => !!pe.form.bu && ((p.alloc || {})[pe.form.bu] || 0) > 0;
+const peExtIn = x => !!pe.form.bu && (x.bus || []).includes(pe.form.bu);
+const peStaffShown = () => peStaffList().filter(p => pe.showAll || peStaffIn(p) || pe.form.staff.includes(p.email));
+const peExtShown = () => rs.externals.filter(x => pe.showAll || peExtIn(x) || pe.form.externals.includes(x.email));
 const peStaffList = () => rs.staff.filter(p => p.active).sort((a, b) => (pe.form.bu ? ((b.alloc || {})[pe.form.bu] > 0) - ((a.alloc || {})[pe.form.bu] > 0) : 0) || a.name.localeCompare(b.name));
 const peVehicles = () => ((rs.vehicles || {}).items || []).filter(v => v.email);
 
@@ -48,8 +53,9 @@ function peFormHtml() {
   const place = f.place
     ? `<div class="note"><b>${esc(f.place.name || f.place.address)}</b><br><small class="na">${esc(f.place.address)}</small>${f.route ? (f.route.km != null ? `<br><small>${f.route.km} km depuis Lifelive (${Math.floor(f.route.minutes / 60)} h ${String(f.route.minutes % 60).padStart(2, '0')}) à l’aller · ${f.route.km * 2} km aller-retour</small>` : `<br><small class="neg">${esc(f.route.unavailable || 'Itinéraire non calculé')}</small>`) : '<br><small class="na">Calcul de l’itinéraire…</small>'}${(f.route && f.route.alerts || []).map(a => `<br><b class="neg">⚠ ${esc(a)}</b>`).join('')} <button type="button" class="mini" id="pe-unplace">Changer</button></div>`
     : `<input class="sdin" id="pe-q" value="${esc(pe.q)}" placeholder="Rechercher le lieu (circuit, ville, adresse…)" autocomplete="off" style="min-width:320px">${pe.suggMsg ? `<small class="${pe.sugg.length ? 'na' : 'neg'}">${esc(pe.suggMsg)}</small>` : ''}${pe.sugg.map(s => `<div class="sdres"><span>${esc(s.text)}</span> <button type="button" class="pe-pick" data-id="${esc(s.id)}">Choisir</button></div>`).join('')}`;
-  const staff = peStaffList().map(p => `<label class="chk"><input type="checkbox" class="pe-staff" data-e="${esc(p.email)}" ${f.staff.includes(p.email) ? 'checked' : ''} ${p.email ? '' : 'disabled'}> ${esc(p.name)}${p.email ? '' : ' <small class="neg">pas de compte Google</small>'}${f.bu && (p.alloc || {})[f.bu] > 0 ? ` <small class="na">${esc(peBuLabel(f.bu))}</small>` : ''}</label>`).join('');
-  const exts = rs.externals.map(x => `<label class="chk"><input type="checkbox" class="pe-ext" data-e="${esc(x.email)}" ${f.externals.includes(x.email) ? 'checked' : ''} ${x.email ? '' : 'disabled'}> ${esc(x.name)}${x.company ? ` <small class="na">${esc(x.company)}</small>` : ''}${x.email ? '' : ' <small class="neg">pas d’e-mail</small>'}</label>`).join('');
+  const staffHidden = peStaffList().length - peStaffShown().length, extHidden = rs.externals.length - peExtShown().length;
+  const staff = peStaffShown().map(p => `<label class="chk"><input type="checkbox" class="pe-staff" data-e="${esc(p.email)}" ${f.staff.includes(p.email) ? 'checked' : ''} ${p.email ? '' : 'disabled'}> ${esc(p.name)}${p.email ? '' : ' <small class="neg">pas de compte Google</small>'}${peStaffIn(p) ? '' : ' <small class="na">autre BU</small>'}</label>`).join('');
+  const exts = peExtShown().map(x => `<label class="chk"><input type="checkbox" class="pe-ext" data-e="${esc(x.email)}" ${f.externals.includes(x.email) ? 'checked' : ''} ${x.email ? '' : 'disabled'}> ${esc(x.name)}${x.company ? ` <small class="na">${esc(x.company)}</small>` : ''}${x.email ? '' : ' <small class="neg">pas d’e-mail</small>'}${peExtIn(x) ? '' : (x.bus || []).length ? ' <small class="na">autre BU</small>' : ' <small class="neg">BU non définie</small>'}</label>`).join('');
   const veh = peVehicles(), cats = ((rs.vehicles || {}).categories || []).filter(k => veh.some(v => v.category === k.id));
   const vcat = (id, label) => `<button type="button" class="rs-pill pe-vcat" data-c="${id}" aria-pressed="${pe.vcat === id}"><span>${esc(label)}</span></button>`;
   const vlist = veh.filter(v => pe.vcat === 'all' || v.category === pe.vcat).map(v => { const b = peBusyOf(v.email);
@@ -63,8 +69,9 @@ function peFormHtml() {
     <small class="na">Par défaut, l’immobilisation reprend les dates de l’événement élargies de ${c.travel_days} jour${c.travel_days > 1 ? 's' : ''} de trajet de chaque côté. Elle ne change que la réservation des véhicules.</small>
     <div class="sdfield" style="margin-top:10px"><span>Lieu (choisi dans la recherche Google)</span>${place}</div>
     <label class="sdfield" style="margin-top:10px"><span>Notes</span><textarea class="sdin pe-f" data-f="notes" rows="3" maxlength="2000">${esc(f.notes)}</textarea></label>
-    <h4 class="sub">Staff</h4><div class="chkgrid">${staff || '<small class="na">Aucun staff actif.</small>'}</div>
-    <h4 class="sub">Prestataires externes</h4><div class="chkgrid">${exts || '<small class="na">Aucun prestataire : à ajouter dans Ressources.</small>'}</div>
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="pe-all" ${pe.showAll ? 'checked' : ''}> Afficher aussi le staff et les prestataires des autres BU${!pe.showAll && staffHidden + extHidden ? ` <small class="na">(${staffHidden + extHidden} masqué${staffHidden + extHidden > 1 ? 's' : ''})</small>` : ''}</label>
+    <h4 class="sub">Staff</h4><div class="chkgrid">${staff || `<small class="na">${f.bu ? 'Aucun staff actif imputé à cette BU.' : 'Choisissez d’abord une BU.'}</small>`}</div>
+    <h4 class="sub">Prestataires externes</h4><div class="chkgrid">${exts || `<small class="na">${f.bu ? 'Aucun prestataire rattaché à cette BU : cochez ses BU dans Ressources.' : 'Choisissez d’abord une BU.'}</small>`}</div>
     <h4 class="sub">Véhicules</h4>${cats.length ? `<div class="bu-filter">${vcat('all', 'Tous')}${cats.map(k => vcat(k.id, k.label)).join('')}</div>` : ''}<div class="chkgrid">${vlist || '<small class="na">Aucun véhicule.</small>'}</div>${pe.busyMsg ? `<small class="neg">${esc(pe.busyMsg)}</small>` : ''}
     <div class="sdbar" style="margin-top:12px"><button type="button" class="primary" id="pe-save" ${ok && !pe.saving ? '' : 'disabled'}>${pe.saving ? 'Enregistrement…' : f.id ? 'Enregistrer' : 'Créer l’événement'}</button><button type="button" id="pe-cancel">Annuler</button>${pe.msg ? `<span class="${pe.msgOk ? 'na' : 'neg'}">${esc(pe.msg)}</span>` : ''}</div>
     ${ok ? '' : `<small class="na">À compléter : ${peMissing().join(', ')}.</small>`}</div>`;
@@ -149,6 +156,7 @@ document.addEventListener('change', e => {
     peWiden(); if (f.immo_start > f.start) f.immo_start = f.start; if (f.immo_end < f.end) f.immo_end = f.end;
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
+  else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }
   else if (t.classList.contains('pe-staff') || t.classList.contains('pe-ext') || t.classList.contains('pe-veh')) {
     const k = t.classList.contains('pe-staff') ? 'staff' : t.classList.contains('pe-ext') ? 'externals' : 'vehicles', m = t.dataset.e;
     f[k] = t.checked ? f[k].concat(f[k].includes(m) ? [] : [m]) : f[k].filter(x => x !== m);

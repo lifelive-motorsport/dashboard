@@ -49,13 +49,15 @@ function drawResources() {
   a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
     + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
   const b = document.getElementById('rs-ext');
+  const RS_BUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
+  const buCell = (e, i) => `<div class="bu-filter" role="group" aria-label="BU concernées">${RS_BUS.map(([k, sym, l]) => `<button type="button" class="rs-pill rs-xbu" data-i="${i}" data-b="${k}" aria-pressed="${(e.bus || []).includes(k)}" title="${esc(l)}">${BuSymbol(sym, {size: 14})}<span>${esc(l)}</span></button>`).join('')}</div>${(e.bus || []).length ? '' : '<small class="neg">à choisir</small>'}`;
   const mailCell = (e, i) => `<input class="sdin rs-email" data-i="${i}" value="${esc(e.email)}" placeholder="adresse e-mail" style="min-width:220px">${e.email ? '' : ' <small class="neg">à compléter</small>'}`;
-  const erows = rs.externals.map((e, i) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
+  const erows = rs.externals.map((e, i) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${buCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
   const found = rs.found == null ? '' : rs.found.length ? table(['Contact Odoo', 'Société', 'Fonction', 'E-mail', ''], rs.found.map(c => {
     const has = rs.externals.some(e => e.partner_id === c.id);
     return `<tr><td class="prod">${esc(c.name)}</td><td>${esc(c.company)}</td><td>${esc(c.function)}</td><td>${c.email ? esc(c.email) : '<small class="neg">pas d’e-mail dans Odoo</small>'}</td><td>${has ? '<small class="na">déjà dans la liste</small>' : `<button type="button" class="rs-add" data-id="${c.id}">Ajouter</button>`}</td></tr>`; }), 'prodtable') : '<p class="na">Aucun contact trouvé.</p>';
-  b.innerHTML = '<p class="na">Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. Rien n’est écrit dans Odoo.</p>'
-    + (erows.length ? table(['Prestataire', 'Société', 'Fonction', 'E-mail', 'Téléphone', ''], erows, 'prodtable') : '<p class="na">Aucun prestataire pour le moment.</p>')
+  b.innerHTML = '<p class="na">Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.</p>'
+    + (erows.length ? table(['Prestataire', 'Société', 'Fonction', 'E-mail', 'BU concernées', 'Téléphone', ''], erows, 'prodtable') : '<p class="na">Aucun prestataire pour le moment.</p>')
     + `<div class="sdbar"><button type="button" id="rs-save" ${rs.dirty ? '' : 'disabled'}>Enregistrer</button><button type="button" id="rs-cancel" ${rs.dirty ? '' : 'disabled'}>Annuler les modifications</button><span class="na" id="rs-msg">${esc(rs.msg || '')}</span></div>`
     + `<div class="sdbar"><input class="sdin" id="rs-q" placeholder="Rechercher un contact Odoo (nom, société, e-mail)" style="min-width:300px"><button type="button" id="rs-find">${rs.searching ? 'Recherche…' : 'Rechercher'}</button></div>` + found;
   const c = document.getElementById('rs-veh'), v = rs.vehicles;
@@ -92,10 +94,11 @@ document.addEventListener('change', async e => {
 document.addEventListener('click', async e => {
   const vc = e.target.closest && e.target.closest('.rs-vcat'); if (vc) { rs.vcat = vc.dataset.c; drawResources(); return; }
   const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('rs-ext')) return;
+  if (t.classList.contains('rs-xbu')) { const x = rs.externals[+t.dataset.i], b = t.dataset.b; x.bus = (x.bus || []).includes(b) ? x.bus.filter(y => y !== b) : (x.bus || []).concat([b]); rs.dirty = true; rs.msg = null; drawResources(); return; }
   if (t.classList.contains('rs-del')) { rs.externals.splice(+t.dataset.i, 1); rs.dirty = true; rs.msg = null; drawResources(); }
   else if (t.classList.contains('rs-add')) {
     const c = (rs.found || []).find(x => x.id === +t.dataset.id); if (!c) return;
-    rs.externals.push({partner_id: c.id, name: c.name, email: (c.email || '').toLowerCase(), company: c.company || '', phone: c.phone || '', role: c.function || ''}); rs.dirty = true; rs.msg = null; drawResources();
+    rs.externals.push({partner_id: c.id, name: c.name, email: (c.email || '').toLowerCase(), company: c.company || '', phone: c.phone || '', role: c.function || '', bus: []}); rs.dirty = true; rs.msg = null; drawResources();
   } else if (t.id === 'rs-dir') {
     rs.suggBusy = true; rs.suggMsg = null; drawResources();
     try {

@@ -1253,3 +1253,15 @@ EN_PATTERNS.push(
 );
 EN_PATTERNS.push([/^Recherche momentanément indisponible : (.+)$/, m => 'Search temporarily unavailable: ' + m[1]]);
 Object.assign(EN, {'jj/mm/aaaa': 'dd/mm/yyyy', 'Calendrier': 'Calendar', 'Date invalide : saisissez jj/mm/aaaa.': 'Invalid date: enter dd/mm/yyyy.'});
+Object.assign(EN, {
+  "BU concernées": "BUs concerned",
+  "à choisir": "to choose",
+  "autre BU": "other BU",
+  "BU non définie": "BU not defined",
+  "Choisissez d’abord une BU.": "Choose a BU first.",
+  "Aucun staff actif imputé à cette BU.": "No active staff allocated to this BU.",
+  "Aucun prestataire rattaché à cette BU : cochez ses BU dans Ressources.": "No contractor linked to this BU: tick their BUs in Resources.",
+  "Afficher aussi le staff et les prestataires des autres BU": "Also show staff and contractors of other BUs",
+  "Prestataires choisis parmi les contacts Odoo. L’adresse e-mail (reprise d’Odoo, modifiable ici) sert à leur envoyer l’invitation à l’événement Google. Cochez les BU concernées : un prestataire n’est proposé que pour les événements de ces BU. Rien n’est écrit dans Odoo.": "Contractors chosen from the Odoo contacts. The email address (taken from Odoo, editable here) is used to send them the Google event invitation. Tick the BUs concerned: a contractor is only offered for events of those BUs. Nothing is written to Odoo.",
+});
+EN_PATTERNS.push([/^\((\d+) masqués?\)$/, m => '(' + m[1] + ' hidden)']);

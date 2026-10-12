@@ -22,7 +22,9 @@ A_IDS, S_IDS = {a for a, _ in ASSIGNMENTS}, {s for s, _ in SYSTEMS}
 EDIT_HOURS = 24
 EVENT_NATURES = [("reassort", "Réassort camion(s)"), ("chargement", "Chargement camion(s) et/ou camionnette(s)"), ("dechargement", "Déchargement camion(s) et/ou camionnette(s)"),
                  ("nettoyage_equip", "Nettoyage équipements et/ou outillage"), ("nettoyage_veh", "Nettoyage camion(s) et/ou camionnette(s)")]
-N_IDS = dict(EVENT_NATURES)
+ATELIER_NATURES = [("pre_event", "Pre-event"), ("post_event", "Post-event"), ("custom", "Autre intervention")]
+N_IDS = {**dict(EVENT_NATURES), **dict(ATELIER_NATURES)}
+N_ASSIGN = {"pre_event": "prepa", "post_event": "revision"}
 DEFAULT_BACKGROUND = ["Nettoyage atelier", "Rangement atelier", "Inventaire stock", "Réunion / briefing", "Formation", "Autre tâche de fond"]
 MAX_PHOTO, MAX_AUDIO = 8 * 1024 * 1024, 12 * 1024 * 1024
 
@@ -276,13 +278,23 @@ def job_title(data: JobIn) -> str:
         if not (data.event and data.nature):
             raise ValueError("Choisissez l'événement et la nature du job")
         return f"{N_IDS[data.nature]} — {data.event.title}"
+    if data.kind == "atelier" and data.nature:
+        if not data.vehicle:
+            raise ValueError("Choisissez la voiture")
+        if data.nature == "custom":
+            if not data.title.strip():
+                raise ValueError("Indiquez l'intervention")
+            return f"{data.title.strip()} / {data.vehicle.name}"
+        if not data.event:
+            raise ValueError("Choisissez l'événement")
+        return f"{N_IDS[data.nature]} {data.event.title} / {data.vehicle.name}"
     if not data.title.strip():
         raise ValueError("L'intitulé est obligatoire")
     return data.title.strip()
 
 
 def create_job(data: JobIn, user: str) -> dict:
-    data = data.model_copy(update={"title": job_title(data)})
+    data = data.model_copy(update={"title": job_title(data), "assignment": N_ASSIGN.get(data.nature, data.assignment)})
     if any(j["title"].lower() == data.title.lower() for j in jobs().all()):
         raise ValueError("Ce job existe déjà")
     jid = "j-" + uuid.uuid4().hex[:10]
@@ -436,6 +448,6 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
             if r.get("category") not in RACE:
                 continue
             vname = re.sub(r"^\s*[(\[][^)\]]*[)\]]\s*[-:]?\s*", "", r["name"]) or r["name"]
-            for prefix, asg in (("Pre-event", "prepa"), ("Post-event", "revision")):
-                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "bu": bu, "vehicle": {"id": "", "name": vname}, "event": eref, "assignment": asg, "when": ev["start"]})
+            for prefix, nat in (("Pre-event", "pre_event"), ("Post-event", "post_event")):
+                out.append({"kind": "atelier", "title": f"{prefix} {ev['title']} / {vname}", "nature": nat, "bu": bu, "vehicle": {"id": "", "name": vname}, "event": eref, "when": ev["start"]})
     return [s for s in out if s.get("natures") or s["title"].lower() not in have]

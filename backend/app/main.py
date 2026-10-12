@@ -737,7 +737,7 @@ def ts_me(user: str = Depends(require_user)):
     r = timesheets.role_of(user)
     p = r["person"] or {}
     return {"role": r["role"], "bus": r["bus"], "super": r["super"], "name": p.get("name", ""), "theoretical": timesheets.theoretical_minutes(r["person"]),
-            "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "natures": [{"id": a, "label": l} for a, l in timesheets.EVENT_NATURES], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
+            "assignments": [{"id": a, "label": l} for a, l in timesheets.ASSIGNMENTS], "natures": [{"id": a, "label": l} for a, l in timesheets.EVENT_NATURES], "atelier_natures": [{"id": a, "label": l} for a, l in timesheets.ATELIER_NATURES], "systems": [{"id": a, "label": l} for a, l in timesheets.SYSTEMS], "edit_hours": timesheets.EDIT_HOURS,
             "attachments": timesheets.blobs().enabled}
 
 
@@ -803,10 +803,17 @@ def ts_vehicles(user: str = Depends(require_user)):
     try:
         today = date.today()
         v = provider().vehicles(date(today.year - 3, 1, 1), today)["vehicles"]
-        return {"vehicles": sorted(({"id": str(x["id"]), "name": x["name"]} for x in v if x.get("group", "CARS") == "CARS"), key=lambda x: x["name"].lower())}
+        return {"vehicles": sorted(({"id": str(x["id"]), "name": x["name"], "bu": _ts_bu_of(x)} for x in v if x.get("group", "CARS") == "CARS"), key=lambda x: x["name"].lower())}
     except Exception as e:
         log.exception("Liste des véhicules indisponible")
         return {"vehicles": [], "unavailable": f"Véhicules Odoo momentanément indisponibles : {e}"}
+
+
+def _ts_bu_of(x: dict) -> str:
+    """BU principale d'un événement ou d'un véhicule d'après l'axe BU d'Odoo ; vide si inconnue."""
+    to_bu = {"XC": "XC", "Modern Rally": "MODERN_RALLY", "Historic Rally": "HISTORIC_RALLY", "Historic Racing": "HISTORIC_RACING"}
+    bus = sorted(x.get("bus") or [], key=lambda b: -b.get("share", 0))
+    return to_bu.get(bus[0]["bu"], "") if bus else ""
 
 
 @app.get("/api/timesheets/events")
@@ -816,11 +823,7 @@ def ts_events(user: str = Depends(require_user)):
     try:
         today = date.today()
         v = provider().events(date(today.year - 3, 1, 1), today + timedelta(days=366))["events"]
-        to_bu = {"XC": "XC", "Modern Rally": "MODERN_RALLY", "Historic Rally": "HISTORIC_RALLY", "Historic Racing": "HISTORIC_RACING"}
-        def bu_of(x):                                   # BU principale de l'événement (axe BU d'Odoo) ; vide si inconnue
-            bus = sorted(x.get("bus") or [], key=lambda b: -b.get("share", 0))
-            return to_bu.get(bus[0]["bu"], "") if bus else ""
-        return {"events": sorted(({"id": str(x["id"]), "name": x["name"], "bu": bu_of(x)} for x in v), key=lambda x: x["name"].lower())}
+        return {"events": sorted(({"id": str(x["id"]), "name": x["name"], "bu": _ts_bu_of(x)} for x in v), key=lambda x: x["name"].lower())}
     except Exception as e:
         log.exception("Liste des événements indisponible")
         return {"events": [], "unavailable": f"Événements Odoo momentanément indisponibles : {e}"}

@@ -190,3 +190,15 @@ def test_event_job_title_is_built_from_event_and_nature(api):
     assert api.post("/api/timesheets/jobs", json=body).status_code == 422                       # doublon
     assert api.post("/api/timesheets/jobs", json={**body, "nature": ""}).status_code == 422
     assert api.post("/api/timesheets/jobs", json={**body, "nature": "x"}).status_code == 422
+
+
+def test_atelier_job_title_from_vehicle_event_nature(api):
+    as_(api, CHEF)
+    base = {"kind": "atelier", "bu": "HISTORIC_RACING", "vehicle": {"id": "3", "name": "Porsche 996 GT3 Cup"}, "event": {"id": "7", "title": "Spa Classic"}}
+    r = api.post("/api/timesheets/jobs", json={**base, "nature": "pre_event"})
+    assert r.json()["title"] == "Pre-event Spa Classic / Porsche 996 GT3 Cup" and r.json()["assignment"] == "prepa" and r.json()["billable"] is True
+    assert api.post("/api/timesheets/jobs", json={**base, "nature": "post_event"}).json()["title"].startswith("Post-event Spa Classic")
+    assert api.post("/api/timesheets/jobs", json={**base, "nature": "pre_event", "event": None}).status_code == 422
+    c = api.post("/api/timesheets/jobs", json={"kind": "atelier", "bu": "CARS", "nature": "custom", "title": "Révision boîte", "vehicle": base["vehicle"]})
+    assert c.json()["title"] == "Révision boîte / Porsche 996 GT3 Cup"
+    assert api.post("/api/timesheets/jobs", json={"kind": "atelier", "bu": "CARS", "nature": "custom", "title": "x"}).status_code == 422

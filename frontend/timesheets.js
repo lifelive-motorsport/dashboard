@@ -84,17 +84,26 @@ function tsTeamHtml() {
   return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
 }
 
+function tsPreview(f) {
+  const v = (ts.veh || []).find(x => x.id === f.vehicle), lab = (l, id) => (l.find(n => n.id === id) || {}).label;
+  if (f.kind === 'event') return f.event && f.nature ? `${lab(ts.me.natures, f.nature)} — ${f.event}` : '';
+  if (f.kind !== 'atelier' || !v || !f.nature) return '';
+  if (f.nature === 'custom') return f.title ? `${f.title} / ${v.name}` : '';
+  return f.event ? `${lab(ts.me.atelier_natures, f.nature)} ${f.event} / ${v.name}` : '';
+}
 function tsJobsHtml() {
   const f = ts.jobForm, bus = tsBuOpts(ts.me);
   const sug = ts.sugg == null ? '<button type="button" data-ts="sugg">Voir les propositions d’après le planning</button>' : ts.sugg.length ? `<table class="sdtable"><tbody>${ts.sugg.map((s, i) => `<tr><td><b>${esc(s.title)}</b></td><td>${esc(TS_KIND[s.kind])}${s.natures ? ` · ${s.natures.length} jobs` : ''}</td><td>${esc(plFmt(s.when, {day: 'numeric', month: 'short'}))}</td><td class="num"><button type="button" data-ts="mk" data-i="${i}">Créer ce job</button></td></tr>`).join('')}</tbody></table>` : '<p class="na">Aucune proposition : tous les jobs des prochains événements existent déjà.</p>';
   const form = !f ? '<button type="button" data-ts="newjob">+ Nouveau job</button>' : `<div class="ts-form"><div class="sdgrid">
     <label class="sdfield"><span>Type</span><select class="sdin" data-j="kind">${Object.entries(TS_KIND).map(([k, l]) => `<option value="${k}"${f.kind === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
     <label class="sdfield"><span>BU</span><select class="sdin" data-j="bu">${bus.map(b => `<option value="${b}"${f.bu === b ? ' selected' : ''}>${TS_BU[b]}</option>`).join('')}</select></label></div>
-    ${f.kind === 'event' ? '' : `<label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>`}
-    ${f.kind === 'atelier' ? `<label class="sdfield"><span>Voiture (Odoo)</span><select class="sdin" data-j="vehicle"><option value="">— Aucune —</option>${(ts.veh || []).map(v => `<option value="${esc(v.id)}"${f.vehicle === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>` : ''}
-    ${f.kind === 'event' ? `<label class="sdfield"><span>Événement (Odoo)</span><input class="sdin" data-j="event" list="ts-evl" value="${esc(f.event)}" maxlength="160" placeholder="Commencez à taper le nom de l’événement" autocomplete="off"><datalist id="ts-evl">${(ts.evs || []).map(v => `<option value="${esc(v.name)}"></option>`).join('')}</datalist></label>` : ''}
+    ${f.kind !== 'background' ? '' : `<label class="sdfield"><span>Intitulé</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="140" placeholder="Pre-event Spa Classic / Porsche 996 GT3 Cup"></label>`}
+    ${f.kind === 'atelier' ? `<label class="sdfield"><span>Voiture (Odoo)</span><select class="sdin" data-j="vehicle"><option value="">— Choisir —</option>${(ts.veh || []).map(v => `<option value="${esc(v.id)}"${f.vehicle === v.id ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
+      <label class="sdfield"><span>Nature du job</span><select class="sdin" data-j="nature"><option value="">— Choisir —</option>${ts.me.atelier_natures.map(n => `<option value="${n.id}"${f.nature === n.id ? ' selected' : ''}>${esc(n.label)}</option>`).join('')}</select></label>
+      ${f.nature === 'custom' ? `<label class="sdfield"><span>Intervention</span><input class="sdin" data-j="title" value="${esc(f.title)}" maxlength="100" placeholder="Révision boîte de vitesse"></label>` : ''}` : ''}
+    ${f.kind === 'event' || (f.kind === 'atelier' && ['pre_event', 'post_event'].includes(f.nature)) ? `<label class="sdfield"><span>Événement (Odoo)</span><input class="sdin" data-j="event" list="ts-evl" value="${esc(f.event)}" maxlength="160" placeholder="Commencez à taper le nom de l’événement" autocomplete="off"><datalist id="ts-evl">${(ts.evs || []).map(v => `<option value="${esc(v.name)}"></option>`).join('')}</datalist></label>` : ''}
     ${f.kind === 'event' ? `<label class="sdfield"><span>Nature du job</span><select class="sdin" data-j="nature"><option value="">— Choisir —</option>${ts.me.natures.map(n => `<option value="${n.id}"${f.nature === n.id ? ' selected' : ''}>${esc(n.label)}</option>`).join('')}</select></label>` : ''}
-    ${f.kind === 'event' && f.event && f.nature ? `<p class="na">Intitulé : <b>${esc(ts.me.natures.find(n => n.id === f.nature).label)} — ${esc(f.event)}</b></p>` : ''}
+    ${tsPreview(f) ? `<p class="na">Intitulé : <b>${esc(tsPreview(f))}</b></p>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="savejob">Créer le job</button><button type="button" data-ts="canceljob">Annuler</button></div></div>`;
   const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>BU</th><th>Rattachement</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${TS_BU[j.bu] || j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td class="num"><button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button> <button type="button" class="danger" data-ts="deljob" data-id="${j.id}">Supprimer</button></td></tr>`).join('')}</tbody></table>` : '';
   return `<div class="block-head"><h3>Jobs</h3></div><h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}`;
@@ -191,7 +200,7 @@ document.addEventListener('click', async ev => {
   if (a === 'canceljob') { ts.jobForm = null; return tsDraw(); }
   if (a === 'savejob') {
     tsReadJob(); const f = ts.jobForm, v = (ts.veh || []).find(x => x.id === f.vehicle);
-    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, nature: f.kind === 'event' ? f.nature : '', bu: f.bu, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind === 'event' && f.event ? {id: ((ts.evs || []).find(x => x.name === f.event) || {}).id || '', title: f.event} : null})}); ts.jobForm = null; });
+    return tsDo(async () => { await rsCall('/api/timesheets/jobs', {method: 'POST', body: JSON.stringify({kind: f.kind, title: f.title, nature: f.kind === 'background' ? '' : f.nature, bu: f.bu, vehicle: f.kind === 'atelier' && v ? {id: v.id, name: v.name} : null, event: f.kind !== 'background' && f.nature !== 'custom' && f.event ? {id: ((ts.evs || []).find(x => x.name === f.event) || {}).id || '', title: f.event} : null})}); ts.jobForm = null; });
   }
   if (a === 'deljob') { if (!confirm(t('Supprimer ce job ?'))) return; return tsDo(() => rsCall(`/api/timesheets/jobs/${b.dataset.id}`, {method: 'DELETE'})); }
   if (a === 'togjob') { const j = ts.jobsAll.find(x => x.id === b.dataset.id); return tsDo(() => rsCall(`/api/timesheets/jobs/${j.id}`, {method: 'PUT', body: JSON.stringify({kind: j.kind, title: j.title, bu: j.bu, nature: j.nature || '', assignment: j.assignment || 'autre', vehicle: j.vehicle, event: j.event, open: !j.open})})); }
@@ -207,4 +216,5 @@ document.addEventListener('change', async ev => {
   if (el.matches && el.matches('[data-j="kind"]')) { tsReadJob(); tsDraw(); }
   if (el.matches && el.matches('[data-j="event"]')) { tsReadJob(); const v = (ts.evs || []).find(x => x.name === ts.jobForm.event); if (v && v.bu && tsBuOpts(ts.me).includes(v.bu)) ts.jobForm.bu = v.bu; tsDraw(); }
   if (el.matches && el.matches('[data-j="nature"]')) { tsReadJob(); tsDraw(); }
+  if (el.matches && el.matches('[data-j="vehicle"]')) { tsReadJob(); const v = (ts.veh || []).find(x => x.id === ts.jobForm.vehicle); if (v && v.bu && !ts.jobForm.event && tsBuOpts(ts.me).includes(v.bu)) ts.jobForm.bu = v.bu; tsDraw(); }
 });

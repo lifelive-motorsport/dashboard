@@ -349,7 +349,7 @@ def create_entry(data: EntryIn, user: str, r: dict) -> dict:
     if target != user.lower() and not chef_for(r, job):
         raise PermissionError("Seul le chef d'atelier peut pointer pour un autre mécanicien")
     eid = "e-" + uuid.uuid4().hex[:12]
-    doc = {"id": eid, "user": target, "job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system, "text": data.text.strip(),
+    doc = {"id": eid, "user": target, "job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system if job.get("kind") == "atelier" else "autre", "text": data.text.strip(),
            "attachments": [], "validated": False, "created_at": now().isoformat(), "updated_at": now().isoformat(), "created_by": user.lower()}
     entries().put(eid, doc)
     return doc
@@ -367,7 +367,7 @@ def update_entry(eid: str, data: EntryIn, user: str, r: dict) -> dict:
         raise LookupError("Job introuvable")
     if data.job_id != e["job_id"] and not job.get("open", True):
         raise LookupError("Job clôturé")
-    e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system, "text": data.text.strip(), "updated_at": now().isoformat()})
+    e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system if job.get("kind") == "atelier" else "autre", "text": data.text.strip(), "updated_at": now().isoformat()})
     entries().put(eid, e)
     return e
 

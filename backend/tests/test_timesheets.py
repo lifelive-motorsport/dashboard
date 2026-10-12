@@ -202,3 +202,9 @@ def test_atelier_job_title_from_vehicle_event_nature(api):
     c = api.post("/api/timesheets/jobs", json={"kind": "atelier", "bu": "CARS", "nature": "custom", "title": "Révision boîte", "vehicle": base["vehicle"]})
     assert c.json()["title"] == "Révision boîte / Porsche 996 GT3 Cup"
     assert api.post("/api/timesheets/jobs", json={"kind": "atelier", "bu": "CARS", "nature": "custom", "title": "x"}).status_code == 422
+
+
+def test_system_only_for_workshop_jobs(api):
+    ev = mkjob(api, kind="event", title="Chargement — Imola", bu="CARS", event={"id": "1", "title": "Imola"}, nature="chargement").json()["id"]
+    as_(api, MEC)
+    assert api.post("/api/timesheets/entries", json=entry(ev, system="moteur")).json()["system"] == "autre"

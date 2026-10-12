@@ -636,3 +636,32 @@ def test_maps_calls_the_documented_google_urls(monkeypatch):
     assert seen[0][1] == "https://places.googleapis.com/v1/places:autocomplete"
     assert seen[1][1] == "https://places.googleapis.com/v1/places/ChIJ1" and "location" in seen[1][3]
     assert seen[2][1] == "https://routes.googleapis.com/directions/v2:computeRoutes" and "routes.polyline" in seen[2][3]
+
+
+def test_busy_check_handles_more_than_50_resources_in_chunks(monkeypatch):
+    from datetime import date
+    from app import planning
+    calls = []
+
+    class R:
+        status_code = 200
+
+        def __init__(self, j):
+            self._j = j
+
+        def json(self):
+            return self._j
+
+    class S:
+        def post(self, url, json, timeout):
+            ids = [x["id"] for x in json["items"]]
+            calls.append(len(ids))
+            return R({"calendars": {i: {"busy": [{"start": "2027-04-01T00:00:00+02:00", "end": "2027-04-02T00:00:00+02:00"}] if i.endswith("7@r") else []} for i in ids}})
+    g = planning.Google()
+    monkeypatch.setattr(g, "_s", lambda: S())
+    emails = [f"{i}@r" for i in range(120)]
+    out = g.busy(emails, date(2027, 4, 1), date(2027, 4, 4))
+    assert calls == [50, 50, 20] and len(out) == 120 and out["7@r"] and not out["8@r"]
+    from fastapi.testclient import TestClient
+    from app.main import app
+    assert TestClient(app).post("/api/events/busy", json={"emails": [f"{i}@r.be" for i in range(80)], "start": "2027-04-01", "end": "2027-04-04"}).status_code == 200

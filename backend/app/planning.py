@@ -77,7 +77,7 @@ class EventIn(BaseModel):
 
 
 class BusyBody(BaseModel):
-    emails: list[str] = Field(max_length=40)
+    emails: list[str] = Field(max_length=300)
     start: date
     end: date
 
@@ -130,8 +130,11 @@ class Google:
         tz = ZoneInfo("Europe/Brussels")
         t0 = datetime.combine(d_from, datetime.min.time(), tz).isoformat()
         t1 = datetime.combine(d_to + timedelta(days=1), datetime.min.time(), tz).isoformat()
-        j = self._chk(self._s().post(f"{API}/freeBusy", json={"timeMin": t0, "timeMax": t1, "timeZone": "Europe/Brussels", "items": [{"id": e} for e in emails]}, timeout=30)).json()
-        return {e: (c.get("busy") or []) for e, c in (j.get("calendars") or {}).items()}
+        out: dict[str, list[dict]] = {}
+        for i in range(0, len(emails), 50):                            # l'API freeBusy accepte au plus 50 agendas par demande
+            j = self._chk(self._s().post(f"{API}/freeBusy", json={"timeMin": t0, "timeMax": t1, "timeZone": "Europe/Brussels", "items": [{"id": e} for e in emails[i:i + 50]]}, timeout=30)).json()
+            out.update({e: (c.get("busy") or []) for e, c in (j.get("calendars") or {}).items()})
+        return out
 
 
 class Memory:

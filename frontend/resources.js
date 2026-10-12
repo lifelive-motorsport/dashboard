@@ -1,5 +1,5 @@
 // Planifier › Ressources : staff (compte Google), prestataires externes (contacts Odoo) et véhicules de service (ressources Google Agenda). Réservé au Super User. Chargé avant app.js.
-let rs = {loaded: false, error: null, staff: [], externals: [], base: null, vehicles: {items: []}, delegation: true, dirty: false, msg: null, found: null, searching: false, savingMail: {}, sugg: {}, suggMsg: null, suggBusy: false};
+let rs = {loaded: false, error: null, staff: [], externals: [], base: null, vehicles: {items: []}, delegation: true, dirty: false, msg: null, found: null, searching: false, savingMail: {}, sugg: {}, suggMsg: null, suggBusy: false, vcat: 'all'};
 const rsAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 const rsNorm = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s'-]/g, ' ').split(/[\s'-]+/).filter(w => w.length > 1 && !['de', 'du', 'van', 'von', 'le', 'la'].includes(w));
 // Propose, pour chaque personne sans compte Google, l'utilisateur de l'annuaire dont le nom correspond (mêmes mots, ou tous les mots du staff présents) : seulement si la correspondance est unique
@@ -59,9 +59,14 @@ function drawResources() {
     + `<div class="sdbar"><button type="button" id="rs-save" ${rs.dirty ? '' : 'disabled'}>Enregistrer</button><button type="button" id="rs-cancel" ${rs.dirty ? '' : 'disabled'}>Annuler les modifications</button><span class="na" id="rs-msg">${esc(rs.msg || '')}</span></div>`
     + `<div class="sdbar"><input class="sdin" id="rs-q" placeholder="Rechercher un contact Odoo (nom, société, e-mail)" style="min-width:300px"><button type="button" id="rs-find">${rs.searching ? 'Recherche…' : 'Rechercher'}</button></div>` + found;
   const c = document.getElementById('rs-veh'), v = rs.vehicles;
+  const cats = (v.categories || []).filter(k => (v.items || []).some(x => x.category === k.id));
+  const vitems = (v.items || []).filter(x => rs.vcat === 'all' || x.category === rs.vcat);
+  const catLabel = id => ((v.categories || []).find(k => k.id === id) || {}).label || id;
+  const pill = (id, label, n) => `<button type="button" class="rs-pill rs-vcat" data-c="${id}" aria-pressed="${rs.vcat === id}"><span>${esc(label)}</span> <small>${n}</small></button>`;
   c.innerHTML = '<p class="na">Véhicules lus dans le module « Ressources » de Google Agenda : ils seront réservés comme ressources invitées aux événements.</p>'
+    + (cats.length ? `<div class="bu-bar"><div class="bu-filter" role="group" aria-label="Filtrer par catégorie">${pill('all', 'Tous', v.items.length)}${cats.map(k => pill(k.id, k.label, v.items.filter(x => x.category === k.id).length)).join('')}</div></div>` : '')
     + (v.message ? `<p class="${v.items.length ? 'na' : 'neg'}">${esc(v.message)}</p>` : '')
-    + (v.items.length ? table(['Véhicule', 'Type', 'Adresse de la ressource', 'Description'], v.items.map(x => `<tr><td class="prod">${esc(x.name)}</td><td>${esc(x.type || '')}</td><td>${x.email ? esc(x.email) : '<small class="na">—</small>'}</td><td>${esc(x.description || '')}</td></tr>`), 'prodtable') : '');
+    + (vitems.length ? table(['Véhicule', 'Catégorie', 'Type', 'Adresse de la ressource', 'Description'], vitems.map(x => `<tr><td class="prod">${esc(x.name)}</td><td>${esc(catLabel(x.category))}</td><td>${esc(x.type || '')}</td><td>${x.email ? esc(x.email) : '<small class="na">—</small>'}</td><td>${esc(x.description || '')}</td></tr>`), 'prodtable') : '');
 }
 
 async function rsSaveExternals() {
@@ -85,6 +90,7 @@ document.addEventListener('change', async e => {
 });
 
 document.addEventListener('click', async e => {
+  const vc = e.target.closest && e.target.closest('.rs-vcat'); if (vc) { rs.vcat = vc.dataset.c; drawResources(); return; }
   const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('rs-ext')) return;
   if (t.classList.contains('rs-del')) { rs.externals.splice(+t.dataset.i, 1); rs.dirty = true; rs.msg = null; drawResources(); }
   else if (t.classList.contains('rs-add')) {

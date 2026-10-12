@@ -1182,3 +1182,9 @@ EN_PATTERNS.push(
   [/^(\d+) suggestions?(?: · (\d+) sans correspondance unique)?$/, m => m[1] + ' suggestion' + (m[1] > 1 ? 's' : '') + (m[2] ? ' · ' + m[2] + ' without a unique match' : '')],
 );
 Object.assign(EN, {"Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.": "Staff members (as recorded in Staff costs) can be invited to events once their Google account is entered: the event then appears in their Google Calendar. The address is saved on their record. Only active people are listed; the BU filter follows the staff allocation.", "Aucune personne active imputée à cette BU.": "No active person allocated to this BU."});
+Object.assign(EN, {
+  "Tous": "All",
+  "Filtrer par catégorie": "Filter by category",
+  "Catégorie": "Category",
+  "Autres": "Other",
+});

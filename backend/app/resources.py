@@ -98,10 +98,37 @@ _cache: tuple[float, dict] | None = None
 _lock = threading.Lock()
 
 
-def _filtered(rows: list[dict]) -> list[dict]:
+# Catégories de véhicules : (identifiant, libellé, types de ressource Google Agenda qui en font partie). Le type est celui saisi dans la console d'administration ; à défaut, le début du nom.
+CATEGORIES = (("sv", "Service Vehicles", ("sv", "tr", "sv to rent")), ("rally", "Rally Cars", ("rally",)), ("circuit", "Circuit Cars", ("circuit",)))
+HIDDEN = re.compile(r"meeting|conference|salle", re.I)                     # salles de réunion : jamais listées
+
+
+def categorize(row: dict) -> str | None:
+    """Identifiant de catégorie ('other' si inconnue), ou None si la ressource ne doit pas apparaître (salle de réunion)."""
+    typ = (row.get("type") or "").strip().lower()
+    if HIDDEN.search(typ) or (row.get("category") or "").upper() == "CONFERENCE_ROOM":
+        return None
+    name = re.sub(r"^[\s(\[]+", "", (row.get("name") or "").lower())
+    for cid, _label, types in CATEGORIES:
+        if typ in types:
+            return cid
+    for cid, _label, types in CATEGORIES:
+        if any(re.match(re.escape(t) + r"[\s)\]\-:_]", name + " ") for t in types):
+            return cid
+    return "other"
+
+
+def _filtered(rows: list[dict], exclude_by_name: bool = False) -> list[dict]:
     pat = re.compile(settings.CALENDAR_VEHICLE_REGEX, re.I) if settings.CALENDAR_VEHICLE_REGEX else None
-    excl = re.compile(settings.CALENDAR_EXCLUDE_REGEX, re.I) if settings.CALENDAR_EXCLUDE_REGEX else None
-    out = [r for r in rows if (not pat or pat.search(r["name"])) and (not excl or not excl.search(r["name"]))]
+    excl = re.compile(settings.CALENDAR_EXCLUDE_REGEX, re.I) if exclude_by_name and settings.CALENDAR_EXCLUDE_REGEX else None
+    out = []
+    for r in rows:
+        if (pat and not pat.search(r["name"])) or (excl and excl.search(r["name"])):
+            continue
+        cat = categorize(r)
+        if cat is None:
+            continue
+        out.append({**r, "category": cat})
     return sorted(out, key=lambda r: r["name"].lower())
 
 
@@ -122,7 +149,7 @@ def _directory() -> list[dict]:
         j = r.json()
         for it in j.get("items", []):
             rows.append({"name": it.get("resourceName", ""), "email": it.get("resourceEmail", ""), "type": it.get("resourceType") or it.get("resourceCategory", ""),
-                         "description": it.get("userVisibleDescription", ""), "capacity": it.get("capacity")})
+                         "description": it.get("userVisibleDescription", ""), "capacity": it.get("capacity"), "category": it.get("resourceCategory", "")})
         token = j.get("nextPageToken")
         if not token:
             return rows
@@ -135,14 +162,22 @@ def _from_events() -> list[dict]:
     return [{"name": n, "email": "", "type": "", "description": "", "capacity": None} for n in names]
 
 
+def _categories() -> list[dict]:
+    return [{"id": cid, "label": label} for cid, label, _t in CATEGORIES] + [{"id": "other", "label": "Autres"}]
+
+
 def vehicles() -> dict:
     """{configured, source: 'directory' | 'events' | 'demo', items, message?}"""
     global _cache
     if settings.PROVIDER == "demo":
-        return {"configured": True, "source": "demo", "items": [
-            {"name": "Sprinter", "email": "sprinter@resource.calendar.google.com", "type": "Véhicule", "description": "Utilitaire atelier", "capacity": 3},
-            {"name": "Citan", "email": "citan@resource.calendar.google.com", "type": "Véhicule", "description": "", "capacity": 2},
-            {"name": "Remorque 1", "email": "remorque1@resource.calendar.google.com", "type": "Remorque", "description": "Remorque plateau", "capacity": None}]}
+        rows = [{"name": "Sprinter", "email": "sprinter@resource.calendar.google.com", "type": "SV", "description": "Utilitaire atelier", "capacity": 3},
+                {"name": "Camion TR 1", "email": "tr1@resource.calendar.google.com", "type": "TR", "description": "", "capacity": None},
+                {"name": "Citan à louer", "email": "citan@resource.calendar.google.com", "type": "SV TO RENT", "description": "", "capacity": 2},
+                {"name": "Porsche 992 Rally", "email": "p992@resource.calendar.google.com", "type": "Rally", "description": "", "capacity": None},
+                {"name": "(Circuit)-BMW M3 E30", "email": "m3@resource.calendar.google.com", "type": "Circuit", "description": "", "capacity": None},
+                {"name": "Salle Lifelive", "email": "salle@resource.calendar.google.com", "type": "Meeting room", "description": "", "capacity": 12},
+                {"name": "Drone", "email": "drone@resource.calendar.google.com", "type": "Matériel", "description": "", "capacity": None}]
+        return {"configured": True, "source": "demo", "items": _filtered(rows), "categories": _categories()}
     with _lock:
         if _cache and time.time() - _cache[0] < 600:
             return _cache[1]
@@ -153,12 +188,13 @@ def vehicles() -> dict:
             out = {"configured": True, "source": "directory", "items": [], "message": f"Liste des ressources indisponible : {e}"}
     elif gcal.configured():
         try:
-            out = {"configured": False, "source": "events", "items": _filtered(_from_events()),
+            out = {"configured": False, "source": "events", "items": _filtered(_from_events(), True),
                    "message": "Délégation Google non activée : seules les ressources déjà réservées dans les agendas sont listées, sans leur adresse."}
         except Exception as e:
             out = {"configured": False, "source": "events", "items": [], "message": f"Agendas indisponibles : {e}"}
     else:
         out = {"configured": False, "source": "none", "items": [], "message": "Google Agenda n’est pas encore relié à Logbook."}
+    out["categories"] = _categories()
     if out["items"]:
         with _lock:
             _cache = (time.time(), out)

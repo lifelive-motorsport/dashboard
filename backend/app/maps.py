@@ -52,7 +52,7 @@ def autocomplete(q: str) -> list[dict]:
     q = q.strip()
     if settings.PROVIDER == "demo":
         return [{"id": p["id"], "text": f'{p["name"]}, {p["address"]}'} for p in DEMO_PLACES if q.lower() in (p["name"] + p["address"]).lower()]
-    r = _post(f"{PLACES}:autocomplete", {"input": q, "languageCode": "fr"}, {})
+    r = _post(f"{PLACES}/places:autocomplete", {"input": q, "languageCode": "fr"}, {})
     if r.status_code != 200:
         raise RuntimeError(f"Google Places HTTP {r.status_code} — {_msg(r)}")
     return [{"id": s["placePrediction"]["placeId"], "text": s["placePrediction"]["text"]["text"]} for s in r.json().get("suggestions", []) if "placePrediction" in s][:8]

@@ -600,3 +600,39 @@ def test_maps_api_key_is_cleaned_and_rejected_when_corrupted(monkeypatch):
     monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "AIzaSyD8\uff21\uff22\u2026")
     with pytest.raises(RuntimeError, match="caractères non valides"):
         maps.api_key()
+
+
+def test_maps_calls_the_documented_google_urls(monkeypatch):
+    """Adresses des API Google Maps (Places New, Routes) : une faute d'URL donne un 404 que la démo ne révèle pas."""
+    from app import maps, settings
+    monkeypatch.setattr(settings, "PROVIDER", "odoo")
+    monkeypatch.setattr(settings, "GOOGLE_MAPS_API_KEY", "AIzaSyTEST")
+    seen = []
+
+    class R:
+        status_code = 200
+
+        def __init__(self, j):
+            self._j = j
+
+        def json(self):
+            return self._j
+
+    def post(url, json, headers):
+        seen.append(("POST", url, headers.get("X-Goog-Api-Key"), headers.get("X-Goog-FieldMask")))
+        if url.endswith("computeRoutes"):
+            return R({"routes": [{"distanceMeters": 63000, "duration": "3300s", "polyline": {"encodedPolyline": "_p~iF~ps|U_ulLnnqC"}}]})
+        return R({"suggestions": [{"placePrediction": {"placeId": "ChIJ1", "text": {"text": "Circuit de Barcelona-Catalunya, Montmeló"}}}]})
+
+    def get(url, **kw):
+        seen.append(("GET", url, kw.get("headers", {}).get("X-Goog-Api-Key"), kw.get("headers", {}).get("X-Goog-FieldMask")))
+        return R({"id": "ChIJ1", "displayName": {"text": "Circuit"}, "formattedAddress": "Montmeló", "location": {"latitude": 41.57, "longitude": 2.26}, "addressComponents": [{"types": ["country"], "shortText": "ES"}]})
+    monkeypatch.setattr(maps, "_post", post)
+    monkeypatch.setattr(maps, "_get", get)
+    monkeypatch.setattr(maps, "_country_at", lambda p: "")
+    assert maps.autocomplete("circuit cata") == [{"id": "ChIJ1", "text": "Circuit de Barcelona-Catalunya, Montmeló"}]
+    assert maps.details("ChIJ1")["country"] == "ES"
+    assert maps.route({"id": "ChIJ1", "country": "ES"})["km"] == 63
+    assert seen[0][1] == "https://places.googleapis.com/v1/places:autocomplete"
+    assert seen[1][1] == "https://places.googleapis.com/v1/places/ChIJ1" and "location" in seen[1][3]
+    assert seen[2][1] == "https://routes.googleapis.com/directions/v2:computeRoutes" and "routes.polyline" in seen[2][3]

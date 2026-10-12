@@ -1320,5 +1320,5 @@ Object.assign(EN, {
   'Aucune proposition : tous les jobs des prochains événements existent déjà.': 'No suggestions: all jobs for upcoming events already exist.', 'Type': 'Type', 'BU': 'BU', 'Intitulé': 'Title', 'Voiture (Odoo)': 'Car (Odoo)', '— Aucune —': '— None —', 'Événement': 'Event', 'Rattachement': 'Linked to',
   'Toutes': 'All', 'Clôturer': 'Close', 'Rouvrir': 'Reopen', 'Logbook · Odoo': 'Logbook · Odoo',
 });
-Object.assign(EN, {'Atelier': 'Workshop', '— Hors atelier —': '— Not in workshop —', 'Chef d’atelier CARS': 'Workshop manager CARS', 'Chef d’atelier XC': 'Workshop manager XC', 'Chef d’atelier CARS + XC': 'Workshop manager CARS + XC'});
+Object.assign(EN, {'Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.': 'No workshop member for this BU: choose a role in the Workshop column (Plan › Resources › Internal staff) and fill in the Google account.', 'Atelier': 'Workshop', '— Hors atelier —': '— Not in workshop —', 'Chef d’atelier CARS': 'Workshop manager CARS', 'Chef d’atelier XC': 'Workshop manager XC', 'Chef d’atelier CARS + XC': 'Workshop manager CARS + XC'});
 Object.assign(EN, {'Date invalide : saisissez jj/mm/aaaa (pas dans le futur).': 'Invalid date: enter dd/mm/yyyy (not in the future).'});

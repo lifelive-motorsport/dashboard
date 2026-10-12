@@ -114,7 +114,7 @@ def test_week_summary_occupancy_and_billable(api):
     assert s["total"] == 570 and s["billable"] == 380 and s["theoretical"] == 38 * 60
     assert s["occupancy"] == 0.25 and s["billable_rate"] == round(380 / 2280, 3)
     as_(api, CHEF)
-    row = api.get("/api/timesheets/team", params={"start": date.today().isoformat()}).json()["rows"][0]
+    row = next(r for r in api.get("/api/timesheets/team", params={"start": date.today().isoformat()}).json()["rows"] if r["name"] == "Nolan Collinet")
     assert row["name"] == "Nolan Collinet" and row["summary"]["total"] == 570
 
 

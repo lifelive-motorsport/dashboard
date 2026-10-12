@@ -814,11 +814,11 @@ def ts_team(start: date, user: str = Depends(require_user)):
     jm = {j["id"]: j for j in timesheets.jobs().all()}
     all_ents = timesheets.entries().between("date", a, b)
     people = [p for p in staff.store().get()["data"]["people"] if p.get("google_email") and p.get("active", True)
-              and timesheets.role_of(p["google_email"])["role"] == "mechanic"]
+              and p.get("workshop")]
     rows = []
     for p in sorted(people, key=lambda p: p["name"].lower()):
         ents = [e for e in all_ents if e["user"] == p["google_email"].lower() and timesheets.chef_for(r, jm.get(e["job_id"]))]
-        rows.append({"name": p["name"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
+        rows.append({"name": p["name"], "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
                      "entries": [timesheets.entry_view(timesheets.public_attachments(e), user, r, jm) for e in sorted(ents, key=lambda e: (e["date"], e["created_at"]))]})
     return {"start": a, "rows": rows}
 

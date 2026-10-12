@@ -1168,3 +1168,16 @@ Object.assign(EN, {
   "Adresse e-mail invalide": "Invalid email address",
   "Personne introuvable": "Person not found",
 });
+Object.assign(EN, {
+  "Proposer depuis l’annuaire Google": "Suggest from the Google directory",
+  "Lecture de l’annuaire…": "Reading the directory…",
+  "suggéré : à accepter": "suggested: to accept",
+  "Aucune correspondance trouvée.": "No match found.",
+  "Suggestions enregistrées.": "Suggestions saved.",
+  "Annuaire des utilisateurs indisponible": "User directory unavailable",
+  "Délégation Google non activée.": "Google delegation not enabled.",
+});
+EN_PATTERNS.push(
+  [/^Accepter les (\d+) suggestions$/, m => 'Accept the ' + m[1] + ' suggestions'],
+  [/^(\d+) suggestions?(?: · (\d+) sans correspondance unique)?$/, m => m[1] + ' suggestion' + (m[1] > 1 ? 's' : '') + (m[2] ? ' · ' + m[2] + ' without a unique match' : '')],
+);

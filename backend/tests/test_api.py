@@ -445,3 +445,10 @@ def test_resources_super_user_only_and_demo_flow(monkeypatch):
     assert c.put("/api/resources/externals", json={"data": {"externals": []}, "base": base}).status_code == 409
     q = c.get("/api/resources/contacts", params={"q": "garage"}).json()["contacts"]
     assert q and q[0]["email"]
+
+
+def test_resources_directory_users_demo():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    j = TestClient(app).get("/api/resources/directory-users").json()
+    assert j["configured"] and j["items"][0]["email"].endswith("@lifelive-motorsport.com")

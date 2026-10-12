@@ -13,6 +13,7 @@ _lock = threading.Lock()
 _sessions: dict[tuple, object] = {}
 
 SCOPE_DIRECTORY = "https://www.googleapis.com/auth/admin.directory.resource.calendar.readonly"
+SCOPE_USERS = "https://www.googleapis.com/auth/admin.directory.user.readonly"
 SCOPE_CALENDAR = "https://www.googleapis.com/auth/calendar"
 
 

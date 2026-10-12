@@ -669,6 +669,11 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
     return {"id": pid, "email": next(p for p in doc["data"]["people"] if p["id"] == pid)["google_email"]}
 
 
+@app.get("/api/resources/directory-users")
+def resource_directory_users(_user: str = Depends(super_user)):
+    return resources.directory_users()
+
+
 @app.get("/api/resources/contacts")
 def resource_contacts(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(super_user)):
     try:

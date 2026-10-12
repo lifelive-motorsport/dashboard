@@ -14,6 +14,7 @@ from . import gauth, gcal, settings
 from .staff import EMAIL
 
 DIRECTORY_URL = "https://admin.googleapis.com/admin/directory/v1/customer/my_customer/resources/calendars"
+USERS_URL = "https://admin.googleapis.com/admin/directory/v1/users"
 
 
 class External(BaseModel):
@@ -162,3 +163,35 @@ def vehicles() -> dict:
         with _lock:
             _cache = (time.time(), out)
     return out
+
+
+# ---- Annuaire des utilisateurs Google (pour proposer le compte Google du staff) -----------------------------------------------------
+
+def directory_users() -> dict:
+    """{configured, items: [{name, email}], message?} : utilisateurs actifs de l'annuaire Workspace."""
+    if settings.PROVIDER == "demo":
+        return {"configured": True, "items": [{"name": "Test Resource", "email": "test.resource@lifelive-motorsport.com"}, {"name": "Autre Personne", "email": "autre@lifelive-motorsport.com"}]}
+    if not gauth.configured():
+        return {"configured": False, "items": [], "message": "Délégation Google non activée."}
+    rows, token = [], None
+    try:
+        sess = gauth.session((gauth.SCOPE_USERS,))
+        while True:
+            params = {"customer": "my_customer", "maxResults": 500, "projection": "basic", "query": "isSuspended=false"}
+            if token:
+                params["pageToken"] = token
+            r = sess.get(USERS_URL, params=params, timeout=30)
+            if r.status_code != 200:
+                try:
+                    msg = r.json().get("error", {}).get("message", "")
+                except ValueError:
+                    msg = ""
+                raise RuntimeError(f"Google Workspace HTTP {r.status_code} — {msg[:300]}".strip(" —"))
+            j = r.json()
+            rows += [{"name": (u.get("name") or {}).get("fullName", ""), "email": u.get("primaryEmail", "")} for u in j.get("users", [])]
+            token = j.get("nextPageToken")
+            if not token:
+                break
+    except Exception as e:
+        return {"configured": True, "items": [], "message": f"Annuaire des utilisateurs indisponible : {e}"}
+    return {"configured": True, "items": sorted(rows, key=lambda x: x["name"].lower())}

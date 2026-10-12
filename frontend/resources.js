@@ -1,6 +1,17 @@
 // Planifier › Ressources : staff (compte Google), prestataires externes (contacts Odoo) et véhicules de service (ressources Google Agenda). Réservé au Super User. Chargé avant app.js.
-let rs = {loaded: false, error: null, staff: [], externals: [], base: null, vehicles: {items: []}, delegation: true, dirty: false, msg: null, found: null, searching: false, savingMail: {}};
+let rs = {loaded: false, error: null, staff: [], externals: [], base: null, vehicles: {items: []}, delegation: true, dirty: false, msg: null, found: null, searching: false, savingMail: {}, sugg: {}, suggMsg: null, suggBusy: false};
 const rsAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
+const rsNorm = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z\s'-]/g, ' ').split(/[\s'-]+/).filter(w => w.length > 1 && !['de', 'du', 'van', 'von', 'le', 'la'].includes(w));
+// Propose, pour chaque personne sans compte Google, l'utilisateur de l'annuaire dont le nom correspond (mêmes mots, ou tous les mots du staff présents) : seulement si la correspondance est unique
+function rsMatch(users) {
+  const out = {};
+  rs.staff.filter(p => !p.email).forEach(p => {
+    const t = rsNorm(p.name); if (!t.length) return;
+    const hits = users.filter(u => { const w = rsNorm(u.name); return w.length && (t.every(x => w.includes(x)) || (w.length > 1 && w.every(x => t.includes(x)))); });
+    if (hits.length === 1) out[p.id] = hits[0].email.toLowerCase();
+  });
+  return out;
+}
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
 function resourcesBlocks() {
@@ -29,9 +40,10 @@ function drawResources() {
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
   const part = rs.staff.filter(p => p.active), off = rs.staff.filter(p => !p.active);
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}</td><td>${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${esc(p.function || '')}</td>`
-    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : '<small class="neg">à renseigner</small>'}</span></td></tr>`;
+    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td></tr>`;
+  const nSugg = Object.keys(rs.sugg).length;
   a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche.</p>'
-    + (rs.staff.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], part.concat(off).map(row), 'prodtable') : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>');
+    + (rs.staff.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (rs.staff.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google'], part.concat(off).map(row), 'prodtable') : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>');
   const b = document.getElementById('rs-ext');
   const mailCell = (e, i) => `<input class="sdin rs-email" data-i="${i}" value="${esc(e.email)}" placeholder="adresse e-mail" style="min-width:220px">${e.email ? '' : ' <small class="neg">à compléter</small>'}`;
   const erows = rs.externals.map((e, i) => `<tr><td class="prod">${esc(e.name)}</td><td>${esc(e.company)}</td><td><input class="sdin rs-role" data-i="${i}" value="${esc(e.role)}" maxlength="120" placeholder="fonction" style="min-width:140px"></td><td>${mailCell(e, i)}</td><td>${esc(e.phone)}</td><td><button type="button" class="rs-del" data-i="${i}">Retirer</button></td></tr>`);
@@ -74,6 +86,18 @@ document.addEventListener('click', async e => {
   else if (t.classList.contains('rs-add')) {
     const c = (rs.found || []).find(x => x.id === +t.dataset.id); if (!c) return;
     rs.externals.push({partner_id: c.id, name: c.name, email: (c.email || '').toLowerCase(), company: c.company || '', phone: c.phone || '', role: c.function || ''}); rs.dirty = true; rs.msg = null; drawResources();
+  } else if (t.id === 'rs-dir') {
+    rs.suggBusy = true; rs.suggMsg = null; drawResources();
+    try {
+      const j = await rsCall('/api/resources/directory-users');
+      if (j.message) rs.suggMsg = j.message; else { rs.sugg = rsMatch(j.items || []); const n = Object.keys(rs.sugg).length, miss = rs.staff.filter(p => !p.email).length - n; rs.suggMsg = n ? n + ' suggestion' + (n > 1 ? 's' : '') + (miss > 0 ? ' · ' + miss + ' sans correspondance unique' : '') : 'Aucune correspondance trouvée.'; }
+    } catch (err) { rs.suggMsg = err.message; }
+    rs.suggBusy = false; drawResources();
+  } else if (t.id === 'rs-acc') {
+    for (const [pid, email] of Object.entries(rs.sugg)) {
+      try { const j = await rsCall('/api/resources/staff/' + encodeURIComponent(pid), {method: 'PUT', body: JSON.stringify({email})}); const p = rs.staff.find(x => x.id === pid); if (p) p.email = j.email; delete rs.sugg[pid]; } catch (err) { rs.suggMsg = err.message; break; }
+    }
+    if (!Object.keys(rs.sugg).length) rs.suggMsg = 'Suggestions enregistrées.'; drawResources();
   } else if (t.id === 'rs-save') rsSaveExternals();
   else if (t.id === 'rs-cancel') { await loadResources(); rs.msg = null; drawResources(); }
   else if (t.id === 'rs-find') {

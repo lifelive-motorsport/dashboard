@@ -322,9 +322,11 @@ def checklist_job(api, tid):
 def test_seed_template_and_rights(api):
     as_(api, CHEF)
     ts_ = api.get("/api/timesheets/templates").json()["templates"]
-    assert [t["name"] for t in ts_] == ["Révision Circuit"] and sum(len(s["lines"]) for s in ts_[0]["sections"]) == 42
-    assert api.delete(f"/api/timesheets/templates/{ts_[0]['id']}").status_code == 200
-    assert api.get("/api/timesheets/templates").json()["templates"] == []                 # supprimé : le modèle de départ ne revient pas
+    assert [t["name"] for t in ts_] == ["Révision Circuit 2RM atmosphérique", "Révision Circuit 2RM turbo", "Révision Rallye 992", "Révision Rallye i20 Rally2", "Révision Rallye M3 E30"]
+    assert all(sum(len(s["lines"]) for s in t["sections"]) > 30 for t in ts_)
+    for t in ts_:
+        assert api.delete(f"/api/timesheets/templates/{t['id']}").status_code == 200
+    assert api.get("/api/timesheets/templates").json()["templates"] == []                 # supprimés : les modèles de départ ne reviennent pas
     as_(api, MEC)
     assert api.get("/api/timesheets/templates").status_code == 403
     assert api.post("/api/timesheets/templates", json=TPL).status_code == 403

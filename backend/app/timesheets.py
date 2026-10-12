@@ -312,20 +312,20 @@ def _template_doc(data: TemplateIn, tid: str, user: str, created: str | None = N
 
 
 def ensure_templates() -> None:
-    """Crée une seule fois le modèle de départ (ensuite, le chef d'atelier le modifie ou le supprime à sa guise)."""
-    if templates().get("_seeded"):
-        return
+    """Crée chaque modèle de départ une seule fois (marqueur « _seed:nom ») : ensuite, le chef d'atelier le modifie ou le supprime, il ne revient pas."""
     from .ts_seed import SEED_TEMPLATES
-    if not [t for t in templates().all() if t.get("id") != "_seeded"]:
-        for t in SEED_TEMPLATES:
-            tid = "t-" + uuid.uuid4().hex[:8]
-            templates().put(tid, _template_doc(TemplateIn.model_validate(t), tid, "system"))
-    templates().put("_seeded", {"id": "_seeded"})
+    for t in SEED_TEMPLATES:
+        key = "_seed:" + t["name"]
+        if templates().get(key):
+            continue
+        tid = "t-" + uuid.uuid4().hex[:8]
+        templates().put(tid, _template_doc(TemplateIn.model_validate(t), tid, "system"))
+        templates().put(key, {"id": key})
 
 
 def list_templates() -> list[dict]:
     ensure_templates()
-    return sorted((t for t in templates().all() if t.get("id") != "_seeded"), key=lambda t: t["name"].lower())
+    return sorted((t for t in templates().all() if not t.get("id", "").startswith("_seed")), key=lambda t: t["name"].lower())
 
 
 def save_template(data: TemplateIn, user: str, tid: str | None = None) -> dict:

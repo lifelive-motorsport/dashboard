@@ -177,9 +177,11 @@ def _categories() -> list[dict]:
     return [{"id": cid, "label": label} for cid, label, _t in CATEGORIES] + [{"id": "other", "label": "Autres"}]
 
 
-def vehicles() -> dict:
-    """{configured, source: 'directory' | 'events' | 'demo', items, message?}"""
+def vehicles(force: bool = False) -> dict:
+    """{configured, source: 'directory' | 'events' | 'demo', items, message?} ; force = relit Google sans passer par le cache."""
     global _cache
+    if force:
+        _cache = None
     if settings.PROVIDER == "demo":
         rows = [{"name": "Sprinter", "email": "sprinter@resource.calendar.google.com", "type": "SV", "description": "Utilitaire atelier", "capacity": 3},
                 {"name": "Camion TR 1", "email": "tr1@resource.calendar.google.com", "type": "TR", "description": "", "capacity": None},
@@ -190,7 +192,7 @@ def vehicles() -> dict:
                 {"name": "Drone", "email": "drone@resource.calendar.google.com", "type": "Matériel", "description": "", "capacity": None}]
         return {"configured": True, "source": "demo", "items": _filtered(rows), "categories": _categories()}
     with _lock:
-        if _cache and time.time() - _cache[0] < 600:
+        if _cache and time.time() - _cache[0] < 120:
             return _cache[1]
     if gauth.configured():
         try:

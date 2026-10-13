@@ -12,10 +12,10 @@ const rdBuPills = (c) => `<div class="bu-filter rd-bupills" role="group" aria-la
 
 function ridesBlocks() { return [{static: '<section class="block" data-bid="rd"><div id="rd-view"><p class="na">Chargement…</p></div></section>'}]; }
 
-async function rdLoad() {
+async function rdLoad(force) {
   rd.loading = true; rdDraw();
   try {
-    const j = await rsCall('/api/rides/cars'); rd.cars = j.cars; rd.catalog = j.catalog; rd.circuits = j.circuits; rd.error = null;
+    const j = await rsCall('/api/rides/cars' + (force ? '?refresh=1' : '')); rd.cars = j.cars; rd.catalog = j.catalog; rd.circuits = j.circuits; rd.error = null;
     if (rd.car) rd.car = await rsCall('/api/rides/cars/' + encodeURIComponent(rd.car.key));
   } catch (e) { rd.error = e.message; }
   rd.loading = false; rdDraw();
@@ -137,7 +137,7 @@ function rdDraw() {
   const c = rd.car;
   const msg = rd.msg && !rd.form && !rd.run && !rd.repl ? `<p class="na">${esc(rd.msg)}</p>` : '';
   if (!c) {
-    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Catalogue de pièces et circuits'}</button>${rd.loading ? '<small class="na">Chargement…</small>' : ''}</div>${msg}${rdSettings()}${rdList()}`;
+    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Catalogue de pièces et circuits'}</button><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button>${rd.loading ? '<small class="na">Chargement…</small>' : ''}</div>${msg}${rdSettings()}${rdList()}`;
     return;
   }
   const alertsHtml = c.alerts_list.length ? `<div class="rd-alerts">${c.alerts_list.map(a => `<span class="rd-chip ${a.state === 'over' ? 'neg' : 'warn'}" title="${rdKm(a.km)} km${a.limit_km ? ' / ' + rdKm(a.limit_km) : ''}">${a.state === 'over' ? '⛔' : '⚠'} ${esc(a.path)} · ${rdPct(a.ratio)}</span>`).join(' ')}</div>` : '';
@@ -204,6 +204,7 @@ document.addEventListener('click', async e => {
     if (a === 'linkone') { const v = parseInt((document.getElementById('rd-odoo-sel') || {}).value); if (!v) throw new Error('Choisissez un compte Odoo.'); await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({odoo_id: v})}); return rdReload(); }
     if (a === 'unlinkodoo') { await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({odoo_id: 0})}); rd.odoo = null; await rdReload(); if (rd.car && !rd.car.odoo) rdLoadOdoo(); return; }
     if (a === 'guessbu') { const j = await rsCall('/api/rides/guess-bu', {method: 'POST', body: '{}'}); rd.msg = `BU proposées pour ${j.set.length} voiture(s) : ` + j.set.map(x => `${x.name} → ${RD_BULAB[x.bu]}`).join(' · ') + '. À vérifier dans chaque fiche.'; return rdReload(); }
+    if (a === 'reread') { await rdLoad(true); return; }
     if (a === 'archive') { await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({archived: !rd.car.archived})}); rd.car.archived = !rd.car.archived; if (rd.car.archived) { rd.car = null; } return rdReload(); }
     if (a === 'delcar') { const c = rd.car; if (!confirm(`Supprimer définitivement « ${c.name} » ?\n\nSes ${c.parts} pièce(s), ses ${c.runs} run(s) et sa photo seront effacés, sans retour possible.${'\n\n'}Le véhicule reste dans Planifier › Ressources : laissez-le archivé s'il y figure encore.`)) return; const j = await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'DELETE'}); rd.car = null; rd.msg = `Données supprimées (${j.parts} pièce(s), ${j.runs} run(s)).`; return rdReload(); }
     if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; await rdReload(); return; }

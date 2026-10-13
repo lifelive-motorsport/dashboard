@@ -92,7 +92,7 @@ function rsDrawVeh() {
   const vitems = (v.items || []).filter(x => rs.vcat === 'all' || x.category === rs.vcat);
   const catLabel = id => ((v.categories || []).find(k => k.id === id) || {}).label || id;
   const pill = (id, label, n) => `<button type="button" class="rs-pill rs-vcat" data-c="${id}" aria-pressed="${rs.vcat === id}"><span>${esc(label)}</span> <small>${n}</small></button>`;
-  c.innerHTML = '<p class="na">Véhicules lus dans le module « Ressources » de Google Agenda : ils seront réservés comme ressources invitées aux événements.</p>'
+  c.innerHTML = '<p class="na">Véhicules lus dans le module « Ressources » de Google Agenda : ils seront réservés comme ressources invitées aux événements. <button type="button" class="mini" data-rs-refresh>↻ Relire depuis Google</button> <small class="na">(la liste est aussi relue toutes les 2 minutes ; Google peut mettre quelques minutes à propager un changement)</small></p>'
     + (cats.length ? `<div class="bu-bar"><div class="bu-filter" role="group" aria-label="Filtrer par catégorie">${pill('all', 'Tous', v.items.length)}${cats.map(k => pill(k.id, k.label, v.items.filter(x => x.category === k.id).length)).join('')}</div></div>` : '')
     + (v.message ? `<p class="${v.items.length ? 'na' : 'neg'}">${esc(v.message)}</p>` : '')
     + (vitems.length ? table(['Véhicule', 'Catégorie', 'Type', 'Adresse de la ressource', 'Description'], vitems.map(x => `<tr><td class="prod">${esc(x.name)}</td><td>${esc(catLabel(x.category))}</td><td>${esc(x.type || '')}</td><td>${x.email ? esc(x.email) : '<small class="na">—</small>'}</td><td>${esc(x.description || '')}</td></tr>`), 'prodtable') : '');
@@ -129,6 +129,7 @@ document.addEventListener('change', async e => {
 document.addEventListener('click', async e => {
   const vc = e.target.closest && e.target.closest('.rs-vcat'); if (vc) { rs.vcat = vc.dataset.c; drawResources(); return; }
   const t = e.target.closest && e.target.closest('button'); if (!t) return;
+  if (t.hasAttribute('data-rs-refresh')) { t.disabled = true; t.textContent = 'Lecture…'; try { const j = await rsCall('/api/resources?refresh=1'); rs.vehicles = j.vehicles; } catch (err) { alert(err.message); } drawResources(); return; }
   if (t.classList.contains('rs-allpill') && document.getElementById('rs-staff')) {
     const p = rs.staff.find(x => x.id === t.dataset.pid); if (!p) return;
     rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({all_bus: !p.all_bus})}).then(j => { p.all_bus = j.all_bus; drawResources(); }).catch(err => alert(err.message));

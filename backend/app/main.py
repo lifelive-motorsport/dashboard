@@ -687,7 +687,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 
 
 @app.get("/api/resources")
-def get_resources(user: str = Depends(granted("planifier/res_staff", "planifier/res_ext", "planifier/res_veh"))):
+def get_resources(refresh: bool = False, user: str = Depends(granted("planifier/res_staff", "planifier/res_ext", "planifier/res_veh"))):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
         people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "bus": staff.resource_bus(p), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", ""), "work_days": p.get("work_days", [0, 1, 2, 3, 4])}
@@ -709,7 +709,7 @@ def get_resources(user: str = Depends(granted("planifier/res_staff", "planifier/
             log.exception("Job Position des prestataires illisible dans Odoo")
             roles_ok = False
     try:
-        veh = resources.vehicles()
+        veh = resources.vehicles(refresh)
     except Exception:
         log.exception("Véhicules de service (ressources Google) indisponibles")
         veh = {"configured": False, "source": "none", "items": [], "message": "Liste des véhicules momentanément indisponible."}
@@ -787,7 +787,9 @@ def _rd(fn, *a):
 
 
 @app.get("/api/rides/cars")
-def rd_cars(_user: str = Depends(granted("consigner/rides"))):
+def rd_cars(refresh: bool = False, _user: str = Depends(granted("consigner/rides"))):
+    if refresh:
+        resources.vehicles(True)                                     # relit les ressources Google (nom corrigé, voiture ajoutée…)
     return {"cars": rides.cars(), "catalog": rides.get_catalog(), "circuits": rides.list_circuits()}
 
 

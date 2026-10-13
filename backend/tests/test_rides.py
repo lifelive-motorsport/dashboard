@@ -132,3 +132,13 @@ def test_odoo_link_suggestions_and_uniqueness(api, monkeypatch):
     assert api.put(f"/api/rides/cars/{m3}", json={"odoo_id": 0}).json()["odoo"] is None
     assert api.put(f"/api/rides/cars/{p992}", json={"odoo_id": 2}).json()["odoo"]["id"] == 2   # libéré : peut être reprise
     assert rides.name_score("Bmw 635 csi Würth (GDM)", "BMW 635 CSi Würth") > 0.85 and rides.name_score("Lotus Elan 26R", "Ferrari 250 SWB") < 0.5
+
+
+def test_refresh_rereads_google_resources(api, monkeypatch):
+    calls = []
+    real = resources.vehicles
+    monkeypatch.setattr(resources, "vehicles", lambda force=False: (calls.append(force), real(force))[1])
+    api.get("/api/rides/cars")
+    api.get("/api/rides/cars?refresh=1")
+    api.get("/api/resources?refresh=1")
+    assert True in calls and calls.count(True) >= 2

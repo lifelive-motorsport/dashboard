@@ -1520,6 +1520,7 @@ Object.assign(EN_T, {
   "démontée le {}": "removed on {}",
   "{} km": "{} km",
   "Modifier la pièce": "Edit the part",
+  "Supprimer ce modèle": "Delete this template",
   "Affichage clair / sombre": "Light / dark display",
   "Passer en affichage clair": "Switch to light display",
   "Passer en affichage sombre": "Switch to dark display",

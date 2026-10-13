@@ -79,7 +79,7 @@ function sdExtras(p) {
   const rows = (p.extras || []).map((e, i) => `<tr><td>${sdIn('label', e.label, {type: 'text', pid: p.id, i, sub: 'extra', ph: 'Libellé'})}</td>
     <td><select class="sdin" data-f="kind" data-pid="${p.id}" data-i="${i}" data-sub="extra"${sd.canEdit ? '' : ' disabled'}>${Object.entries(SD_KINDS).map(([k, l]) => `<option value="${k}"${e.kind === k ? ' selected' : ''}>${l}</option>`).join('')}</select></td>
     <td>${sdIn('monthly', e.monthly, {pid: p.id, i, sub: 'extra'})}</td><td>${sdIn('note', e.note, {type: 'text', pid: p.id, i, sub: 'extra', ph: 'Note'})}</td>
-    <td>${sd.canEdit ? `<button type="button" class="mini" data-sd-del-extra data-pid="${p.id}" data-i="${i}">✕</button>` : ''}</td></tr>`);
+    <td>${sd.canEdit ? `<button type="button" class="mini" data-sd-del-extra data-pid="${p.id}" data-i="${i}" title="Supprimer" aria-label="Supprimer">✕</button>` : ''}</td></tr>`);
   return `<h4 class="sub">${p.kind === 'salarie' ? 'Coûts hors salaire' : 'Coûts hors facture'}</h4>`
     + (rows.length ? table(['Libellé', 'Type', '€ / mois', 'Note', ''], rows, 'prodtable sdtable') : '<p class="na">Aucun : véhicule, carte essence, abonnement téléphone ou autre avantage mis à disposition.</p>')
     + (sd.canEdit ? `<button type="button" data-sd-add-extra data-pid="${p.id}">+ Ajouter un coût</button>` : '');
@@ -90,7 +90,7 @@ function sdPayslips(p) {
   const rows = slips.map(s => { const i = p.payslips.indexOf(s);
     const file = s.file ? `<a href="#" data-sd-open data-pid="${p.id}" data-month="${s.month}">${esc(s.file.name)}</a>` : (sd.canEdit && sd.upload ? `<input type="file" accept="application/pdf" data-sd-upload data-pid="${p.id}" data-month="${s.month}">` : '–');
     return `<tr><td><b>${esc(s.month)}</b></td><td>${sdIn('brut', s.brut, {pid: p.id, i, sub: 'slip'})}</td><td>${sdIn('patronal', s.patronal, {pid: p.id, i, sub: 'slip', ph: 'estimé'})}</td><td>${sdIn('net', s.net, {pid: p.id, i, sub: 'slip'})}</td>
-      <td>${sdIn('other', s.other, {pid: p.id, i, sub: 'slip'})}</td><td>${file}</td><td>${sd.canEdit ? `<button type="button" class="mini" data-sd-del-slip data-pid="${p.id}" data-i="${i}">✕</button>` : ''}</td></tr>`; });
+      <td>${sdIn('other', s.other, {pid: p.id, i, sub: 'slip'})}</td><td>${file}</td><td>${sd.canEdit ? `<button type="button" class="mini" data-sd-del-slip data-pid="${p.id}" data-i="${i}" title="Supprimer" aria-label="Supprimer">✕</button>` : ''}</td></tr>`; });
   const next = slips.length ? (() => { const [y, m] = slips[slips.length - 1].month.split('-').map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`; })() : `${SD_YEAR}-01`;
   return '<h4 class="sub">Fiches de paie</h4>'
     + (rows.length ? table(['Mois', 'Brut', 'Cotisations patronales', 'Net', 'Autres coûts société', 'Fiche (PDF)', ''], rows, 'prodtable sdtable') : '<p class="na">Aucune fiche saisie.</p>')
@@ -123,7 +123,7 @@ function sdLeaveAlloc(p) {
   return `<h4 class="sub">Soldes de congés alloués (jours)</h4><div class="tblwrap"><table class="sdtable"><thead><tr><th>Année</th>${types.map(t => `<th>${esc(t.label)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div><p class="na">Les congés pris et en attente se déduisent automatiquement (Consigner › Congés).</p>`;
 }
 function sdIndependentCompanies(p) {
-  const chips = (p.partners || []).map(x => `<span class="tagchip">${esc(x.name)} ${sd.canEdit ? `<button type="button" class="mini" data-sd-del-partner data-pid="${p.id}" data-id="${x.id}">✕</button>` : ''}</span>`).join(' ');
+  const chips = (p.partners || []).map(x => `<span class="tagchip">${esc(x.name)} ${sd.canEdit ? `<button type="button" class="mini" data-sd-del-partner data-pid="${p.id}" data-id="${x.id}" title="Supprimer" aria-label="Supprimer">✕</button>` : ''}</span>`).join(' ');
   const res = sd.results ? (sd.results.length ? sd.results.map(r => `<div class="sdres"><span>${esc(r.name)} <small class="na">${esc([r.vat, r.city].filter(Boolean).join(' · '))}</small></span> <button type="button" data-sd-add-partner data-pid="${p.id}" data-id="${r.id}" data-name="${esc(r.name)}">Ajouter</button></div>`).join('') : '<small class="na">Aucune société trouvée.</small>') : '';
   const inv = sd.inv[p.id];
   const list = !(p.partners || []).length ? '<p class="na">Rattachez une ou plusieurs sociétés Odoo pour faire remonter les factures de cet indépendant.</p>'

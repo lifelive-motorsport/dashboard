@@ -467,3 +467,23 @@ def test_alerts_status_paused_active_and_unreadable(monkeypatch):
     monkeypatch.setattr(scheduler, "_list_jobs", boom)
     r = scheduler.alerts_status(force=True)
     assert r["state"] == "unknown" and "PERMISSION_DENIED" in r["error"]
+
+
+def test_wall_snapshot_has_no_money_and_needs_the_page(api, monkeypatch):
+    from app import presence
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {})
+    jid = mkjob(api, title="Révision Porsche", vehicle={"id": "9", "name": "Porsche 911"}).json()["id"]
+    as_(api, MEC)
+    api.post("/api/timesheets/entries", json=entry(jid))
+    as_(api, CHEF)
+    monkeypatch.setattr(users, "pages_of", lambda e: {"consigner/wall"} if e == CHEF else None)
+    r = api.get("/api/wall")
+    assert r.status_code == 200
+    s = r.json()
+    j = next(x for x in s["jobs"] if x["title"] == "Révision Porsche")
+    assert j["vehicle"] == "Porsche 911" and j["minutes_week"] == 90 and j["today"] == ["Nolan Collinet"]
+    assert s["indicators"]["jobs_open"] >= 1 and s["indicators"]["hours_week"] >= 1.5
+    assert "€" not in str(s) and "amount" not in str(s)
+    as_(api, NOBODY)
+    monkeypatch.setattr(users, "pages_of", lambda e: {"planifier/planning"})
+    assert api.get("/api/wall").status_code == 403

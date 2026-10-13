@@ -11,7 +11,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
 let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
 const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!GRANT_ONLY.has(k) || superUser || (pagesList && pagesList.has(k))) && (!pagesList || pagesList.has(k) || (superUser && !pagesList)));
-const homePage = () => 'home/welcome';
+const homePage = () => !superUser && pagesList && pagesList.size === 1 && pagesList.has('consigner/wall') ? 'consigner/wall' : 'home/welcome';      // compte « Kiosque » : il ouvre directement l'écran atelier
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
 const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };
 // Bandeau « Voir comme » : toujours visible tant qu'un Super User agit avec les droits d'un autre utilisateur
@@ -33,10 +33,10 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['rides','Roulages'], ['consumables','Consommables']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['wall','Écran atelier'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/wall','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -504,6 +504,7 @@ const PAGES = {
   'consigner/timesheets': () => tsBlocks('mine'),
   'consigner/team': () => [BU_BAR()].concat(tsBlocks('team')),
   'consigner/leaves': () => leavesBlocks(),
+  'consigner/wall': () => wallBlocks(),
   'planifier/res_staff': () => resourcesBlocks('staff'),
   'planifier/res_ext': () => resourcesBlocks('ext'),
   'planifier/res_veh': () => resourcesBlocks('veh'),
@@ -643,7 +644,8 @@ async function fillBlock(b, force) {
 }
 
 function render(force) {
-  let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
+  let key = route(); if (!item(key) || !allowedPage(key) || (key === 'home/welcome' && homePage() !== key)) key = homePage();
+  if (key !== 'consigner/wall' && typeof wlStop === 'function') wlStop();
   const {grp: g, it} = item(key);
   renderNav(key); renderTabbar(key); buLogo(pageBu(key));
   $('page-title').innerHTML = pageTitle(key);
@@ -673,6 +675,7 @@ function render(force) {
   if (key === 'others/users' && superUser) { drawViewAs(); loadViewAs(); }
   if (superUser && (key === 'home/welcome' || key === 'consigner/team')) alertsBanner();
   if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
+  if (key === 'consigner/wall') wlStart();
   if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, feedback, projection, users
+from . import access, feedback, projection, users, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -770,6 +770,16 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
 @app.get("/api/resources/directory-users")
 def resource_directory_users(_user: str = Depends(super_user)):
     return resources.directory_users()
+
+
+@app.get("/api/wall")
+def wall_snapshot(_user: str = Depends(granted("consigner/wall"))):
+    """Écran mural de l'atelier : jobs ouverts, présence du jour, indicateurs de la semaine (aucun montant)."""
+    try:
+        return wall.snapshot()
+    except Exception:
+        log.exception("Écran atelier indisponible")
+        raise HTTPException(503, "Données momentanément indisponibles.")
 
 
 @app.get("/api/planning")

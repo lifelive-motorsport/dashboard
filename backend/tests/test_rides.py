@@ -272,29 +272,28 @@ def test_first_level_is_a_locked_list_of_ensembles(api):
     assert api.post("/api/rides/templates", json={**bad, "name": "y"}).status_code == 422
 
 
-def test_new_maintenance_types_time_events_condition_and_reference(api):
+def test_new_maintenance_types_events_condition_and_reference(api):
     from datetime import date
     c = car(api)["key"]
     t = {"name": "Rally2 test", "description": "", "nodes": [
         {"id": "g", "name": "Carburant", "group": True},
-        {"id": "tank", "parent_id": "g", "name": "Fuel Tank", "reference": "DYXRQ186021", "types": ["replace", "inspection"], "replace": {"limit_months": 60, "note": "ou si abîmé"}, "inspection": {"limit_events": 1}},
+        {"id": "tank", "parent_id": "g", "name": "Fuel Tank", "reference": "DYXRQ186021", "types": ["replace", "inspection"], "replace": {"limit_km": 500, "note": "ou si abîmé"}, "inspection": {"limit_events": 1}},
         {"id": "gb", "parent_id": "g", "name": "Gearbox", "types": ["revision", "revision2", "inspection"], "revision": {"limit_km": 500}, "revision2": {"limit_km": 3000}, "inspection": {"limit_km": 650}},
         {"id": "pl", "parent_id": "g", "name": "Clutch plates", "types": ["replace"], "replace": {"note": "sous l'épaisseur minimale"}}]}
     tid = api.post("/api/rides/templates", json=t).json()["id"]
     api.post(f"/api/rides/cars/{c}/template", json={"template_id": tid})
     d = api.get(f"/api/rides/cars/{c}").json()
     kids = {n["name"]: n for n in d["tree"][0]["children"]}
-    assert kids["Fuel Tank"]["reference"] == "DYXRQ186021" and kids["Fuel Tank"]["limit_months"] == 60
+    assert kids["Fuel Tank"]["reference"] == "DYXRQ186021" and kids["Fuel Tank"]["limit_km"] == 500
     assert {m["type"] for m in kids["Gearbox"]["meters"]} == {"revision", "revision2", "inspection"}
     cp = kids["Clutch plates"]["meters"][0]
     assert cp["type"] == "replace" and cp["note"] == "sous l'épaisseur minimale" and cp["state"] == "none"                 # « sur condition » : visible, sans alerte
-    # temps : réservoir monté il y a 5 ans -> dépassé ; sans date de montage, pas de compteur de temps
-    api.put(f"/api/rides/parts/{kids['Fuel Tank']['id']}", json={"name": "Fuel Tank", "types": ["replace", "inspection"], "limit_months": 60, "maint": {"inspection": {"limit_events": 1}}, "mounted_from": "2021-01-01"})
+    api.put(f"/api/rides/parts/{kids['Fuel Tank']['id']}", json={"name": "Fuel Tank", "types": ["replace", "inspection"], "limit_km": 500, "maint": {"inspection": {"limit_events": 1}}, "mounted_from": "2021-01-01"})
     api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "A", "km": 700})
     d = api.get(f"/api/rides/cars/{c}").json()
     kids = {n["name"]: n for n in d["tree"][0]["children"]}
     m = {x["type"]: x for x in kids["Fuel Tank"]["meters"]}
-    assert m["replace"]["state"] == "over" and m["replace"]["months"] > 60
+    assert m["replace"]["state"] == "over"
     assert m["inspection"]["events"] == 1 and m["inspection"]["state"] == "warn"                                           # contrôle dû : avertissement, jamais « dépassé »
     gm = {x["type"]: x for x in kids["Gearbox"]["meters"]}
     assert gm["revision"]["state"] == "over" and gm["revision2"]["state"] == "ok" and gm["inspection"]["state"] == "over".replace("over", "warn")

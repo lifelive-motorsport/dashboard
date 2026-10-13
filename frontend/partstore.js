@@ -54,7 +54,7 @@ function psDraw() {
     <div class="sdbar"><button type="button" class="mini" data-ps="addroot">＋ Ensemble</button></div>
     <div class="sdbar"><button type="button" class="primary" data-ps="save" ${ps.saving || !t.name.trim() ? 'disabled' : ''}>${ps.saving ? 'Enregistrement…' : 'Enregistrer le modèle'}</button><button type="button" data-ps="back">Fermer</button>${ps.dirty ? '<small class="na">Modifications non enregistrées</small>' : ''}</div>`;
 }
-const psLimBody = L => ({limit_km: psNum(L.limit_km), limit_hours: psNum(L.limit_hours), limit_months: psNum(L.limit_months), limit_events: psNum(L.limit_events), warn_pct: psNum(L.warn_pct) || 75, note: L.note || ''});
+const psLimBody = L => ({limit_km: psNum(L.limit_km), limit_hours: psNum(L.limit_hours), limit_events: psNum(L.limit_events), warn_pct: psNum(L.warn_pct) || 75, note: L.note || ''});
 const psBody = t => ({name: t.name.trim(), description: t.description || '', nodes: t.nodes.filter(n => n.name.trim()).map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name.trim(), reference: n.reference || '', group: !!n.group, types: n.group ? [] : n.types,
   ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLimBody(n[k])]))}))});
 const psFromApi = t => ({id: t.id, name: t.name, description: t.description || '', nodes: t.nodes.map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name, reference: n.reference || '', group: !!n.group, types: n.types || [], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim(n[k])]))}))});

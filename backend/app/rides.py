@@ -96,7 +96,6 @@ def canon_ensemble(name: str) -> str | None:
 class MaintLimit(BaseModel):
     limit_km: float | None = Field(default=None, gt=0, le=1e7)
     limit_hours: float | None = Field(default=None, gt=0, le=1e6)
-    limit_months: float | None = Field(default=None, gt=0, le=1200)   # limite en temps (ex. réservoir : 60 mois)
     limit_events: int | None = Field(default=None, gt=0, le=1000)     # tous les N roulages (ex. contrôle après chaque rallye : 1)
     warn_pct: float = Field(default=75.0, gt=0, le=100)
     note: str = Field(default="", max_length=160)                     # critère « sur condition » (ex. « quand abîmé ») ou précision
@@ -112,7 +111,6 @@ class PartIn(BaseModel):
     group: bool = False                                              # simple regroupement (ex. Motorisation) : pas de compteur propre, l'état est celui du pire de ses pièces
     limit_km: float | None = Field(default=None, gt=0, le=1e7)
     limit_hours: float | None = Field(default=None, gt=0, le=1e6)
-    limit_months: float | None = Field(default=None, gt=0, le=1200)
     limit_note: str = Field(default="", max_length=160)
     reference: str = Field(default="", max_length=60)                # référence constructeur
     warn_pct: float = Field(default=75.0, gt=0, le=100)
@@ -137,7 +135,7 @@ class PartIn(BaseModel):
     @model_validator(mode="after")
     def _chk(self):
         if self.group:
-            self.limit_km = self.limit_hours = self.limit_months = None
+            self.limit_km = self.limit_hours = None
             self.km_start = self.hours_start = 0.0
             self.types, self.maint = [], {}
         return self
@@ -271,17 +269,15 @@ def _runs_of(vehicle: str) -> list[dict]:
 
 def types_of(p: dict) -> list[str]:
     """Maintenances suivies d'une pièce : le choix explicite ; à défaut (anciennes fiches) le remplacement si une limite est définie."""
-    return list(p.get("types") or (["replace"] if p.get("limit_km") or p.get("limit_hours") or p.get("limit_months") else []))
+    return list(p.get("types") or (["replace"] if p.get("limit_km") or p.get("limit_hours") else []))
 
 
-def _meter(km: float, hours: float, months: float | None, events: int, lim: dict) -> tuple[float | None, str]:
+def _meter(km: float, hours: float, events: int, lim: dict) -> tuple[float | None, str]:
     ratios = []
     if lim.get("limit_km"):
         ratios.append(km / lim["limit_km"])
     if lim.get("limit_hours"):
         ratios.append(hours / lim["limit_hours"])
-    if lim.get("limit_months") and months is not None:
-        ratios.append(months / lim["limit_months"])
     if lim.get("limit_events"):
         ratios.append(events / lim["limit_events"])
     ratio = max(ratios) if ratios else None
@@ -289,19 +285,10 @@ def _meter(km: float, hours: float, months: float | None, events: int, lim: dict
     return ratio, ("none" if ratio is None else "over" if ratio >= 1 else "warn" if ratio >= warn else "ok")
 
 
-def _months_between(since: str | None, today: date) -> float | None:
-    if not since:
-        return None
-    return max(0.0, (today - date.fromisoformat(since)).days / 30.4375)
-
-
-def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None, today: date | None = None) -> dict:
+def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None) -> dict:
     """Compteurs d'une pièce : total depuis le montage + un compteur par maintenance suivie (remplacement : depuis le montage ; révisions, vidange, contrôle : depuis la dernière
-    maintenance enregistrée, à défaut depuis le montage). Chaque compteur suit les km, les heures, le temps (mois) et / ou le nombre de roulages selon les limites définies.
+    maintenance enregistrée, à défaut depuis le montage). Chaque compteur suit les km, les heures et / ou le nombre de roulages selon les limites définies.
     Les runs du jour d'une maintenance comptent après elle. Un contrôle en retard reste un avertissement (jamais « dépassé »)."""
-    if today is None:
-        from . import presence
-        today = presence.local_now().date()
     a, b = p.get("mounted_from") or "", p.get("removed_at") or "9999"
     mine = [r for r in runs if a <= r["date"] < b]
     km = p.get("km_start", 0.0) + sum(r.get("km") or 0.0 for r in mine)
@@ -309,22 +296,21 @@ def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None, tod
     meters = []
     for t in [x for x in MAINT_TYPES if x in types_of(p)]:
         if t == "replace":
-            lim = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "limit_months": p.get("limit_months"), "warn_pct": p.get("warn_pct"), "note": p.get("limit_note", "")}
-            mk, mh, ev, last, ref = km, hours, len(mine), None, a or None
+            lim = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "warn_pct": p.get("warn_pct"), "note": p.get("limit_note", "")}
+            mk, mh, ev, last = km, hours, len(mine), None
         else:
             lim = (p.get("maint") or {}).get(t) or {}
             done = sorted(l["date"] for l in (logs or []) if l["part_id"] == p["id"] and l["type"] == t)
             last = done[-1] if done else None
             since = max(last or "", a)
             seg = [r for r in runs if since <= r["date"] < b]
-            mk, mh, ev, ref = sum(r.get("km") or 0.0 for r in seg), sum(r.get("hours") or 0.0 for r in seg), len(seg), (since or None)
-        mo = _months_between(ref, today) if not p.get("removed_at") else None
-        ratio, state = _meter(mk, mh, mo, ev, lim)
+            mk, mh, ev = sum(r.get("km") or 0.0 for r in seg), sum(r.get("hours") or 0.0 for r in seg), len(seg)
+        ratio, state = _meter(mk, mh, ev, lim)
         if t == "inspection" and state == "over":
             state = "warn"
-        if ratio is not None or t != "replace" or lim.get("note") or lim.get("limit_months"):         # une limite en temps sans date de montage reste visible (compteur à compléter)
-            meters.append({"type": t, "label": MAINT_LABEL[t], "km": round(mk, 1), "hours": round(mh, 2), "months": None if mo is None else round(mo, 1), "events": ev,
-                           "limit_km": lim.get("limit_km"), "limit_hours": lim.get("limit_hours"), "limit_months": lim.get("limit_months"), "limit_events": lim.get("limit_events"),
+        if ratio is not None or t != "replace" or lim.get("note"):
+            meters.append({"type": t, "label": MAINT_LABEL[t], "km": round(mk, 1), "hours": round(mh, 2), "events": ev,
+                           "limit_km": lim.get("limit_km"), "limit_hours": lim.get("limit_hours"), "limit_events": lim.get("limit_events"),
                            "note": lim.get("note") or "", "warn_pct": lim.get("warn_pct") or 75.0, "ratio": None if ratio is None else round(ratio, 4), "state": state, "last": last})
     ratios = [m["ratio"] for m in meters if m["ratio"] is not None]
     state = max((m["state"] for m in meters), key=lambda s: RANK[s], default="none")
@@ -369,8 +355,7 @@ def _alerts_rec(nodes: list[dict], path: str, out: list[dict], checks: list[str]
                     if m["type"] == "inspection":
                         checks.append(here)                                # les contrôles se regroupent : une seule alerte par voiture
                         continue
-                    out.append({"id": n["id"], "path": here, "type": m["type"], "label": m["label"], "state": m["state"], "ratio": m["ratio"], "km": m["km"], "hours": m["hours"], "limit_km": m["limit_km"], "limit_hours": m["limit_hours"],
-                                "months": m.get("months"), "limit_months": m.get("limit_months")})
+                    out.append({"id": n["id"], "path": here, "type": m["type"], "label": m["label"], "state": m["state"], "ratio": m["ratio"], "km": m["km"], "hours": m["hours"], "limit_km": m["limit_km"], "limit_hours": m["limit_hours"]})
         _alerts_rec(n["children"], here, out, checks)
 
 
@@ -722,11 +707,11 @@ def _node_part(n: dict, vehicle: str, parent: str | None, user: str) -> dict:
     types = [t for t in MAINT_TYPES if t in n.get("types", [])]
     rep = n.get("replace") or {}
     doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "reference": n.get("reference", ""), "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
-           "limit_km": None, "limit_hours": None, "limit_months": None, "limit_note": "", "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
+           "limit_km": None, "limit_hours": None, "limit_note": "", "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
     if not n.get("group"):
         if "replace" in types:
-            doc.update(limit_km=rep.get("limit_km"), limit_hours=rep.get("limit_hours"), limit_months=rep.get("limit_months"), limit_note=rep.get("note") or "", warn_pct=rep.get("warn_pct") or 75.0)
-        doc["maint"] = {t: {k: (n.get(t) or {}).get(k) for k in ("limit_km", "limit_hours", "limit_months", "limit_events", "warn_pct", "note")} for t in LOGGED if t in types}
+            doc.update(limit_km=rep.get("limit_km"), limit_hours=rep.get("limit_hours"), limit_note=rep.get("note") or "", warn_pct=rep.get("warn_pct") or 75.0)
+        doc["maint"] = {t: {k: (n.get(t) or {}).get(k) for k in ("limit_km", "limit_hours", "limit_events", "warn_pct", "note")} for t in LOGGED if t in types}
     return doc
 
 

@@ -422,3 +422,4 @@ body.wall-full header,body.wall-full #nav,body.wall-full #tabbar,body.wall-full 
 .wl-top{position:relative;z-index:5}
 body.wall-full .wl-top button{min-height:46px;padding-left:18px;padding-right:18px;font-size:15px}
 .fb-box textarea{display:block;margin:12px 0 0}.fb-files{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 4px}.fb-add{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font-size:14px;cursor:pointer;line-height:1.2}.fb-add:hover{border-color:var(--mut)}.fb-box .sdbar{margin:14px 0 0}.fb-box .na{margin:0}.fb-box .bu-filter{margin-bottom:10px}.fb-box p.neg{margin:8px 0 0}
+.rs-fn{font-size:13px;color:var(--mut);max-width:130px;text-align:left!important}.rs-pill.rs-allpill{min-height:30px;padding:0 10px;font-size:12px}

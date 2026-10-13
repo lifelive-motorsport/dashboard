@@ -304,6 +304,7 @@ Object.assign(EN, {
   "Personne.": "Nobody.",
   "mise à jour automatique toutes les 60 s": "updates automatically every 60 s",
   "Logbook · Google Agenda": "Logbook · Google Calendar",
+  "toutes": "all",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

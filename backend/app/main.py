@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from . import speech, leaves
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
 from . import access, projection, users
-from .auth import COOKIE, require_user, role, set_session_cookie, verify_google
+from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
 
@@ -102,8 +102,48 @@ def open_session(request: Request, response: Response, authorization: str | None
 
 
 @app.get("/api/session")
-def current_session(user: str = Depends(require_user)):
-    return {"email": user, "session": True, "role": role(user), "super": users.is_super(user), **users.identity(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
+def current_session(request: Request, user: str = Depends(require_user)):
+    return {"viewing_as": getattr(request.state, "viewing_as", None), "email": user, "session": True, "role": role(user), "super": users.is_super(user), **users.identity(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
+
+
+class ViewAsBody(BaseModel):
+    email: str = Field(min_length=3, max_length=120)
+    write: bool = False
+
+
+@app.get("/api/session/view-as/candidates")
+def viewas_candidates(real: str = Depends(real_user)):
+    if not users.is_super(real):
+        raise HTTPException(403, "Réservé au Super User")
+    out: dict[str, dict] = {}
+    for p in staff.store().get()["data"]["people"]:
+        if p.get("google_email") and p.get("active", True):
+            out[p["google_email"].lower()] = {"email": p["google_email"].lower(), "name": p["name"], "info": p.get("function", "") or ""}
+    for e, r in users.registry().items():
+        out.setdefault(e.lower(), {"email": e.lower(), "name": e, "info": r})
+    return {"candidates": sorted(out.values(), key=lambda c: c["name"].lower())}
+
+
+@app.post("/api/session/view-as")
+def viewas_start(body: ViewAsBody, request: Request, response: Response, real: str = Depends(real_user)):
+    """Super User : ouvre Logbook avec les droits d'un autre utilisateur pendant deux heures (lecture seule, sauf si les modifications sont autorisées ; elles sont alors journalisées)."""
+    if not users.is_super(real):
+        raise HTTPException(403, "Réservé au Super User")
+    target = body.email.strip().lower()
+    if not is_allowed(target):
+        raise HTTPException(422, "Adresse inconnue ou non autorisée")
+    if target == real.lower():
+        raise HTTPException(422, "Vous êtes déjà cet utilisateur")
+    set_viewas_cookie(response, request, real, target, body.write)
+    if body.write:
+        audit_viewas(real, target, "START", "view-as with write")
+    return {"viewing_as": {"real": real, "as": target, "write": body.write}}
+
+
+@app.delete("/api/session/view-as")
+def viewas_stop(response: Response):
+    response.delete_cookie(VIEWAS, path="/")
+    return {"viewing_as": None}
 
 
 @app.delete("/api/session")

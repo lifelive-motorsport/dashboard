@@ -13,7 +13,14 @@ let role = 'full', superUser = false, pagesList = null;       // pagesList : pag
 const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!pagesList || pagesList.has(k)));
 const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
-const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; };
+const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; viewAs(sj.viewing_as); };
+// Bandeau « Voir comme » : toujours visible tant qu'un Super User agit avec les droits d'un autre utilisateur
+function viewAs(v) {
+  let b = document.getElementById('viewas'); document.body.classList.toggle('viewing-as', !!v);
+  if (!v) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement('div'); b.id = 'viewas'; document.body.prepend(b); }
+  b.innerHTML = `👁 <span>${esc(t('Vous voyez Logbook comme'))}</span> <b>${esc(me && me.name ? me.name : v.as)}</b> <small>${esc(v.as)}</small> · <span>${esc(t(v.write ? 'modifications actives, journalisées' : 'lecture seule'))}</span> <button type="button" id="viewas-quit">${esc(t('Quitter'))}</button>`;
+}
 
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
@@ -660,6 +667,7 @@ function render(force) {
   if (key === 'others/users') { drawUsers(); loadUsers().then(drawUsers); }
   if (key.startsWith('planifier/res_')) { drawResources(); loadResources().then(drawResources); }
   if (key === 'planifier/planning') { plDraw(); plLoad(); }
+  if (key === 'others/users' && superUser) { drawViewAs(); loadViewAs(); }
   if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
   if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }

@@ -7,7 +7,7 @@ const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Adminis
 const usPages = () => CHAPTERS.flatMap(c => c.modules.map(m => [m.id, c.label + ' › ' + m.label, modulePages(m).filter(p => !SUPER_ONLY.has(p[0])).map(p => [p[0], m.groups ? p[2] + ' › ' + p[1] : p[1]])])).filter(([, , it]) => it.length);
 const usAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 
-function usersBlocks() { return [{static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na">Chargement…</p></div></section>'}]; }
+function usersBlocks() { return [{static: '<section class="block" data-bid="viewas"><div class="block-head"><h3>Se connecter en tant que…</h3></div><div class="block-body" id="viewas-view"><p class="na">Chargement…</p></div></section>'}, {static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na">Chargement…</p></div></section>'}]; }
 
 async function loadUsers() {
   try {
@@ -85,4 +85,31 @@ document.addEventListener('click', e => {
     if (!nick) { us.msg = {ok: false, t: 'Indiquez le surnom de l’utilisateur (utilisé pour l’accueillir)'}; drawUsers(); return; }
     us.users.push({email: m, role: document.getElementById('us-newrole').value, note: nm0, nickname: nick}); us.dirty = true; us.msg = null; us.draft = {email: '', name: '', nick: '', role: us.draft.role}; drawUsers(); return; }
   if (t.id === 'us-save') usSave();
+});
+
+
+// « Se connecter en tant que » : le Super User voit Logbook avec les droits d'un autre utilisateur (2 h) ; lecture seule, sauf si les modifications sont autorisées (elles sont alors journalisées)
+let va = {cands: null, err: null, email: '', write: false};
+async function loadViewAs() {
+  try { va.cands = (await rsCall('/api/session/view-as/candidates')).candidates; va.err = null; } catch (e) { va.err = e.message; }
+  drawViewAs();
+}
+function drawViewAs() {
+  const el = document.getElementById('viewas-view'); if (!el) return;
+  if (va.err) { el.innerHTML = `<p class="neg">${esc(va.err)}</p>`; return; }
+  if (!va.cands) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  el.innerHTML = `<p class="na">Ouvrez Logbook comme le ferait la personne choisie : ses pages, ses droits et ses données. Pour tester une demande de congé ou un pointage de bout en bout, cochez « Autoriser les modifications » : vos actions seront alors faites <b>en son nom</b> (e-mails compris) et enregistrées dans un journal. La session dure 2 heures.</p>
+    <div class="sdgrid"><label class="sdfield"><span>Utilisateur</span><select class="sdin" id="va-user"><option value="">— Choisir —</option>${va.cands.map(c => `<option value="${esc(c.email)}"${va.email === c.email ? ' selected' : ''}>${esc(c.name)}${c.info ? ' · ' + esc(c.info) : ''}</option>`).join('')}</select></label>
+    <label class="sdfield"><span>Modifications</span><label class="chk"><input type="checkbox" id="va-write"${va.write ? ' checked' : ''}> <span>Autoriser les modifications (en son nom)</span></label></label></div>
+    <div class="sdbar"><button type="button" class="primary" id="va-go">Voir comme</button></div>`;
+  if (typeof i18nNode === 'function' && LANG === 'en') i18nNode(el);
+}
+document.addEventListener('change', e => { if (e.target.id === 'va-user') va.email = e.target.value; if (e.target.id === 'va-write') va.write = e.target.checked; });
+document.addEventListener('click', async e => {
+  if (e.target.id === 'va-go') {
+    if (!va.email) { alert(t('Choisissez un utilisateur.')); return; }
+    if (va.write && !confirm(t('Vos actions seront faites au nom de cet utilisateur, e-mails compris, et journalisées. Continuer ?'))) return;
+    try { await rsCall('/api/session/view-as', {method: 'POST', body: JSON.stringify({email: va.email, write: va.write})}); location.hash = '#/home/welcome'; location.reload(); } catch (err) { alert(err.message); }
+  }
+  if (e.target.id === 'viewas-quit') { try { await fetch('/api/session/view-as', {method: 'DELETE'}); } catch {} location.reload(); }
 });

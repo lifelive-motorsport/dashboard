@@ -92,10 +92,75 @@ def _identify(request: Request, response: Response, authorization: str | None) -
     return verify_google(authorization)
 
 
+# ---- « Voir comme » : le Super User ouvre Logbook avec les droits d'un autre utilisateur (essais, assistance) -------------------------------------
+VIEWAS = "lm_viewas"
+VIEWAS_HOURS = 2
+
+
+def make_viewas(real: str, target: str, write: bool, now: float | None = None) -> str:
+    now = int(now or time.time())
+    body = _b64(json.dumps({"r": real, "a": target, "w": bool(write), "exp": now + VIEWAS_HOURS * 3600}, separators=(",", ":")).encode())
+    return f"{body}.{_mac(body)}"
+
+
+def read_viewas(value: str, real: str, now: float | None = None) -> dict | None:
+    """{r, a, w} si le cookie est authentique, non expiré, lié à cette session et que son auteur est (toujours) Super User."""
+    if not value or "." not in value or not settings.SESSION_SECRET:
+        return None
+    body, mac = value.rsplit(".", 1)
+    if not hmac.compare_digest(mac, _mac(body)):
+        return None
+    try:
+        p = json.loads(_unb64(body))
+    except ValueError:
+        return None
+    if p.get("exp", 0) < (now or time.time()) or p.get("r") != real or not users.is_super(real) or not is_allowed(p.get("a", "")):
+        return None
+    return p
+
+
+def set_viewas_cookie(response: Response, request: Request, real: str, target: str, write: bool) -> None:
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(VIEWAS, make_viewas(real, target, write), max_age=VIEWAS_HOURS * 3600, httponly=True, secure=secure, samesite="strict", path="/")
+
+
+def real_user(request: Request, response: Response, authorization: str | None = Header(default=None)) -> str:
+    """Utilisateur réellement connecté, sans « voir comme » (pour gérer le mode lui-même)."""
+    return _identify(request, response, authorization)
+
+
+_audit = None
+
+
+def audit_viewas(real: str, target: str, method: str, path: str) -> None:
+    """Journal des actions faites en « voir comme » (écritures seulement)."""
+    global _audit
+    import logging
+    import uuid
+    from datetime import datetime, timezone
+    logging.getLogger("logbook").warning("VOIR COMME : %s agit en tant que %s — %s %s", real, target, method, path)
+    try:
+        from .timesheets import Coll
+        _audit = _audit or Coll("audit_viewas")
+        i = uuid.uuid4().hex[:12]
+        _audit.put(i, {"id": i, "at": datetime.now(timezone.utc).isoformat(), "real": real, "as": target, "method": method, "path": path})
+    except Exception:
+        logging.getLogger("logbook").exception("Journal « voir comme » indisponible")
+
+
 def require_user(request: Request, response: Response, authorization: str | None = Header(default=None)) -> str:
     """Utilisateur authentifié : cookie de session du dashboard, sinon jeton Google (Authorization: Bearer).
-    Une catégorie d'utilisateurs (pages cochées par le Super User) n'ouvre que les routes de ses pages (voir access.py)."""
+    Une catégorie d'utilisateurs (pages cochées par le Super User) n'ouvre que les routes de ses pages (voir access.py).
+    Si un Super User a activé « Voir comme », c'est l'utilisateur choisi qui est renvoyé (lecture seule, sauf modifications autorisées et journalisées)."""
     user = _identify(request, response, authorization)
+    va = read_viewas(request.cookies.get(VIEWAS, ""), user) if users.is_super(user) else None
+    if va:
+        request.state.viewing_as = {"real": user, "as": va["a"], "write": bool(va["w"])}
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            if not va["w"]:
+                raise HTTPException(403, "Mode « Voir comme » en lecture seule : quittez-le ou autorisez les modifications pour agir en tant que cet utilisateur.")
+            audit_viewas(user, va["a"], request.method, request.url.path)
+        user = va["a"]
     pages = users.pages_of(user)
     if pages is not None and not access.path_ok(request.url.path, pages):
         raise HTTPException(403, "Cette page n'est pas incluse dans votre catégorie d'utilisateur")

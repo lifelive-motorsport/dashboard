@@ -128,18 +128,19 @@ document.addEventListener('change', async e => {
 
 document.addEventListener('click', async e => {
   const vc = e.target.closest && e.target.closest('.rs-vcat'); if (vc) { rs.vcat = vc.dataset.c; drawResources(); return; }
-  const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('rs-ext')) return;
-  if (t.classList.contains('rs-allpill')) {
+  const t = e.target.closest && e.target.closest('button'); if (!t) return;
+  if (t.classList.contains('rs-allpill') && document.getElementById('rs-staff')) {
     const p = rs.staff.find(x => x.id === t.dataset.pid); if (!p) return;
     rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({all_bus: !p.all_bus})}).then(j => { p.all_bus = j.all_bus; drawResources(); }).catch(err => alert(err.message));
     return;
   }
-  if (t.classList.contains('rs-sbu')) {
+  if (t.classList.contains('rs-sbu') && document.getElementById('rs-staff')) {
     const p = rs.staff.find(x => x.id === t.dataset.pid), b = t.dataset.b; if (!p) return;
     const next = (p.bus || []).includes(b) ? p.bus.filter(y => y !== b) : (p.bus || []).concat([b]);
     rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({resource_bus: next})}).then(j => { p.bus = j.bus; drawResources(); }).catch(err => alert(err.message));
     return;
   }
+  if (!document.getElementById('rs-ext')) return;
   if (t.classList.contains('rs-xbu')) { const x = rs.externals[+t.dataset.i], b = t.dataset.b; x.bus = (x.bus || []).includes(b) ? x.bus.filter(y => y !== b) : (x.bus || []).concat([b]); rs.dirty = true; rs.msg = null; drawResources(); return; }
   if (t.classList.contains('rs-del')) { rs.externals.splice(+t.dataset.i, 1); rs.dirty = true; rs.msg = null; drawResources(); }
   else if (t.classList.contains('rs-add')) {

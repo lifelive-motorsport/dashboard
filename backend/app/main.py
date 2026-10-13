@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, feedback, projection, users, wall
+from . import access, feedback, projection, rides, users, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -773,6 +773,90 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
 @app.get("/api/resources/directory-users")
 def resource_directory_users(_user: str = Depends(super_user)):
     return resources.directory_users()
+
+
+# ---- Roulages (kilométrage des voitures de course et de leurs pièces) ---------------------------------------------------------------------
+
+def _rd(fn, *a):
+    try:
+        return fn(*a)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/api/rides/cars")
+def rd_cars(_user: str = Depends(granted("consigner/rides"))):
+    return {"cars": rides.cars(), "catalog": rides.get_catalog(), "circuits": rides.list_circuits()}
+
+
+@app.get("/api/rides/cars/{key}")
+def rd_car(key: str, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.car_detail, key)
+
+
+@app.get("/api/rides/cars/{key}/photo")
+def rd_photo(key: str, _user: str = Depends(granted("consigner/rides"))):
+    got = rides.get_photo(key)
+    if not got:
+        raise HTTPException(404, "Pas de photo")
+    return RawResponse(got[0], media_type=got[1], headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.post("/api/rides/cars/{key}/photo")
+async def rd_set_photo(key: str, request: Request, _user: str = Depends(granted("consigner/rides"))):
+    if not timesheets.blobs().enabled:
+        raise HTTPException(503, "Stockage des photos non configuré (variable TIMESHEETS_BUCKET)")
+    data = await request.body()
+    return _rd(rides.set_photo, key, data, request.headers.get("content-type") or "")
+
+
+@app.post("/api/rides/cars/{key}/parts")
+def rd_add_part(key: str, body: rides.PartIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.add_part, key, body, user)
+
+
+@app.put("/api/rides/parts/{pid}")
+def rd_update_part(pid: str, body: rides.PartIn, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.update_part, pid, body)
+
+
+@app.delete("/api/rides/parts/{pid}")
+def rd_delete_part(pid: str, _user: str = Depends(granted("consigner/rides"))):
+    _rd(rides.delete_part, pid)
+    return {"ok": True}
+
+
+@app.post("/api/rides/parts/{pid}/replace")
+def rd_replace_part(pid: str, body: rides.ReplaceIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.replace_part, pid, body, user)
+
+
+@app.post("/api/rides/cars/{key}/runs")
+def rd_add_run(key: str, body: rides.RunIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.add_run, key, body, user)
+
+
+@app.put("/api/rides/runs/{rid}")
+def rd_update_run(rid: str, body: rides.RunIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.update_run, rid, body, user)
+
+
+@app.delete("/api/rides/runs/{rid}")
+def rd_delete_run(rid: str, _user: str = Depends(granted("consigner/rides"))):
+    _rd(rides.delete_run, rid)
+    return {"ok": True}
+
+
+@app.post("/api/rides/circuits")
+def rd_save_circuit(body: rides.CircuitIn, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.save_circuit, body)
+
+
+@app.put("/api/rides/catalog")
+def rd_put_catalog(body: rides.CatalogIn, _user: str = Depends(granted("consigner/rides"))):
+    return {"catalog": _rd(rides.put_catalog, body)}
 
 
 @app.get("/api/wall")

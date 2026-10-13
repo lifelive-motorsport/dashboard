@@ -20,7 +20,7 @@ const CHAPTERS = [
 // Pages réservées au Super User : jamais attribuables à une catégorie d'utilisateurs (Événements et Ressources sont cochables ; la modification des fiches du staff reste au Super User)
 const SUPER_ONLY = new Set(['others/users']);
 // Pages que seul le Super User ou une catégorie qui les a cochées ouvre (ni « Administrateur » ni les autres)
-const GRANT_ONLY = new Set(['consigner/wall', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
+const GRANT_ONLY = new Set(['consigner/wall', 'consigner/rides', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
 // Toutes les pages d'un module, dans l'ordre : [clé, libellé]
 function modulePages(mod) {
   const out = [];

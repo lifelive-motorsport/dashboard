@@ -36,7 +36,7 @@ const MENU = [
   ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/wall','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/wall','consigner/rides','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -505,6 +505,7 @@ const PAGES = {
   'consigner/team': () => [BU_BAR()].concat(tsBlocks('team')),
   'consigner/leaves': () => leavesBlocks(),
   'consigner/wall': () => wallBlocks(),
+  'consigner/rides': () => ridesBlocks(),
   'planifier/res_staff': () => resourcesBlocks('staff'),
   'planifier/res_ext': () => resourcesBlocks('ext'),
   'planifier/res_veh': () => resourcesBlocks('veh'),
@@ -676,6 +677,7 @@ function render(force) {
   if (superUser && (key === 'home/welcome' || key === 'consigner/team')) alertsBanner();
   if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
   if (key === 'consigner/wall') wlStart();
+  if (key === 'consigner/rides') { rdDraw(); rdLoad(); }
   if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');

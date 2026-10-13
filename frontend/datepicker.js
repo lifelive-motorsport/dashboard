@@ -48,3 +48,11 @@ document.addEventListener('change', e => {
   if (iso === null) { t.setCustomValidity('jj/mm/aaaa'); t.reportValidity(); return; }
   t.setCustomValidity(''); h.value = iso; h.dispatchEvent(new Event('change', {bubbles: true}));
 });
+
+// Saisie des dates sans séparateurs : « 12102026 » devient « 12/10/2026 » (les « / », « . » et « - » tapés à la main restent acceptés tels quels).
+document.addEventListener('input', e => {
+  const t = e.target; if (!t.matches || !t.matches('.dp-t, .pe-d, .lv-d, .ts-d') || (e.inputType || '').startsWith('delete')) return;
+  const v = t.value; if (/[.\-]/.test(v) || /(^|\D)\d(\D|$)/.test(v) && /\D/.test(v)) return;
+  const d = v.replace(/\D/g, '').slice(0, 8), out = d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}` : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+  if (out !== v) t.value = out;
+});

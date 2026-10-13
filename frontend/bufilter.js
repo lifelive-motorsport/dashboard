@@ -2,6 +2,16 @@
 // La sélection est mémorisée ; la dernière ligne du logo prend la couleur de la BU filtrée (CARS : trois tirets bleu / vert / jaune). Chargé après bu.js, avant app.js.
 let buSel = (() => { try { return localStorage.getItem('lm_bu') || 'all'; } catch { return 'all'; } })();
 if (buSel !== 'all' && !BUS[buSel]) buSel = 'all';
+// BU imposée par les droits : une catégorie dont toutes les pages de données concernent une seule BU (xc/…, staff/xc ou cars/…, staff/cars) ne voit que cette BU ; null = pas de restriction
+function buLock() {
+  if (typeof pagesList === 'undefined' || !pagesList) return null;
+  let xc = false, cars = false, both = false;
+  pagesList.forEach(k => { const g = k.split('/')[0];
+    if (g === 'xc' || k === 'staff/xc') xc = true; else if (g === 'cars' || k === 'staff/cars') cars = true;
+    else if (['overview', 'staff', 'expenses', 'vehicles', 'marketing'].includes(g)) both = true; });
+  return both || (xc && cars) ? null : xc ? 'xc' : cars ? 'cars' : null;
+}
+function buEnforce() { const l = buLock(); if (l === 'xc' && buSel !== 'xc') buSel = 'xc'; else if (l === 'cars' && !buIsCars(buSel)) buSel = 'cars'; }
 const buIsCars = id => id === 'cars' || (BUS[id] && BUS[id].parent === 'cars');
 // Clés du P&L de l'application pour chaque sélection
 const BU_KEYS = {all: null, xc: ['XC'], cars: ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'], mr: ['MODERN_RALLY'], hrc: ['HISTORIC_RACING'], hrl: ['HISTORIC_RALLY']};
@@ -35,7 +45,7 @@ function buLogo(sel = buSel) {
 }
 const buPill = (id, label, on, sym) => `<button type="button" class="bu-pill" data-bu="${id}" aria-pressed="${on}">${sym ? BuSymbol(sym, {size: 15}) : ''}<span>${esc(label)}</span></button>`;
 function buBarHtml() {
-  const l1 = [['all', 'ALL', 'lifelive'], ['xc', 'XC', 'xc'], ['cars', 'CARS', 'cars']];
+  const lock = buLock(), l1 = [['all', 'ALL', 'lifelive'], ['xc', 'XC', 'xc'], ['cars', 'CARS', 'cars']].filter(([id]) => !lock || id === lock);       // BU imposée par les droits : les autres BU ne sont pas proposées
   let h = `<div class="bu-filter" role="group" aria-label="Filtrer par BU">${l1.map(([id, l, sym]) => buPill(id, l, id === 'all' ? buSel === 'all' : id === 'cars' ? buIsCars(buSel) : buSel === id, sym)).join('')}</div>`;
   if (buIsCars(buSel)) h += `<div class="bu-filter bu-l2" role="group" aria-label="Filtrer par BU CARS">${[['cars', 'ALL CARS', 'cars'], ['mr', 'Modern Rally', 'mr'], ['hrc', 'Historic Racing', 'hrc'], ['hrl', 'Historic Rally', 'hrl']].map(([id, l, sym]) => buPill(id, l, buSel === id, sym)).join('')}</div>`;
   return h;

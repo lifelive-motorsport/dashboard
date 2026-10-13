@@ -13,7 +13,7 @@ let role = 'full', superUser = false, pagesList = null;       // pagesList : pag
 const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!pagesList || pagesList.has(k)));
 const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
-const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; viewAs(sj.viewing_as); };
+const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };
 // Bandeau « Voir comme » : toujours visible tant qu'un Super User agit avec les droits d'un autre utilisateur
 function viewAs(v) {
   let b = document.getElementById('viewas'); document.body.classList.toggle('viewing-as', !!v);

@@ -986,6 +986,20 @@ async def ts_transcribe(request: Request, user: str = Depends(require_user)):
         raise HTTPException(503, f"Transcription indisponible : {e}")
 
 
+class RejectBody(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/timesheets/entries/{eid}/reject")
+def ts_reject_entry(eid: str, body: RejectBody, user: str = Depends(require_user)):
+    r = _ts_ctx(user)
+    try:
+        e = timesheets.reject_entry(eid, body.reason, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
+
+
 @app.post("/api/timesheets/entries/{eid}/attachments")
 async def ts_add_attachment(eid: str, request: Request, filename: str = Query("fichier", max_length=120), user: str = Depends(require_user)):
     r = _ts_ctx(user)

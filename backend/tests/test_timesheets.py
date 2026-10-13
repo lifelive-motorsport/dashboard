@@ -359,3 +359,31 @@ def test_job_gets_a_copy_of_the_checklist_and_lines_are_ticked_by_entries(api):
     assert api.put(f"/api/timesheets/entries/{e['id']}", json=entry(job["id"], lines=["inconnue"])).status_code == 422
     api.delete(f"/api/timesheets/entries/{e['id']}")
     assert next(j for j in api.get("/api/timesheets/jobs").json()["jobs"] if j["id"] == job["id"])["progress"]["done"] == 0
+
+
+def test_reject_with_reason_correction_trace_and_job_done(api):
+    jid = mkjob(api, vehicle={"id": "1", "name": "P"}).json()["id"]
+    as_(api, MEC)
+    e = api.post("/api/timesheets/entries", json=entry(jid, minutes=120)).json()
+    assert e["status"] == "sent"
+    assert api.post(f"/api/timesheets/entries/{e['id']}/reject", json={"reason": "x"}).status_code == 403          # le mécanicien ne renvoie pas
+    as_(api, CHEF)
+    assert api.post(f"/api/timesheets/entries/{e['id']}/reject", json={"reason": "ab"}).status_code == 422          # motif trop court
+    r = api.post(f"/api/timesheets/entries/{e['id']}/reject", json={"reason": "Heures fausses : tu étais à Spa"}).json()
+    assert r["status"] == "returned" and r["thread"][-1]["kind"] == "reject"
+    old = timesheets.entries().get(e["id"])
+    old["created_at"] = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()                                   # bien au-delà des 24 h
+    timesheets.entries().put(e["id"], old)
+    as_(api, MEC)
+    r = api.put(f"/api/timesheets/entries/{e['id']}", json=entry(jid, minutes=60)).json()                            # renvoyé : corrigeable malgré les 24 h
+    assert r["status"] == "sent" and r["thread"][-1]["kind"] == "resubmit" and r["minutes"] == 60
+    as_(api, CHEF)
+    r = api.put(f"/api/timesheets/entries/{e['id']}", json=entry(jid, minutes=90)).json()                            # correction du chef : tracée
+    assert r["adjusted"] is True and "Correction" in r["thread"][-1]["text"]
+    assert api.post(f"/api/timesheets/entries/{e['id']}/validate").json()["status"] == "adjusted"
+    as_(api, MEC)
+    assert api.put(f"/api/timesheets/entries/{e['id']}", json=entry(jid)).status_code == 403                          # validé : verrouillé
+    e2 = api.post("/api/timesheets/entries", json=entry(jid, job_done=True)).json()
+    assert e2["job_done"] is True
+    assert next(j for j in timesheets.jobs().all() if j["id"] == jid)["open"] is False                               # « terminé » : le job est clôturé
+    assert api.post("/api/timesheets/entries", json=entry(jid)).status_code == 422

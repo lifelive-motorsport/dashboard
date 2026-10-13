@@ -74,6 +74,7 @@ class EntryIn(BaseModel):
     system: str = "autre"
     text: str = Field(default="", max_length=3000)
     user: str | None = None                                              # pointage pour un autre mécanicien : chef d'atelier seulement
+    job_done: bool = False                                               # « Le job est-il terminé ? » : Oui clôture le job (le chef peut le rouvrir)
     lines: list[str] = Field(default_factory=list, max_length=200)       # lignes de la liste de contrôle du job faites pendant ce pointage
 
     @field_validator("assignment")
@@ -280,7 +281,9 @@ def editable_until(entry: dict) -> str:
 def can_edit(entry: dict, user: str, r: dict, job: dict | None) -> bool:
     if chef_for(r, job):
         return True
-    return entry["user"] == user.lower() and not entry.get("validated") and now() <= datetime.fromisoformat(editable_until(entry))
+    if entry["user"] != user.lower() or entry.get("validated"):
+        return False
+    return bool(entry.get("returned")) or now() <= datetime.fromisoformat(editable_until(entry))        # renvoyé par le chef (« Info requise ») : corrigeable sans limite de temps
 
 
 # ---- Jobs ---------------------------------------------------------------------------------------------------------------------------------
@@ -435,7 +438,8 @@ def entry_view(e: dict, user: str, r: dict, jmap: dict) -> dict:
     if job and job.get("checklist"):
         by = {ln["id"]: (s["title"], ln["text"]) for s in job["checklist"]["sections"] for ln in s["lines"]}
         lines = [{"id": i, "section": by[i][0], "text": by[i][1]} for i in e.get("lines", []) if i in by]
-    return {**e, "lines": lines, "line_ids": e.get("lines", []), "job": job_view(job) if job else {"id": e["job_id"], "title": "(job supprimé)", "kind": "atelier", "billable": False},
+    status = "returned" if e.get("returned") else ("adjusted" if e.get("adjusted") else "validated") if e.get("validated") else "sent"
+    return {**e, "status": status, "thread": e.get("thread", []), "lines": lines, "line_ids": e.get("lines", []), "job": job_view(job) if job else {"id": e["job_id"], "title": "(job supprimé)", "kind": "atelier", "billable": False},
             "can_edit": can_edit(e, user, r, job), "editable_until": editable_until(e)}
 
 
@@ -465,6 +469,22 @@ def summary(ents: list[dict], person: dict | None, jmap: dict) -> dict:
             "validated": sum(1 for e in ents if e.get("validated")), "count": len(ents)}
 
 
+def tsfmt(m: int) -> str:
+    h, r = divmod(m, 60)
+    return f"{h} h {r:02d}" if h and r else (f"{h} h" if h else f"{r} min")
+
+
+def _note(e: dict, kind: str, by: str, text: str) -> None:
+    """Fil de discussion du pointage : motif de renvoi, correction du chef, reprise par le mécanicien (rien n'écrase rien)."""
+    e.setdefault("thread", []).append({"at": now().isoformat(), "by": person_name(by), "kind": kind, "text": text})
+
+
+def _close_job_if_done(job: dict, done: bool, user: str) -> None:
+    if done and job.get("kind") != "background" and job.get("open", True):
+        job.update(open=False, closed_by=user.lower(), closed_at=now().isoformat())
+        jobs().put(job["id"], job)
+
+
 def create_entry(data: EntryIn, user: str, r: dict) -> dict:
     job = jobs().get(data.job_id)
     if not job or not job.get("open", True):
@@ -479,7 +499,9 @@ def create_entry(data: EntryIn, user: str, r: dict) -> dict:
     doc["lines"] = list(data.lines)
     if job.get("checklist"):
         doc["system"] = "autre"
+    doc["job_done"] = bool(data.job_done and job.get("kind") != "background")
     entries().put(eid, doc)
+    _close_job_if_done(job, data.job_done, user)
     return doc
 
 
@@ -496,6 +518,7 @@ def update_entry(eid: str, data: EntryIn, user: str, r: dict) -> dict:
     if data.job_id != e["job_id"] and not job.get("open", True):
         raise LookupError("Job clôturé")
     prev_job = e["job_id"]
+    before = f"{tsfmt(e['minutes'])} le {e['date']}"
     e.update({"job_id": data.job_id, "date": data.date.isoformat(), "minutes": data.minutes, "assignment": job.get("assignment", "autre"), "system": data.system if job.get("kind") == "atelier" else "autre", "text": data.text.strip(), "updated_at": now().isoformat()})
     if data.job_id != prev_job:
         sync_lines(old_job, eid, e["user"], [])                       # on quitte l'ancien job : ses lignes redeviennent à faire
@@ -503,7 +526,15 @@ def update_entry(eid: str, data: EntryIn, user: str, r: dict) -> dict:
     e["lines"] = list(data.lines)
     if job.get("checklist"):
         e["system"] = "autre"
+    e["job_done"] = bool(data.job_done and job.get("kind") != "background")
+    if e["user"] != user.lower():                                        # correction faite par le chef : tracée, le mécanicien n'a rien à refaire
+        e["adjusted"] = True
+        _note(e, "adjust", user, f"Correction : {before} → {tsfmt(e['minutes'])} le {e['date']}" + (f" ; {e['text']}" if e["text"] else ""))
+    elif e.get("returned"):                                              # le mécanicien a corrigé un pointage renvoyé : il repart « Envoyé »
+        e["returned"] = False
+        _note(e, "resubmit", user, "Corrigé et renvoyé")
     entries().put(eid, e)
+    _close_job_if_done(job, data.job_done, user)
     return e
 
 
@@ -526,8 +557,25 @@ def validate_entry(eid: str, validated: bool, user: str, r: dict) -> dict:
     if not chef_for(r, jobs().get(e["job_id"])):
         raise PermissionError("Réservé au chef d'atelier")
     e["validated"] = validated
+    if validated:
+        e["returned"] = False
     e["validated_by"] = user.lower() if validated else None
     e["validated_at"] = now().isoformat() if validated else None
+    entries().put(eid, e)
+    return e
+
+
+def reject_entry(eid: str, reason: str, user: str, r: dict) -> dict:
+    """Renvoie le pointage au mécanicien (« Info requise ») avec un motif obligatoire ; il le corrige puis le renvoie, sans limite de 24 h."""
+    e = entries().get(eid)
+    if not e:
+        raise KeyError(eid)
+    if not chef_for(r, jobs().get(e["job_id"])):
+        raise PermissionError("Réservé au chef d'atelier")
+    if len((reason or "").strip()) < 3:
+        raise ValueError("Écrivez un motif utilisable : c'est la seule information que le mécanicien recevra")
+    e.update(returned=True, validated=False, validated_by=None, validated_at=None, return_reason=reason.strip(), returned_by=user.lower(), returned_at=now().isoformat())
+    _note(e, "reject", user, reason.strip())
     entries().put(eid, e)
     return e
 

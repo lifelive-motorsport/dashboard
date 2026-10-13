@@ -446,3 +446,4 @@ body.wall-full .wl-top button{min-height:46px;padding-left:18px;padding-right:18
 @media (max-width:900px){.wl-cal{font-size:11px}}
 body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .wl-bar2{align-self:start}.wl-ab{align-self:end}
+.wl-bar2.immo{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 38%,transparent) 0 10px,color-mix(in srgb,var(--c) 22%,transparent) 10px 20px);color:var(--fg);border:1px solid color-mix(in srgb,var(--c) 70%,transparent);font-size:.88em;padding:1px 8px;white-space:nowrap;display:block;text-overflow:ellipsis}.wl-bar2.immo small{opacity:.9}.wl-legend .immosw{background:repeating-linear-gradient(135deg,#888 0 4px,#555 4px 8px)}

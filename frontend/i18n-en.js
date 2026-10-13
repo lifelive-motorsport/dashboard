@@ -380,6 +380,8 @@ Object.assign(EN, {
   "À confirmer (TBC)": "To be confirmed (TBC)",
   "Prénom": "First name",
   "Absents": "Absent",
+  "🚚 Immobilisation véhicules": "🚚 Vehicle immobilisation",
+  "Immobilisation des véhicules": "Vehicle immobilisation",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

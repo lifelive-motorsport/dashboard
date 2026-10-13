@@ -725,3 +725,19 @@ def test_unregistered_domain_user_is_unclassified_and_sees_no_data(monkeypatch):
     assert not access.path_ok("/api/staff", set()) and not access.path_ok("/api/projection", set()) and access.path_ok("/api/session", set())
     monkeypatch.setattr(u.settings, "AUTH_ENABLED", False)
     assert u.pages_of("nouveau@lifelive-motorsport.com") is None                      # démonstration : tout reste ouvert
+
+
+def test_transport_and_others_events():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning
+    c = TestClient(app)
+    assert "OTHERS" in [b["id"] for b in c.get("/api/events/config").json()["bus"]]
+    r = c.post("/api/events", json=_ev(title="Enlèvement étagères", bu="OTHERS", transport=True, start="2027-03-10", end="2027-03-10", immo_start="2027-03-10", immo_end="2027-03-10", vehicles=[]))
+    assert r.status_code in (200, 201), r.text
+    be = planning.backend()
+    evs = list(be.events[planning.calendars_by_bu()["OTHERS"]].values())
+    assert evs[0]["summary"] == "[TBC] [transport] Enlèvement étagères"
+    got = c.get("/api/events", params={"from": "2027-03-01", "to": "2027-03-31"}).json()["events"]
+    assert got[0]["title"] == "Enlèvement étagères" and got[0]["transport"] is True and got[0]["bu"] == "OTHERS"
+    c.delete(f"/api/events/{got[0]['id']}")

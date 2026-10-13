@@ -1,7 +1,7 @@
 // Planifier › Planning (lecture seule, tous les utilisateurs) : deux vues, « Par ressource » (une ligne par personne ou véhicule) et « Calendrier » (grille semaine ou mois),
 // avec le détail complet de l'événement au survol. Les données viennent de /api/planning (événements Logbook dans Google Agenda). Chargé après events.js.
 let pl = {loaded: false, loading: false, error: null, data: {resources: [], events: [], categories: []}, mode: 'rows', span: 'week', anchor: '', res: 'all', hideEmpty: false};
-const PL_BU = {XC: ['var(--bu-xc)', '#fff', 'XC'], MODERN_RALLY: ['var(--bu-mr-ui)', '#fff', 'Modern Rally'], HISTORIC_RALLY: ['var(--bu-hrl)', '#2B2B2B', 'Historic Rally'], HISTORIC_RACING: ['var(--bu-hrc)', '#fff', 'Historic Racing']};
+const PL_BU = {XC: ['var(--bu-xc)', '#fff', 'XC'], MODERN_RALLY: ['var(--bu-mr-ui)', '#fff', 'Modern Rally'], HISTORIC_RALLY: ['var(--bu-hrl)', '#2B2B2B', 'Historic Rally'], HISTORIC_RACING: ['var(--bu-hrc)', '#fff', 'Historic Racing'], OTHERS: ['var(--mut)', '#fff', 'Others']};
 const plAdd = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const plMonday = iso => { const d = new Date(iso + 'T12:00:00Z'), w = (d.getUTCDay() + 6) % 7; return plAdd(iso, -w); };
 const plMonthStart = iso => iso.slice(0, 8) + '01';
@@ -110,7 +110,7 @@ function plTipHtml(e) {
   const sec = (t, list) => list.length ? `<div class="pl-tsec"><b>${t}</b> ${list.map(name).join(', ')}</div>` : '';
   const [bg, , bl] = PL_BU[e.bu] || ['var(--mut)', '', e.bu];
   const pend = (e.pending || []).map(r => esc((R[r] || {}).name || '?'));
-  return `<div class="pl-thead"><span class="pl-dot" style="background:${bg}"></span><b>${e.confirmed ? '' : '[TBC] '}${esc(e.title)}</b></div><div class="pl-tmeta">${esc(bl)} · ${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</div>`
+  return `<div class="pl-thead"><span class="pl-dot" style="background:${bg}"></span><b>${e.confirmed ? '' : '[TBC] '}${e.transport ? '[transport] ' : ''}${esc(e.title)}</b></div><div class="pl-tmeta">${esc(bl)} · ${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</div>`
     + (e.vehicles.length && (e.immo_start !== e.start || e.immo_end !== e.end) ? `<div class="pl-tmeta">Immobilisation véhicules : ${fmtDate(e.immo_start)} → ${fmtDate(e.immo_end)}</div>` : '')
     + (e.place ? `<div class="pl-tsec"><b>Lieu</b> ${esc(e.place)}${e.km != null ? ` · ${e.km} km depuis Lifelive` : ''}</div>` : '')
     + (e.via || []).map(v => `<div class="neg">⚠ ${v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni'}</div>`).join('')

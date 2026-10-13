@@ -254,6 +254,8 @@ Object.assign(EN, {
   "Période — Canaux d’acquisition": "Period — Acquisition channels",
   "Période — Pages les plus visitées (Google Analytics)": "Period — Most visited pages (Google Analytics)",
   "Ouvrir dans Odoo": "Open in Odoo",
+  "Transport": "Transport",
+  "(mission logistique, pas un événement : « [transport] » est ajouté au début du titre et aucun job n’est proposé dans les pointages)": "(logistics mission, not an event: “[transport]” is added at the start of the title and no job is suggested in timesheets)",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

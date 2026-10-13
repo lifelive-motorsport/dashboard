@@ -627,6 +627,8 @@ def suggestions(today: date, days: int = 60) -> list[dict]:
     have = {j["title"].lower() for j in jobs().all()}
     out: list[dict] = []
     for ev in view["events"]:
+        if ev.get("transport"):                                       # simple transport : pas de job proposé
+            continue
         bu = ev["bu"] if ev["bu"] in ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING") else "CARS"
         eref = {"id": ev["id"], "title": ev["title"]}
         todo = [n for n, label in EVENT_NATURES if f"{label} — {ev['title']}".lower() not in have]

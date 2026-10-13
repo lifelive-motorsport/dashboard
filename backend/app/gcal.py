@@ -18,7 +18,7 @@ _lock = threading.Lock()
 _session = None
 
 
-BU_BY_LABEL = (("historic racing", "HISTORIC_RACING"), ("historic rally", "HISTORIC_RALLY"), ("modern rally", "MODERN_RALLY"), ("logistic", "LOGISTICS"), ("xc", "XC"))
+BU_BY_LABEL = (("historic racing", "HISTORIC_RACING"), ("historic rally", "HISTORIC_RALLY"), ("modern rally", "MODERN_RALLY"), ("logistic", "LOGISTICS"), ("others", "OTHERS"), ("xc", "XC"))
 BU_NAMES = {"XC": "XC", "MODERN_RALLY": "Modern Rally", "HISTORIC_RALLY": "Historic Rally", "HISTORIC_RACING": "Historic Racing", "LOGISTICS": "Logistics", "OTHER": "Autre"}
 
 

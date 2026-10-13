@@ -183,7 +183,7 @@ def _bu_ok(user: str, bu: str | None) -> bool:
     if users.is_super(user):
         return True
     lock = access.bu_lock(users.pages_of(user))
-    return lock is None or bu is None or (lock == "XC") == (bu == "XC")
+    return lock is None or bu is None or (bu != "OTHERS" and (lock == "XC") == (bu == "XC"))
 
 
 def _users_view(doc: dict) -> dict:

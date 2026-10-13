@@ -18,8 +18,10 @@ from .staff import EMAIL
 API = "https://www.googleapis.com/calendar/v3"
 SEP = "\n\n— Logbook —\n"
 TBC = "[TBC] "
+TRANSPORT = "[transport] "
 # BU proposées pour un événement : identifiant -> (libellé, couleur Google Agenda de la charte, clé de BU de gcal.calendars())
-BUS = {"XC": ("XC", "11"), "MODERN_RALLY": ("Modern Rally", "9"), "HISTORIC_RALLY": ("Historic Rally", "5"), "HISTORIC_RACING": ("Historic Racing", "10")}
+BUS = {"XC": ("XC", "11"), "MODERN_RALLY": ("Modern Rally", "9"), "HISTORIC_RALLY": ("Historic Rally", "5"), "HISTORIC_RACING": ("Historic Racing", "10"),
+       "OTHERS": ("Others", "8")}     # Others : transports privés (actionnaires, MD, enlèvements pour le stock…), hors BU
 
 
 class Place(BaseModel):
@@ -35,6 +37,7 @@ class EventIn(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     bu: str
     confirmed: bool = False
+    transport: bool = False                                            # simple mission logistique : « [transport] » est ajouté au titre ; pas de job proposé
     start: date
     end: date
     immo_start: date
@@ -195,7 +198,12 @@ def calendars_by_bu() -> dict[str, str]:
     """BU de l'application -> adresse de l'agenda. En démo : adresses fictives."""
     if settings.PROVIDER == "demo":
         return {k: f"demo-{k.lower()}@group.calendar.google.com" for k in BUS}
-    return {bu: cid for cid, _label, bu in gcal.calendars() if bu in BUS}
+    cals = {bu: cid for cid, _label, bu in gcal.calendars() if bu in BUS}
+    if "OTHERS" not in cals:                                           # pas d'agenda « Others » : repli sur l'ancien agenda « Logistics »
+        old = next((cid for cid, _l, bu in gcal.calendars() if bu == "LOGISTICS"), None)
+        if old:
+            cals["OTHERS"] = old
+    return cals
 
 
 def _day(d: date) -> dict:
@@ -215,11 +223,11 @@ def _description(notes: str, place: Place, route: dict | None, origin: Place | N
 
 
 def _title(e: EventIn) -> str:
-    return e.title.strip() if e.confirmed else TBC + e.title.strip()
+    return ("" if e.confirmed else TBC) + (TRANSPORT if e.transport else "") + e.title.strip()
 
 
 def _shared(e: EventIn, lbid: str, kind: str, route: dict | None) -> dict:
-    sh = {"logbook": "1", "kind": kind, "lbid": lbid, "bu": e.bu, "confirmed": "1" if e.confirmed else "0", "place": e.place.id,
+    sh = {"logbook": "1", "kind": kind, "lbid": lbid, "bu": e.bu, "confirmed": "1" if e.confirmed else "0", "transport": "1" if e.transport else "0", "place": e.place.id,
           "immo": f"{e.immo_start.isoformat()}/{e.immo_end.isoformat()}"}
     if not e.confirmed and e.externals:                                # prestataires prévus mais pas encore invités (événement TBC) : gardés ici pour la modification
         sh["pending"] = ",".join(e.externals)
@@ -354,13 +362,17 @@ def listing(d_from: date, d_to: date) -> list[dict]:
         desc = ev.get("description", "")
         notes = desc.split(SEP)[0] if SEP in desc else ("" if desc.startswith(SEP.lstrip("\n")) else desc)
         title = ev.get("summary", "")
+        if title.startswith(TBC):
+            title = title[len(TBC):]
+        if sh.get("transport") == "1" and title.lower().startswith(TRANSPORT):
+            title = title[len(TRANSPORT):]
         att = ev.get("attendees", [])
         vehicles = [a["email"] for a in att if a.get("resource")] + [a["email"] for a in (vehs[lbid].get("attendees", []) if lbid in vehs else []) if a.get("resource")]
         responses = {a["email"]: a.get("responseStatus", "needsAction") for a in att}          # accepted | needsAction | declined | tentative
         if lbid in vehs:
             responses.update({a["email"]: a.get("responseStatus", "needsAction") for a in vehs[lbid].get("attendees", [])})
         imm = sh.get("immo", "").split("/")
-        out.append({"id": lbid, "bu": sh.get("bu", ""), "title": title[len(TBC):] if title.startswith(TBC) else title, "confirmed": sh.get("confirmed") == "1",
+        out.append({"id": lbid, "bu": sh.get("bu", ""), "title": title, "confirmed": sh.get("confirmed") == "1", "transport": sh.get("transport") == "1",
                     "start": _start(ev), "end": _inc_end(ev), "immo_start": imm[0] if len(imm) == 2 else _start(ev), "immo_end": imm[1] if len(imm) == 2 else _inc_end(ev),
                     "place": {"id": sh.get("place", ""), "address": ev.get("location", "")}, "origin": {"id": sh["origin"], "address": sh.get("origin_addr", "")} if sh.get("origin") else None, "notes": notes, "km": int(sh["km"]) if sh.get("km", "").isdigit() else None,
                     "via": [x for x in sh.get("via", "").split(",") if x], "staff_and_external": [a["email"] for a in att if not a.get("resource")], "externals_pending": [x for x in sh.get("pending", "").split(",") if x], "responses": responses, "vehicles": vehicles})
@@ -383,7 +395,7 @@ def restrict_to_bu(view: dict, lock: str | None) -> dict:
     """Utilisateur dont les droits se limitent à une BU : il ne voit ni les événements des autres BU, ni (pour XC) les voitures de course Rally / Circuit."""
     if not lock:
         return view
-    ev = [e for e in view["events"] if (e["bu"] == "XC") == (lock == "XC")]
+    ev = [e for e in view["events"] if e["bu"] != "OTHERS" and (e["bu"] == "XC") == (lock == "XC")]     # Others (transports privés) : réservé aux utilisateurs non limités à une BU
     res = [r for r in view["resources"] if not (lock == "XC" and r["kind"] == "vehicle" and r.get("category") in RACE_CATEGORIES)]
     cats = [c for c in view.get("categories", []) if not (lock == "XC" and c["id"] in RACE_CATEGORIES)]
     return {**view, "events": ev, "resources": res, "categories": cats}
@@ -427,7 +439,7 @@ def planning_view(d_from: date, d_to: date) -> dict:
             if rid:
                 vehicles.append({"rid": rid, "status": resp.get(email, "needsAction")})
         pending = [by_email.get(x.lower()) for x in e.get("externals_pending", [])]
-        events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
+        events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "transport": e.get("transport", False), "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
                        "place": e["place"]["address"], "km": e["km"], "via": e["via"], "notes": e["notes"], "people": people, "vehicles": vehicles,
                        "pending": [r for r in pending if r], "other_guests": other})
     from . import leaves

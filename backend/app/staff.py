@@ -82,8 +82,17 @@ class Person(BaseModel):
     note: str = Field(default="", max_length=500)
     google_email: str = Field(default="", max_length=120)               # compte Google de la personne : invitée aux événements créés dans Google Agenda
     workshop: str = ""                                                  # rôle à l'atelier (Pointages) : "", mechanic, chef_cars, chef_xc, chef_all ; choisi dans Planifier › Ressources, indépendant du libellé de la fonction
+    leave_alloc: dict[str, dict[str, float]] = Field(default_factory=dict)                  # soldes de congés alloués : année -> type de congé -> jours (saisie initiale, Odoo Payroll pas encore utilisé)
     work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4], max_length=7)       # jours de présence habituels (0 = lundi … 6 = dimanche) : alertes d'oubli de pointage
     all_bus: bool = False                                               # proposée pour toutes les BU (filtres de Ressources et d'Événements), quelle que soit son imputation
+
+    @field_validator("leave_alloc")
+    @classmethod
+    def _leave_alloc(cls, v):
+        for y, d in v.items():
+            if not (y.isdigit() and len(y) == 4) or any(t not in ("paid", "comp", "extra", "recup") or not (0 <= n <= 400) for t, n in d.items()):
+                raise ValueError("soldes de congés invalides")
+        return v
 
     @field_validator("work_days")
     @classmethod

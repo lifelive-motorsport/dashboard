@@ -27,7 +27,7 @@ PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
     # modules à venir : droits prêts à être donnés dès maintenant (aucune donnée à ce stade)
     "planifier/planning": (("/api/planning",), set()),      # lecture seule, ouverte à tous les rôles (aucune donnée de paie ni adresse e-mail)
     # « planifier/events » et « planifier/res_* » (Ressources) : réservées au Super User (comme « others/users »), donc jamais attribuables à une catégorie
-    "consigner/timesheets": (("/api/timesheets",), set()), "consigner/team": (("/api/timesheets",), set()), "consigner/rides": ((), set()), "consigner/consumables": ((), set()),
+    "consigner/timesheets": (("/api/timesheets",), set()), "consigner/leaves": (("/api/leaves", "/api/leaves-proofs"), set()), "consigner/team": (("/api/timesheets",), set()), "consigner/rides": ((), set()), "consigner/consumables": ((), set()),
 }
 XC_PAGES = ["xc/webshop_xc", "xc/webshop_gs", "xc/events", "xc/inventory", "xc/margins", "xc/tn11"]       # catégorie « XC » proposée par défaut
 

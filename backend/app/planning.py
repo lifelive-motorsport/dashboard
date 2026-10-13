@@ -411,4 +411,9 @@ def planning_view(d_from: date, d_to: date) -> dict:
         events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
                        "place": e["place"]["address"], "km": e["km"], "via": e["via"], "notes": e["notes"], "people": people, "vehicles": vehicles,
                        "pending": [r for r in pending if r], "other_guests": other})
-    return {"resources": res, "events": events, "categories": veh.get("categories", []), "vehicles_message": veh.get("message")}
+    from . import leaves
+    try:
+        lv = leaves.planning_leaves(d_from, d_to)
+    except Exception:
+        lv = []
+    return {"resources": res, "events": events, "leaves": lv, "categories": veh.get("categories", []), "vehicles_message": veh.get("message")}

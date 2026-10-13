@@ -33,7 +33,8 @@ document.addEventListener('click', e => {
     if (nav) { dpState.view = new Date(dpState.view.getFullYear(), dpState.view.getMonth() + (+nav.dataset.nav), 1); dpDraw(); }
     else if (day || td) {
       const iso = day ? day.dataset.iso : dpIso(new Date()), inp = dpState.input; dpClose();
-      inp.value = iso; inp.dispatchEvent(new Event('change', {bubbles: true}));
+      inp.value = iso; const vis = inp.parentElement && inp.parentElement.querySelector('.dp-t'); if (vis) vis.value = fmtDate(iso);      // champs dpField : le texte affiché suit le choix
+      inp.dispatchEvent(new Event('change', {bubbles: true}));
     }
   } else if (!(t.closest && t.closest('.pe-cal, .lv-cal, .ts-cal, .dp-cal'))) dpClose();
 }, true);

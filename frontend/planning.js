@@ -110,7 +110,7 @@ function plTipHtml(e) {
   const sec = (t, list) => list.length ? `<div class="pl-tsec"><b>${t}</b> ${list.map(name).join(', ')}</div>` : '';
   const [bg, , bl] = PL_BU[e.bu] || ['var(--mut)', '', e.bu];
   const pend = (e.pending || []).map(r => esc((R[r] || {}).name || '?'));
-  return `<div class="pl-thead"><span class="pl-dot" style="background:${bg}"></span><b>${e.confirmed ? '' : '[TBC] '}${e.transport ? '[transport] ' : ''}${esc(e.title)}</b></div><div class="pl-tmeta">${esc(bl)} · ${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</div>`
+  return `<div class="pl-thead"><span class="pl-dot" style="background:${bg}"></span><b>${e.confirmed ? '' : '[TBC] '}${e.transport ? '[transport] ' : ''}${esc(e.title)}</b></div><div class="pl-tmeta">${esc(bl)} · ${fmtDate(e.start)}${e.start_time ? ' ' + esc(e.start_time) : ''}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}${e.start_time ? (e.end !== e.start ? ' ' : ' → ') + esc(e.end_time) : ''}</div>`
     + (e.vehicles.length && (e.immo_start !== e.start || e.immo_end !== e.end) ? `<div class="pl-tmeta">Immobilisation véhicules : ${fmtDate(e.immo_start)} → ${fmtDate(e.immo_end)}</div>` : '')
     + (e.place ? `<div class="pl-tsec"><b>Lieu</b> ${esc(e.place)}${e.km != null ? ` · ${e.km} km depuis Lifelive` : ''}</div>` : '')
     + (e.via || []).map(v => `<div class="neg">⚠ ${v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni'}</div>`).join('')

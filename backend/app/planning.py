@@ -5,6 +5,7 @@ diffèrent, un événement « Immobilisation » lié (véhicules invités comme 
 Google Agenda reste la seule source de vérité. Accès Google : délégation à l'échelle du domaine (gauth). En démo : mémoire."""
 from __future__ import annotations
 
+import re
 import threading
 import uuid
 from datetime import date, datetime, timedelta
@@ -40,6 +41,8 @@ class EventIn(BaseModel):
     transport: bool = False                                            # simple mission logistique : « [transport] » est ajouté au titre ; pas de job proposé
     start: date
     end: date
+    start_time: str = ""                                               # « HH:MM », transports seulement (sinon l'événement dure des journées entières)
+    end_time: str = ""
     immo_start: date
     immo_end: date
     place: Place
@@ -68,8 +71,22 @@ class EventIn(BaseModel):
                 out.append(x)
         return out
 
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _time(cls, v):
+        v = (v or "").strip()
+        if v and not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", v):
+            raise ValueError("heure invalide (HH:MM)")
+        return v
+
     @model_validator(mode="after")
     def _dates(self):
+        if not self.transport:
+            self.start_time = self.end_time = ""
+        elif bool(self.start_time) != bool(self.end_time):
+            raise ValueError("indiquez l'heure de début et l'heure de fin")
+        elif self.start_time and (self.end, self.end_time) <= (self.start, self.start_time):
+            raise ValueError("la fin du transport doit suivre son début")
         if self.end < self.start:
             raise ValueError("la fin de l'événement précède son début")
         if self.immo_start > self.start or self.immo_end < self.end:
@@ -172,7 +189,7 @@ class Memory:
             sh = (e.get("extendedProperties") or {}).get("shared", {})
             if sh.get("logbook") != "1" or (lbid and sh.get("lbid") != lbid):
                 continue
-            s, en = date.fromisoformat(e["start"]["date"]), date.fromisoformat(e["end"]["date"]) - timedelta(days=1)
+            s, en = date.fromisoformat(_start(e)), date.fromisoformat(_inc_end(e))
             if s <= d_to and en >= d_from:
                 out.append(e)
         return out
@@ -240,12 +257,20 @@ def _shared(e: EventIn, lbid: str, kind: str, route: dict | None) -> dict:
     return sh
 
 
+def _span(e: EventIn) -> dict:
+    """Début / fin de l'événement principal : journées entières, ou plage horaire (transport) à l'heure de Bruxelles."""
+    if e.start_time:
+        tz = "Europe/Brussels"
+        return {"start": {"dateTime": f"{e.start.isoformat()}T{e.start_time}:00", "timeZone": tz}, "end": {"dateTime": f"{e.end.isoformat()}T{e.end_time}:00", "timeZone": tz}}
+    return {"start": _day(e.start), "end": _day(e.end + timedelta(days=1))}
+
+
 def build_main(e: EventIn, lbid: str, route: dict | None) -> dict:
     single = e.vehicles and (e.immo_start, e.immo_end) == (e.start, e.end)
     att = [{"email": x} for x in e.staff] + ([{"email": x} for x in e.externals] if e.confirmed else [])
     att += [{"email": x, "resource": True} for x in e.vehicles] if single else []
     return {"summary": _title(e), "description": _description(e.notes, e.place, route, e.origin), "location": e.place.address or e.place.name, "colorId": BUS[e.bu][1],
-            "start": _day(e.start), "end": _day(e.end + timedelta(days=1)), "attendees": att,
+            **_span(e), "attendees": att,
             "extendedProperties": {"shared": _shared(e, lbid, "main", route)}}
 
 
@@ -373,6 +398,7 @@ def listing(d_from: date, d_to: date) -> list[dict]:
             responses.update({a["email"]: a.get("responseStatus", "needsAction") for a in vehs[lbid].get("attendees", [])})
         imm = sh.get("immo", "").split("/")
         out.append({"id": lbid, "bu": sh.get("bu", ""), "title": title, "confirmed": sh.get("confirmed") == "1", "transport": sh.get("transport") == "1",
+                    "start_time": ev["start"]["dateTime"][11:16] if "dateTime" in ev["start"] else "", "end_time": ev["end"]["dateTime"][11:16] if "dateTime" in ev["end"] else "",
                     "start": _start(ev), "end": _inc_end(ev), "immo_start": imm[0] if len(imm) == 2 else _start(ev), "immo_end": imm[1] if len(imm) == 2 else _inc_end(ev),
                     "place": {"id": sh.get("place", ""), "address": ev.get("location", "")}, "origin": {"id": sh["origin"], "address": sh.get("origin_addr", "")} if sh.get("origin") else None, "notes": notes, "km": int(sh["km"]) if sh.get("km", "").isdigit() else None,
                     "via": [x for x in sh.get("via", "").split(",") if x], "staff_and_external": [a["email"] for a in att if not a.get("resource")], "externals_pending": [x for x in sh.get("pending", "").split(",") if x], "responses": responses, "vehicles": vehicles})
@@ -439,7 +465,7 @@ def planning_view(d_from: date, d_to: date) -> dict:
             if rid:
                 vehicles.append({"rid": rid, "status": resp.get(email, "needsAction")})
         pending = [by_email.get(x.lower()) for x in e.get("externals_pending", [])]
-        events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "transport": e.get("transport", False), "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
+        events.append({"id": e["id"], "bu": e["bu"], "title": e["title"], "confirmed": e["confirmed"], "transport": e.get("transport", False), "start_time": e.get("start_time", ""), "end_time": e.get("end_time", ""), "start": e["start"], "end": e["end"], "immo_start": e["immo_start"], "immo_end": e["immo_end"],
                        "place": e["place"]["address"], "km": e["km"], "via": e["via"], "notes": e["notes"], "people": people, "vehicles": vehicles,
                        "pending": [r for r in pending if r], "other_guests": other})
     from . import leaves

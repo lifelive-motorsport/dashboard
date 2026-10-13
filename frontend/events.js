@@ -1,6 +1,6 @@
 // Planifier › Événements : création et suivi des événements dans les agendas Google des BU (Super User). S'appuie sur les ressources de resources.js. Chargé après resources.js.
 const PE_BU_SYM = {XC: 'xc', MODERN_RALLY: 'mr', HISTORIC_RALLY: 'hrl', HISTORIC_RACING: 'hrc', OTHERS: 'lifelive'};
-const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, transport: false, start: '', end: '', immo_start: '', immo_end: '', before: 1, after: 1, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
+const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, transport: false, start_time: '', end_time: '', start: '', end: '', immo_start: '', immo_end: '', before: 1, after: 1, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
 let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: {dest: '', origin: ''}, sugg: {dest: [], origin: []}, suggMsg: {dest: null, origin: null}, originEdit: false, searching: {dest: false, origin: false}, busy: {}, busyMsg: null, vcat: 'all', showAll: false};
 const peDay = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const peToday = () => new Date().toISOString().slice(0, 10);
@@ -77,6 +77,7 @@ function peFormHtml() {
     <div class="sdfield"><span>BU</span><div class="bu-filter">${bus}</div></div>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-conf" ${f.confirmed ? 'checked' : ''}> Confirmé <small class="na">${f.confirmed ? '' : '(sinon « [TBC] » est ajouté au début du titre ; les prestataires sont invités à la confirmation)'}</small></label>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-transport" ${f.transport ? 'checked' : ''}> Transport <small class="na">(mission logistique, pas un événement : « [transport] » est ajouté au début du titre et aucun job n’est proposé dans les pointages)</small></label>
+    ${f.transport ? `<div class="pe-times"><label>Heure de début<input type="time" class="sdin pe-t" data-t="start_time" value="${esc(f.start_time)}"></label><label>Heure de fin<input type="time" class="sdin pe-t" data-t="end_time" value="${esc(f.end_time)}"></label><small class="na">(sans heure : journées entières)</small></div>` : ''}
     <div class="sdgrid"><label class="sdfield"><span>Début de l’événement</span>${peDate('start', f.start)}</label><label class="sdfield"><span>Fin de l’événement</span>${peDate('end', f.end, f.start)}</label>
     <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peDate('immo_start', f.immo_start, '', f.start)}${peStep('before', f.before)}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peDate('immo_end', f.immo_end, f.end)}${peStep('after', f.after)}</label></div>
     <small class="na">L’immobilisation reprend les dates de l’événement élargies de jours de trajet : ajustez-les avec + et − (ou saisissez directement les dates). Ces jours restent les mêmes si vous déplacez l’événement. Elle ne change que la réservation des véhicules.</small>
@@ -91,7 +92,7 @@ function peFormHtml() {
     ${ok ? '' : `<small class="na">À compléter : ${peMissing().join(', ')}.</small>`}</div>`;
 }
 
-const peMissing = () => { const f = pe.form, m = []; if (!f.title.trim()) m.push('titre'); if (!f.bu) m.push('BU'); if (!f.start || !f.end) m.push('dates'); if (!f.place) m.push('lieu'); return m; };
+const peMissing = () => { const f = pe.form, m = []; if (!f.title.trim()) m.push('titre'); if (!f.bu) m.push('BU'); if (!f.start || !f.end) m.push('dates'); if (f.transport && !!f.start_time !== !!f.end_time) m.push('heure de début et de fin'); if (f.transport && f.start_time && f.end_time && f.start === f.end && f.end_time <= f.start_time) m.push('une heure de fin après l’heure de début'); if (!f.place) m.push('lieu'); return m; };
 const peValid = () => !peMissing().length && pe.form.end >= pe.form.start && pe.form.immo_start && pe.form.immo_end;
 
 // Réservation existante d'un véhicule sur la période d'immobilisation (ignorée quand elle vient de cet événement lui-même : dates inchangées)
@@ -117,7 +118,7 @@ function peListHtml() {
     const vnames = e.vehicles.map(m => `${peRsvp((e.responses || {})[m])} ${esc((peVehicles().find(v => v.email === m) || {}).name || m)}`);
     const waiting = e.staff_and_external.filter(m => (e.responses || {})[m] !== 'accepted' && (e.responses || {})[m] !== 'declined').length, refused = Object.values(e.responses || {}).filter(x => x === 'declined').length;
     const sym = PE_BU_SYM[e.bu] ? BuSymbol(PE_BU_SYM[e.bu], {size: 14}) : '';
-    return `<tr><td>${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</td><td class="prod">${sym} ${e.confirmed ? '' : '<span class="badge-profile">TBC</span> '}${e.transport ? '<span class="badge-profile">Transport</span> ' : ''}<b>${esc(e.title)}</b><br><small class="na">${esc(peBuLabel(e.bu))} · ${esc(e.place.address)}</small>${(e.via || []).map(v => `<br><small class="neg">⚠ ${esc(v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni')}</small>`).join('')}</td>`
+    return `<tr><td>${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''}</td><td class="prod">${sym} ${e.confirmed ? '' : '<span class="badge-profile">TBC</span> '}${e.transport ? '<span class="badge-profile">Transport</span> ' : ''}<b>${esc(e.title)}</b>${e.start_time ? ` <small class="na">${esc(e.start_time)}–${esc(e.end_time)}</small>` : ''}<br><small class="na">${esc(peBuLabel(e.bu))} · ${esc(e.place.address)}</small>${(e.via || []).map(v => `<br><small class="neg">⚠ ${esc(v === 'CH' ? 'Itinéraire par la Suisse' : 'Itinéraire par le Royaume-Uni')}</small>`).join('')}</td>`
       + `<td>${e.km != null ? e.km + ' km' : '–'}</td><td><small>${names.join(', ') || '–'}${waiting ? `<br><span class="na">${waiting} sans réponse</span>` : ''}${refused ? `<br><span class="neg">${refused} refus</span>` : ''}${e.externals_pending.length ? `<br><span class="na">${e.externals_pending.length} prestataire${e.externals_pending.length > 1 ? 's' : ''} à inviter à la confirmation</span>` : ''}</small></td><td><small>${vnames.join(', ') || '–'}${vnames.length ? `<br><span class="na">${fmtDate(e.immo_start)} → ${fmtDate(e.immo_end)}</span>` : ''}</small></td>`
       + `<td><button type="button" class="pe-edit" data-id="${e.id}">Modifier</button> <button type="button" class="pe-del" data-id="${e.id}">Supprimer</button></td></tr>`; });
   return '<h4 class="sub">Événements à venir (depuis 30 jours) <button type="button" class="mini" id="pe-refresh" title="Relire Google Agenda (réponses des invités)">↻ Actualiser</button></h4><small class="na">Réponses des invités : ✓ accepté · … sans réponse · ✗ refusé (pour un véhicule : déjà réservé) · ? peut-être.</small>' + (pe.unavailable ? `<p class="neg">${esc(pe.unavailable)}</p>` : '')
@@ -128,7 +129,7 @@ function peOpenNew() { pe.form = peBlank(); pe.form.before = pe.form.after = pe.
 function peOpenEdit(id) {
   const e = pe.events.find(x => x.id === id); if (!e) return;
   const sEmails = new Set(rs.staff.map(p => p.email).filter(Boolean)), att = e.staff_and_external;
-  pe.form = {id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, transport: !!e.transport, start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, before: Math.max(0, peDiff(e.immo_start, e.start)), after: Math.max(0, peDiff(e.end, e.immo_end)),
+  pe.form = {id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, transport: !!e.transport, start_time: e.start_time || '', end_time: e.end_time || '', start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, before: Math.max(0, peDiff(e.immo_start, e.start)), after: Math.max(0, peDiff(e.end, e.immo_end)),
     place: e.place.id ? {id: e.place.id, name: '', address: e.place.address, lat: null, lng: null, country: ''} : null, origin: e.origin ? {id: e.origin.id, name: '', address: e.origin.address, lat: null, lng: null, country: ''} : null, route: e.km != null ? {km: e.km, minutes: 0, alerts: (e.via || []).map(v => `L’itinéraire depuis le départ passe par ${v === 'CH' ? 'la Suisse' : 'le Royaume-Uni'}.`)} : null,
     notes: e.notes, staff: att.filter(m => sEmails.has(m)), externals: att.filter(m => !sEmails.has(m)).concat(e.externals_pending), vehicles: e.vehicles.slice()};
   pe.orig = {immo_start: e.immo_start, immo_end: e.immo_end, vehicles: e.vehicles.slice()};
@@ -188,6 +189,7 @@ document.addEventListener('change', e => {
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
   else if (t.id === 'pe-transport') { f.transport = t.checked; peDraw(); }
+  else if (t.classList.contains('pe-t')) { f[t.dataset.t] = t.value; peDraw(); }
   else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }
   else if (t.classList.contains('pe-staff') || t.classList.contains('pe-ext') || t.classList.contains('pe-veh')) {
     const k = t.classList.contains('pe-staff') ? 'staff' : t.classList.contains('pe-ext') ? 'externals' : 'vehicles', m = t.dataset.e;
@@ -200,7 +202,7 @@ document.addEventListener('click', async e => {
   const f = pe.form;
   if (t.id === 'pe-new') peOpenNew();
   else if (t.id === 'pe-refresh') { t.disabled = true; await peLoad(); peDraw(); }
-  else if (t.classList.contains('pe-cal')) { const dp = document.querySelector(`.pe-dp[data-f="${t.dataset.f}"]`); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } }
+  else if (t.classList.contains('pe-cal')) { const dp = document.querySelector(`.pe-dp[data-f="${t.dataset.f}"]`); if (dp) dpOpen(dp, t); }
   else if (t.classList.contains('pe-step')) { const k = t.dataset.k; f[k] = Math.max(0, Math.min(60, f[k] + (+t.dataset.d))); peWiden(); peDraw(); peCheckBusy(); }
   else if (t.id === 'pe-cancel') { pe.open = false; pe.msg = null; peDraw(); }
   else if (t.classList.contains('pe-bu')) { f.bu = t.dataset.bu; peDraw(); }
@@ -216,7 +218,7 @@ document.addEventListener('click', async e => {
     peDraw();
   } else if (t.id === 'pe-save') {
     pe.saving = true; pe.msg = null; peDraw();
-    const body = {title: f.title.trim(), bu: f.bu, confirmed: f.confirmed, transport: f.transport, start: f.start, end: f.end, immo_start: f.immo_start, immo_end: f.immo_end, notes: f.notes,
+    const body = {title: f.title.trim(), bu: f.bu, confirmed: f.confirmed, transport: f.transport, start_time: f.transport ? f.start_time : '', end_time: f.transport ? f.end_time : '', start: f.start, end: f.end, immo_start: f.immo_start, immo_end: f.immo_end, notes: f.notes,
       place: {id: f.place.id, name: f.place.name || '', address: f.place.address || '', lat: f.place.lat, lng: f.place.lng, country: f.place.country || ''},
       origin: f.origin ? {id: f.origin.id, name: f.origin.name || '', address: f.origin.address || '', lat: f.origin.lat, lng: f.origin.lng, country: f.origin.country || ''} : null, staff: f.staff, externals: f.externals, vehicles: f.vehicles};
     try {

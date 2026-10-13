@@ -293,7 +293,7 @@ async function tsDo(fn) { try { await fn(); ts.msg = null; } catch (e) { ts.msg 
 const tsAllEntries = () => (ts.week ? ts.week.entries : []).concat(ts.team ? ts.team.rows.flatMap(r => r.entries) : []);
 
 document.addEventListener('click', ev => {
-  const c = ev.target.closest && ev.target.closest('.ts-cal'); if (c && document.getElementById('ts-view')) { const dp = document.querySelector('.ts-dp'); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } }
+  const c = ev.target.closest && ev.target.closest('.ts-cal'); if (c && document.getElementById('ts-view')) { const dp = document.querySelector('.ts-dp'); if (dp) dpOpen(dp, c); }
 });
 document.addEventListener('click', async ev => {
   const b = ev.target.closest && ev.target.closest('[data-ts]'); if (!b || !document.getElementById('ts-view') || b.tagName === 'INPUT') return;

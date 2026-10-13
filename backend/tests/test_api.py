@@ -741,3 +741,25 @@ def test_transport_and_others_events():
     got = c.get("/api/events", params={"from": "2027-03-01", "to": "2027-03-31"}).json()["events"]
     assert got[0]["title"] == "Enlèvement étagères" and got[0]["transport"] is True and got[0]["bu"] == "OTHERS"
     c.delete(f"/api/events/{got[0]['id']}")
+
+
+def test_transport_time_range():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning
+    c = TestClient(app)
+    base = dict(title="Enlèvement", bu="OTHERS", transport=True, start="2027-04-12", end="2027-04-12", immo_start="2027-04-12", immo_end="2027-04-12", vehicles=[])
+    assert c.post("/api/events", json=_ev(**base, start_time="08:00")).status_code == 422                 # une seule heure
+    assert c.post("/api/events", json=_ev(**base, start_time="10:00", end_time="09:00")).status_code == 422
+    assert c.post("/api/events", json=_ev(**base, start_time="8h", end_time="09:00")).status_code == 422
+    assert c.post("/api/events", json=_ev(**base, start_time="08:00", end_time="12:30")).status_code == 200
+    ev = list(planning.backend().events[planning.calendars_by_bu()["OTHERS"]].values())[-1]
+    assert ev["start"]["dateTime"] == "2027-04-12T08:00:00" and ev["end"]["dateTime"] == "2027-04-12T12:30:00"
+    got = c.get("/api/events", params={"from": "2027-04-01", "to": "2027-04-30"}).json()["events"][0]
+    assert (got["start_time"], got["end_time"], got["end"]) == ("08:00", "12:30", "2027-04-12")
+    c.delete(f"/api/events/{got['id']}")
+    r = c.post("/api/events", json=_ev(**{**base, "transport": False}, start_time="08:00", end_time="12:30"))   # hors transport : heures ignorées
+    assert r.status_code == 200
+    got = c.get("/api/events", params={"from": "2027-04-01", "to": "2027-04-30"}).json()["events"][0]
+    assert got["start_time"] == ""
+    c.delete(f"/api/events/{got['id']}")

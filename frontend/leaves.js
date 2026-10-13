@@ -84,7 +84,7 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('click', async e => {
   if (!document.getElementById('lv-view')) return;
-  const c = e.target.closest && e.target.closest('.lv-cal'); if (c) { const dp = document.querySelector(`.lv-dp[data-k="${c.dataset.k}"]`); if (dp) { try { dp.showPicker(); } catch { dp.focus(); dp.click(); } } return; }
+  const c = e.target.closest && e.target.closest('.lv-cal'); if (c) { const dp = document.querySelector(`.lv-dp[data-k="${c.dataset.k}"]`); if (dp) dpOpen(dp, c); return; }
   const b = e.target.closest && e.target.closest('[data-lv]'); if (!b) return; const a = b.dataset.lv;
   if (a === 'new') { lv.form = lvBlank(); lv.days = null; await lvPreview(); return lvDraw(); }
   if (a === 'cancelform') { lv.form = null; lv.msg = null; return lvDraw(); }

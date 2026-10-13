@@ -132,6 +132,7 @@ function rdSettings() {
 // ---- Dessin -----------------------------------------------------------------------------------------------------------------------------
 function rdDraw() {
   const el = document.getElementById('rd-view'); if (!el) return;
+  const bar = document.querySelector('#page .bu-bar'); if (bar) bar.hidden = !!rd.car;        // le filtre BU n'a de sens que dans la liste des voitures, pas dans la fiche d'une voiture
   const sav = [window.scrollX, window.scrollY];
   if (rd.error && !rd.cars) { el.innerHTML = `<p class="neg">${esc(rd.error)}</p>`; return; }
   const c = rd.car;

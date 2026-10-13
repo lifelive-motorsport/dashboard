@@ -390,6 +390,8 @@ Object.assign(EN, {
   "🗑 Supprimer définitivement": "🗑 Delete permanently",
   "Archivée": "Archived",
   "Voiture archivée : cachée du Garage, ses données sont conservées. « Supprimer définitivement » efface ses pièces, ses runs et sa photo.": "Archived car: hidden from the Garage, its data is kept. “Delete permanently” erases its parts, runs and photo.",
+  "Proposer les BU manquantes": "Suggest the missing BUs",
+  "d’après la catégorie (Rallye / Circuit) et le nom ; à vérifier ensuite voiture par voiture": "based on the category (Rally / Circuit) and the name; check afterwards car by car",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

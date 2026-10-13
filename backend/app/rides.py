@@ -227,6 +227,30 @@ def set_car(key: str, data: CarIn) -> dict:
     return {"bu": meta.get("bu", ""), "archived": bool(meta.get("archived"))}
 
 
+MODERN_RALLY_RE = re.compile(r"\b(wrc|rally[ -]?[1-5]|r5|fabia|yaris|i20|puma|ds ?3|c3 rally|focus rs|evo ?x|impreza|992|gr ?yaris)\b", re.I)
+
+
+def guess_bu(c: dict) -> str:
+    """BU probable d'après la catégorie de la ressource (Rally / Circuit) et le nom : rallye moderne (WRC, Rally1…) sinon rallye historique ; circuit = Historic Racing.
+    Une proposition à vérifier, pas une certitude."""
+    if c.get("category") == "rally":
+        return "MODERN_RALLY" if MODERN_RALLY_RE.search(c["name"]) else "HISTORIC_RALLY"
+    return "HISTORIC_RACING"
+
+
+def guess_missing_bus() -> list[dict]:
+    """Range les voitures sans BU (non archivées) selon guess_bu ; renvoie [{key, name, bu}] pour que l'écran montre ce qui a été fait."""
+    out = []
+    for c in race_cars():
+        meta = cars_coll().get(c["key"]) or {"id": c["key"]}
+        if meta.get("bu") or meta.get("archived"):
+            continue
+        meta["bu"] = guess_bu(c)
+        cars_coll().put(c["key"], meta)
+        out.append({"key": c["key"], "name": c["name"], "bu": meta["bu"]})
+    return out
+
+
 def delete_car(key: str) -> dict:
     """Suppression définitive des données de roulage d'une voiture (pièces, runs, photo, BU) ; la voiture doit d'abord être archivée.
     Le véhicule lui-même reste une ressource de Planifier › Ressources : sans données, il réapparaîtrait vide tant qu'il y figure (le laisser archivé)."""

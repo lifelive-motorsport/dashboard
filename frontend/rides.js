@@ -28,10 +28,12 @@ const rdChip = (state, n) => { const [c, l] = RD_STATE[state] || RD_STATE.none; 
 const rdPhoto = (c, big) => c.photo ? `<img class="rd-photo${big ? ' big' : ''}" src="/api/rides/cars/${encodeURIComponent(c.key)}/photo?t=${rd.photoT || 0}" alt="" loading="lazy">` : `<div class="rd-photo${big ? ' big' : ''} none" aria-hidden="true">${esc(c.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</div>`;
 function rdList() {
   if (!rd.cars) return '<p class="na">Chargement…</p>';
+  const nNoBu = rd.cars.filter(c => !c.bu && !c.archived).length;
+  const guessBar = nNoBu ? `<div class="note"><b>${nNoBu} voiture${nNoBu > 1 ? 's' : ''} sans BU.</b> <button type="button" data-rd="guessbu">Proposer les BU manquantes</button> <small class="na">d’après la catégorie (Rallye / Circuit) et le nom ; à vérifier ensuite voiture par voiture</small></div>` : '';
   const nArch = rd.cars.filter(c => c.archived).length, shown = rd.cars.filter(c => rdBuOk(c) && (rd.showArchived || !c.archived));
   if (rd.cars.length && !shown.length) return '<p class="na">Aucune voiture dans cette BU : la BU d’une voiture se choisit dans sa fiche.</p>';
   if (!rd.cars.length) return '<p class="na">Aucune voiture de course : elles viennent de Planifier › Ressources › Véhicules (catégories Rally et Circuit).</p>';
-  return (nArch ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArch})</label>` : '') + `<div class="rd-grid">${shown.map(c => `<button type="button" class="rd-card${c.archived ? ' arch' : ''}" data-rd="open" data-k="${esc(c.key)}">${rdPhoto(c)}<div class="rd-cbody"><b>${esc(c.name)}${c.archived ? ' <span class="rd-chip">Archivée</span>' : ''}</b><small class="na">${c.bu ? esc(RD_BULAB[c.bu]) : '<span class="neg">BU à définir</span>'} · ${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${c.parts} pièce${c.parts > 1 ? 's' : ''}</small>
+  return guessBar + (nArch ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArch})</label>` : '') + `<div class="rd-grid">${shown.map(c => `<button type="button" class="rd-card${c.archived ? ' arch' : ''}" data-rd="open" data-k="${esc(c.key)}">${rdPhoto(c)}<div class="rd-cbody"><b>${esc(c.name)}${c.archived ? ' <span class="rd-chip">Archivée</span>' : ''}</b><small class="na">${c.bu ? esc(RD_BULAB[c.bu]) : '<span class="neg">BU à définir</span>'} · ${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${c.parts} pièce${c.parts > 1 ? 's' : ''}</small>
     <div>${rdChip(c.state, c.alerts)}</div><small class="na">${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''}${c.last_run ? ' · dernier run ' + fmtDate(c.last_run) : ''}</small></div></button>`).join('')}</div>`;
 }
 
@@ -182,6 +184,7 @@ document.addEventListener('click', async e => {
   try {
     if (a === 'open') return rdOpen(b.dataset.k);
     if (a === 'setbu') { const bu = rd.car.bu === b.dataset.b ? '' : b.dataset.b; await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({bu})}); rd.car.bu = bu; return rdReload(); }
+    if (a === 'guessbu') { const j = await rsCall('/api/rides/guess-bu', {method: 'POST', body: '{}'}); rd.msg = `BU proposées pour ${j.set.length} voiture(s) : ` + j.set.map(x => `${x.name} → ${RD_BULAB[x.bu]}`).join(' · ') + '. À vérifier dans chaque fiche.'; return rdReload(); }
     if (a === 'archive') { await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({archived: !rd.car.archived})}); rd.car.archived = !rd.car.archived; if (rd.car.archived) { rd.car = null; } return rdReload(); }
     if (a === 'delcar') { const c = rd.car; if (!confirm(`Supprimer définitivement « ${c.name} » ?\n\nSes ${c.parts} pièce(s), ses ${c.runs} run(s) et sa photo seront effacés, sans retour possible.${'\n\n'}Le véhicule reste dans Planifier › Ressources : laissez-le archivé s'il y figure encore.`)) return; const j = await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'DELETE'}); rd.car = null; rd.msg = `Données supprimées (${j.parts} pièce(s), ${j.runs} run(s)).`; return rdReload(); }
     if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; await rdReload(); return; }

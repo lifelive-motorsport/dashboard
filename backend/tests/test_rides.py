@@ -101,3 +101,16 @@ def test_archive_then_delete_car_data(api):
     d = car(api)
     assert d["km_total"] == 0 and d["parts"] == 0 and d["photo"] is False and d["archived"] is False and d["bu"] == ""   # la voiture revient vide (elle est toujours une ressource)
     assert api.get(f"/api/rides/cars/{c}/photo").status_code == 404
+
+
+def test_guess_missing_bus_only_fills_empty_cars(api):
+    cars_ = api.get("/api/rides/cars").json()["cars"]
+    keep = next(c for c in cars_ if "BMW M3" in c["name"])
+    api.put(f"/api/rides/cars/{keep['key']}", json={"bu": "XC"})
+    done = api.post("/api/rides/guess-bu").json()["set"]
+    names = {d["name"]: d["bu"] for d in done}
+    assert names == {"Porsche 992 Rally": "MODERN_RALLY"}                                     # la voiture déjà réglée n'est pas touchée
+    assert api.post("/api/rides/guess-bu").json() == {"set": []}
+    assert rides.guess_bu({"name": "Ford Escort RS1600", "category": "rally"}) == "HISTORIC_RALLY"
+    assert rides.guess_bu({"name": "WRC W7 #29", "category": "rally"}) == "MODERN_RALLY"
+    assert rides.guess_bu({"name": "Aston Martin GT3", "category": "circuit"}) == "HISTORIC_RACING"

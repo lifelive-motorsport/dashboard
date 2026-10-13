@@ -796,6 +796,11 @@ def rd_car(key: str, _user: str = Depends(granted("consigner/rides"))):
     return _rd(rides.car_detail, key)
 
 
+@app.post("/api/rides/guess-bu")
+def rd_guess_bu(_user: str = Depends(granted("consigner/rides"))):
+    return {"set": rides.guess_missing_bus()}
+
+
 @app.put("/api/rides/cars/{key}")
 def rd_set_car(key: str, body: rides.CarIn, _user: str = Depends(granted("consigner/rides"))):
     return _rd(rides.set_car, key, body)

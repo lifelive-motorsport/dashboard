@@ -76,7 +76,7 @@ def catalog_coll() -> Coll:
 
 # ---- Modèles ----------------------------------------------------------------------------------------------------------------------------
 
-MAINT_TYPES = ("replace", "revision", "revision2", "fluids", "inspection")
+MAINT_TYPES = ("inspection", "fluids", "revision", "revision2", "replace")          # ordre chronologique logique : contrôle, vidange, révisions, remplacement
 MAINT_LABEL = {"replace": "Remplacement", "revision": "Révision 1", "revision2": "Révision 2", "fluids": "Vidange et nouveaux fluides", "inspection": "Contrôle"}
 LOGGED = ("revision", "revision2", "fluids", "inspection")          # maintenances qui s'enregistrent avec 🛠 (le remplacement se fait par « Remplacer »)
 
@@ -307,7 +307,7 @@ def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None, tod
     km = p.get("km_start", 0.0) + sum(r.get("km") or 0.0 for r in mine)
     hours = p.get("hours_start", 0.0) + sum(r.get("hours") or 0.0 for r in mine)
     meters = []
-    for t in types_of(p):
+    for t in [x for x in MAINT_TYPES if x in types_of(p)]:
         if t == "replace":
             lim = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "limit_months": p.get("limit_months"), "warn_pct": p.get("warn_pct"), "note": p.get("limit_note", "")}
             mk, mh, ev, last, ref = km, hours, len(mine), None, a or None

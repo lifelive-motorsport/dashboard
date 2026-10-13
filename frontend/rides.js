@@ -6,7 +6,7 @@ const rdPct = r => r == null ? '' : Math.round(r * 100) + ' %';
 const RD_STATE = {over: ['neg', 'Limite dépassée'], warn: ['warn', 'À surveiller'], ok: ['pos', 'OK'], none: ['na', '']};
 const rdNum = v => v === '' || v == null ? null : parseFloat(String(v).replace(',', '.'));
 const rdToday = () => new Date().toISOString().slice(0, 10);
-const RD_MAINT = [['replace', 'Remplacement'], ['revision', 'Révision 1'], ['revision2', 'Révision 2'], ['fluids', 'Vidange et nouveaux fluides'], ['inspection', 'Contrôle']];
+const RD_MAINT = [['inspection', 'Contrôle'], ['fluids', 'Vidange et nouveaux fluides'], ['revision', 'Révision 1'], ['revision2', 'Révision 2'], ['replace', 'Remplacement']];       // ordre chronologique logique
 const RD_MLAB = Object.fromEntries(RD_MAINT);
 const rdLimBlank = () => ({limit_km: '', limit_hours: '', limit_months: '', limit_events: '', warn_pct: 75, note: ''});
 const rdLimOf = x => ({limit_km: x.limit_km ?? '', limit_hours: x.limit_hours ?? '', limit_months: x.limit_months ?? '', limit_events: x.limit_events ?? '', warn_pct: x.warn_pct ?? 75, note: x.note ?? x.limit_note ?? ''});
@@ -96,7 +96,7 @@ function rdPartForm() {
     <div class="sdgrid">${nameField}${root ? '' : inp('reference', 'Référence constructeur', {w: '220px'})}${root ? '' : inp('serial', 'N° de série', {w: '200px'})}</div>
     ${root ? '' : `<label class="chk"><input type="checkbox" data-rd-f="group" ${f.group ? 'checked' : ''} ${f.id ? 'disabled' : ''}> Regroupement : pas de compteur propre, son état est celui de ses éléments</label>`}
     ${f.group ? '' : `<div class="rd-types"><b>Maintenances suivies</b>${RD_MAINT.map(([t, l]) => `<label class="chk"><input type="checkbox" data-rd-ft="${t}" ${f.types.includes(t) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
-      ${f.types.map(lim).join('')}
+      ${RD_MAINT.filter(([t]) => f.types.includes(t)).map(([t]) => lim(t)).join("")}
       <div class="sdgrid">${inp('km_start', 'Km au montage', {w: '140px'})}${inp('hours_start', 'Heures au montage', {w: '140px'})}
       <label class="sdfield"><span>Monté le</span>${dpField('data-rd-f="mounted_from"', f.mounted_from || '')}</label></div><small class="na">Les runs de la voiture à partir de la date de montage comptent pour cette pièce ; laissez vide si elle est montée depuis toujours. Les révisions, la vidange et le contrôle repartent à chaque maintenance enregistrée (🛠).</small>`}
     ${inp('notes', 'Notes')}

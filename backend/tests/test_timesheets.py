@@ -487,3 +487,18 @@ def test_wall_snapshot_has_no_money_and_needs_the_page(api, monkeypatch):
     as_(api, NOBODY)
     monkeypatch.setattr(users, "pages_of", lambda e: {"planifier/planning"})
     assert api.get("/api/wall").status_code == 403
+
+
+def test_wall_shows_the_staff_name_even_without_workshop_role(api, monkeypatch):
+    from app import presence
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {})
+    jid = mkjob(api, title="Révision BMW").json()["id"]
+    cur = staff.store().get()
+    people = cur["data"]["people"] + [{"id": "r1", "name": "Raphaël de Borman", "kind": "independant", "function": "MD", "google_email": "raphael.deborman@lifelive-motorsport.com"}]
+    assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
+    as_(api, CHEF)
+    assert api.post("/api/timesheets/entries", json=entry(jid, user="raphael.deborman@lifelive-motorsport.com")).status_code in (200, 201, 403, 422)
+    monkeypatch.setattr(users, "pages_of", lambda e: {"consigner/wall"})
+    timesheets.entries().put("x1", {"id": "x1", "job_id": jid, "user": "raphael.deborman@lifelive-motorsport.com", "date": date.today().isoformat(), "minutes": 60, "created_at": "2026-01-01T00:00:00+00:00"})
+    j = next(x for x in api.get("/api/wall").json()["jobs"] if x["title"] == "Révision BMW")
+    assert "Raphaël de Borman" in j["today"]

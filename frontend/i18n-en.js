@@ -300,6 +300,7 @@ Object.assign(EN, {
   "Personne.": "Nobody.",
   "mise à jour automatique toutes les 60 s": "updates automatically every 60 s",
   "Logbook · Google Agenda": "Logbook · Google Calendar",
+  "✕ Quitter le plein écran": "✕ Exit full screen",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

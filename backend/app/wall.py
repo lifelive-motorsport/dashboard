@@ -21,7 +21,8 @@ def snapshot(now: datetime | None = None) -> dict:
     jobs = {j["id"]: j for j in timesheets.jobs().all()}
     week = timesheets.entries().between("date", mon.isoformat(), today.isoformat())
     by_job: dict[str, dict] = {}
-    names = {p["google_email"].lower(): p["name"] for p in timesheets.workshop_people()}
+    from . import staff, users
+    names = {p["google_email"].lower(): p["name"] for p in staff.store().get()["data"]["people"] if p.get("google_email")}
     total = billable = 0
     for e in week:
         j = jobs.get(e["job_id"])
@@ -33,7 +34,7 @@ def snapshot(now: datetime | None = None) -> dict:
         d["minutes"] += m
         d["last"] = max(d["last"], e["date"])
         if e["date"] == today.isoformat():
-            d["today"].add(names.get(e["user"], e["user"].split("@")[0].replace(".", " ").title()))
+            d["today"].add(names.get(e["user"]) or users.identity(e["user"])["name"])
     open_jobs = []
     for j in jobs.values():
         if not j.get("open", True) or j.get("kind") == "background":

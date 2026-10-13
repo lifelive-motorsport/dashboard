@@ -419,3 +419,4 @@ input[type="time"]::-webkit-calendar-picker-indicator{opacity:.6;cursor:pointer}
 @media (max-width:900px){.wl-cols{grid-template-columns:1fr}.wl-list{grid-template-columns:1fr}}
 body.wall-full header,body.wall-full #nav,body.wall-full #tabbar,body.wall-full #page-title,body.wall-full #foot,body.wall-full #backdrop,body.wall-full #status,body.wall-full #fb-open{display:none!important}body.wall-full main{margin:0;max-width:none;padding:18px 24px}body.wall-full #app{display:block}
 @media print{.wl-top button{display:none}}
+#wl-exit{position:fixed;top:10px;right:10px;z-index:3000;opacity:.35;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);font:inherit;font-size:13px;cursor:pointer}#wl-exit:hover,#wl-exit:focus{opacity:1}.wl-top{position:relative;z-index:5}

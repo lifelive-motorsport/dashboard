@@ -9,12 +9,12 @@ const wlHours = m => { const h = Math.floor(m / 60), r = m % 60; return h ? `${h
 
 function wallBlocks() { return [{static: '<section class="block wl-block" data-bid="wl"><div id="wl-view"><p class="na">Chargement…</p></div></section>'}]; }
 
+const wlClockHtml = () => { const now = new Date(); return `${esc(now.toLocaleDateString(LOCALE(), {weekday: 'long', day: 'numeric', month: 'long'}))} · <b>${esc(now.toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit'}))}</b>`; };
 function wlTop() {
   const pill = (a, k, l, on) => `<button type="button" class="rs-pill" data-wl="${a}" data-k="${k}" aria-pressed="${on}">${esc(l)}</button>`;
-  const now = new Date();
   return `<div class="wl-top"><div class="bu-filter">${pill('view', 'events', 'Événements', wl.view === 'events')}${pill('view', 'atelier', 'Atelier', wl.view === 'atelier')}</div>
     <div class="bu-filter">${[['all', 'Toutes les BU'], ['xc', 'XC'], ['cars', 'CARS']].concat(wl.view === 'events' ? [['others', 'Others']] : []).map(([k, l]) => pill('bu', k, l, wl.bu === k)).join('')}</div>
-    <span class="wl-sp"></span><span class="wl-clock" id="wl-clock">${esc(now.toLocaleDateString(LOCALE(), {weekday: 'long', day: 'numeric', month: 'long'}))} · <b>${esc(now.toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit'}))}</b></span>
+    <span class="wl-sp"></span><span class="wl-clock" id="wl-clock">${wlClockHtml()}</span>
     <button type="button" class="mini" data-wl="full">${wl.full ? 'Quitter le plein écran' : '⛶ Plein écran'}</button></div>`;
 }
 
@@ -48,9 +48,12 @@ function wlAtelier() {
     <div class="wl-cols"><div><h4 class="sub">Jobs en cours</h4>${jobs.length ? jobs.slice(0, 12).map(job).join('') : '<p class="na">Aucun job ouvert.</p>'}</div><div><h4 class="sub">Équipe aujourd’hui</h4>${people.length ? people.map(person).join('') : '<p class="na">Personne.</p>'}</div></div>`;
 }
 
+// La barre du haut n'est reconstruite que si la vue, la BU ou le plein écran changent : les boutons ne sont jamais remplacés sous le doigt par la mise à jour automatique.
 function wlDraw() {
   const el = document.getElementById('wl-view'); if (!el) return;
-  el.innerHTML = wlTop() + (wl.error ? `<p class="neg">${esc(wl.error)}</p>` : '') + (wl.view === 'events' ? wlEvents() : wlAtelier())
+  const sig = [wl.view, wl.bu, wl.full, LANG].join('|');
+  if (el.dataset.sig !== sig || !el.querySelector('.wl-top')) { el.dataset.sig = sig; el.innerHTML = wlTop() + '<div id="wl-body"></div>'; }
+  document.getElementById('wl-body').innerHTML = (wl.error ? `<p class="neg">${esc(wl.error)}</p>` : '') + (wl.view === 'events' ? wlEvents() : wlAtelier())
     + `<small class="na wl-foot">${wl.at ? 'Actualisé à ' + esc(wl.at.toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit'})) + ' · ' : ''}mise à jour automatique toutes les 60 s</small>`;
 }
 async function wlLoad() {
@@ -62,14 +65,16 @@ async function wlLoad() {
   } catch (e) { wl.error = e.message; }
   wl.loading = false; wlDraw();
 }
-function wlStart() { wlStop(); wlDraw(); wlLoad(); wl.timer = setInterval(wlLoad, 60000); wl.clock = setInterval(() => { const c = document.getElementById('wl-clock'); if (c) wlDraw(); }, 30000); }
+function wlStart() { wlStop(); wlDraw(); wlLoad(); wl.timer = setInterval(wlLoad, 60000); wl.clock = setInterval(() => { const c = document.getElementById('wl-clock'); if (c) c.innerHTML = wlClockHtml(); }, 15000); }
 function wlStop() { clearInterval(wl.timer); clearInterval(wl.clock); wl.timer = wl.clock = null; if (wl.full) wlFull(false); }
 function wlFull(on) {
   wl.full = on; document.body.classList.toggle('wall-full', on);
+  let x = document.getElementById('wl-exit'); if (x) x.remove();
+  if (on) { x = document.createElement('button'); x.id = 'wl-exit'; x.type = 'button'; x.dataset.wl = 'full'; x.textContent = '✕ Quitter le plein écran'; document.body.appendChild(x); }
   try { if (on && !document.fullscreenElement) document.documentElement.requestFullscreen(); else if (!on && document.fullscreenElement) document.exitFullscreen(); } catch {}
   wlDraw();
 }
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wl.full) { wl.full = false; document.body.classList.remove('wall-full'); wlDraw(); } });
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wl.full) wlFull(false); });
 document.addEventListener('click', e => {
   const b = e.target.closest && e.target.closest('[data-wl]'); if (!b || !document.getElementById('wl-view')) return;
   const a = b.dataset.wl;

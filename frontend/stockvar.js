@@ -48,11 +48,11 @@ document.addEventListener('click', e => {
 
 // ---- Volet « Variations de stock » de la page Stock ---------------------------------------------------------------
 function stockVarBlocks() {
-  return [{static: '<section class="block" data-bid="stockvar"><div class="block-head"><h3>Variations de stock</h3></div><div class="block-body" id="stockvar-view"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="stockvar"><div class="block-head"><h3>Variations de stock</h3></div><div class="block-body" id="stockvar-view"><p class="na loading">Chargement…</p></div></section>'}];
 }
 function drawStockVar() {
   const el = document.getElementById('stockvar-view'); if (!el) return;
-  if (!sv.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!sv.loaded) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (sv.error) { el.innerHTML = `<p class="neg">${esc(sv.error)}</p>`; return; }
   const edit = sv.can_edit && sv.can_save !== false, items = edit ? svDraft : (sv.items || []), dis = edit ? '' : ' disabled';
   const year = new Date().getFullYear(), tot = items.filter(a => a.enabled && a.date && a.date.startsWith(String(year))).reduce((t, a) => t + (+a.amount || 0), 0);

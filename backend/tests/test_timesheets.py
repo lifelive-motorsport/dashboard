@@ -43,8 +43,13 @@ def mkjob(c, kind="atelier", title="Pre-event Spa / Porsche", bu="CARS", **kw):
     return c.post("/api/timesheets/jobs", json=body)
 
 
+def local_today():
+    from app import presence
+    return presence.local_now().date()                                  # date de Bruxelles : celle du Cockpit (date.today() est en UTC, différent entre 22 h et minuit)
+
+
 def entry(job, **kw):
-    return {"job_id": job, "date": date.today().isoformat(), "minutes": 90, "assignment": "prepa", "system": "moteur", "text": "Vidange", **kw}
+    return {"job_id": job, "date": local_today().isoformat(), "minutes": 90, "assignment": "prepa", "system": "moteur", "text": "Vidange", **kw}
 
 
 def test_roles(api):
@@ -501,7 +506,7 @@ def test_wall_shows_the_staff_name_even_without_workshop_role(api, monkeypatch):
     as_(api, CHEF)
     assert api.post("/api/timesheets/entries", json=entry(jid, user="raphael.deborman@lifelive-motorsport.com")).status_code in (200, 201, 403, 422)
     monkeypatch.setattr(users, "pages_of", lambda e: {"consigner/wall"})
-    timesheets.entries().put("x1", {"id": "x1", "job_id": jid, "user": "raphael.deborman@lifelive-motorsport.com", "date": date.today().isoformat(), "minutes": 60, "created_at": "2026-01-01T00:00:00+00:00"})
+    timesheets.entries().put("x1", {"id": "x1", "job_id": jid, "user": "raphael.deborman@lifelive-motorsport.com", "date": local_today().isoformat(), "minutes": 60, "created_at": "2026-01-01T00:00:00+00:00"})
     j = next(x for x in api.get("/api/wall").json()["jobs"] if x["title"] == "Révision BMW")
     assert "Raphaël de Borman" in j["today"]
 

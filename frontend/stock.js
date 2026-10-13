@@ -13,14 +13,14 @@ async function loadStock(force) {
 }
 
 function stockBlocks() {
-  return [{static: '<section class="block" data-bid="stock"><div class="block-head"><h3>Valorisation du stock XC</h3><span class="per-wrap"><small class="per-dates" id="stock-date">à date</small></span></div><div class="block-body" id="stock-view"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="stock"><div class="block-head"><h3>Valorisation du stock XC</h3><span class="per-wrap"><small class="per-dates" id="stock-date">à date</small></span></div><div class="block-body" id="stock-view"><p class="na loading">Chargement…</p></div></section>'}];
 }
 
 const sNum = n => num(Math.round(n * 100) / 100);
 function drawStock() {
   const el = document.getElementById('stock-view'); if (!el) return;
   const d = stockState.data;
-  if (!d) { el.innerHTML = stockState.error ? `<p class="neg">${esc(stockState.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  if (!d) { el.innerHTML = stockState.error ? `<p class="neg">${esc(stockState.error)}</p>` : '<p class="na loading">Chargement…</p>'; return; }
   if (d.unavailable) { el.innerHTML = `<p class="na">${esc(d.unavailable)}</p>`; return; }
   const dt = document.getElementById('stock-date'); if (dt) dt.textContent = 'Situation au ' + fmtDate(d.as_of);
   const t = d.total, a = d.attention, pifSet = !!d.pif_field;

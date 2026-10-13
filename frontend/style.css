@@ -484,3 +484,5 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .rd-lt{width:150px;flex:none;display:flex;flex-direction:column;line-height:1.2;padding-bottom:8px}
 .rd-lf{display:flex;flex-direction:column;gap:2px;flex:none}.rd-lf span{font-size:11px;color:var(--mut)}.rd-lf input{width:100%;box-sizing:border-box}
 .rd-lnote{flex:1 1 200px;min-width:160px}
+.loading::before{content:"";display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--fg);border-radius:50%;animation:turn .8s linear infinite;margin-right:8px;vertical-align:-2px}
+@media (prefers-reduced-motion:reduce){.loading::before{animation-duration:2.4s}}

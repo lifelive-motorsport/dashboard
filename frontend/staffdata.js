@@ -41,14 +41,14 @@ window.addEventListener('beforeunload', e => { if (sd.dirty && sd.canSave !== fa
 
 // ---- Pages -------------------------------------------------------------------------------------------------------
 function staffSourceBlocks() {
-  return [{static: '<section class="block" data-bid="staff-src"><div class="block-head"><h3>Données source du personnel</h3></div><div class="block-body" id="staff-source"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="staff-src"><div class="block-head"><h3>Données source du personnel</h3></div><div class="block-body" id="staff-source"><p class="na loading">Chargement…</p></div></section>'}];
 }
 function staffPeopleBlocks() {
-  return [{static: '<section class="block" data-bid="staff-ppl"><div class="block-head"><h3>Imputation du personnel sur les BU et Shared Services</h3></div><div class="block-body" id="staff-people"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="staff-ppl"><div class="block-head"><h3>Imputation du personnel sur les BU et Shared Services</h3></div><div class="block-body" id="staff-people"><p class="na loading">Chargement…</p></div></section>'}];
 }
 
 function sdGate() {
-  if (!sd.loaded) return '<p class="na">Chargement…</p>';
+  if (!sd.loaded) return '<p class="na loading">Chargement…</p>';
   if (sd.error) return `<p class="neg">${esc(sd.error)}</p>`;
   if (sd.restricted) return '<p class="na">Ces données (rémunérations, coûts par personne) sont réservées aux administrateurs de Logbook.</p>';
   return '';
@@ -127,7 +127,7 @@ function sdIndependentCompanies(p) {
   const res = sd.results ? (sd.results.length ? sd.results.map(r => `<div class="sdres"><span>${esc(r.name)} <small class="na">${esc([r.vat, r.city].filter(Boolean).join(' · '))}</small></span> <button type="button" data-sd-add-partner data-pid="${p.id}" data-id="${r.id}" data-name="${esc(r.name)}">Ajouter</button></div>`).join('') : '<small class="na">Aucune société trouvée.</small>') : '';
   const inv = sd.inv[p.id];
   const list = !(p.partners || []).length ? '<p class="na">Rattachez une ou plusieurs sociétés Odoo pour faire remonter les factures de cet indépendant.</p>'
-    : !inv ? '<p class="na">Chargement des factures…</p>'
+    : !inv ? '<p class="na loading">Chargement des factures…</p>'
     : inv.error ? `<p class="neg">${esc(inv.error)}</p>`
     : inv.list.length ? table(['Date', 'Facture', 'Référence', 'Société', 'HT', 'Honoraires (613)', 'TTC', 'Payée'], inv.list.map(x => `<tr><td>${fmtDate(x.date)}</td><td>${esc(x.number)}${x.refund ? ' <small class="na">(avoir)</small>' : ''}</td><td>${esc(x.ref)}</td><td>${esc(x.partner)}</td><td>${sdEur2(x.untaxed)}</td><td${Math.abs((x.fees || 0) - x.untaxed) > 0.5 ? ' class="adjv" title="Une partie de la facture n’est pas un honoraire (frais avancés…)"' : ''}>${sdEur2(x.fees || 0)}</td><td>${sdEur2(x.total)}</td><td>${x.paid ? '✓' : '–'}</td></tr>`)
         .concat([`<tr class="tot"><td>Total ${SD_YEAR}</td><td></td><td></td><td></td><td>${sdEur2(inv.list.reduce((t, x) => t + x.untaxed, 0))}</td><td>${sdEur2(sdFees(inv))}</td><td>${sdEur2(inv.list.reduce((t, x) => t + x.total, 0))}</td><td></td></tr>`]), 'prodtable sdtable')
@@ -163,7 +163,7 @@ function sdMatchRows(pay, accM) {
 }
 function sdControl() {
   const a = sd.acc;
-  if (!a) return '<p class="na">Chargement des données comptables…</p>';
+  if (!a) return '<p class="na loading">Chargement des données comptables…</p>';
   if (a.unavailable) return `<p class="na">${esc(a.unavailable)}</p>`;
   const m = sdMatchRows(SC.payrollByMonth(sd.doc.people), a.pay_by_month || {});
   const tbl = (r, label) => r.rows.length ? table(['Mois', 'Fiches de paie (brut + patronal)', label, 'Écart'], r.rows.concat([`<tr class="tot"><td>Total</td><td>${sdEur2(r.tp)}</td><td>${sdEur2(r.ta)}</td><td>${sdEur2(r.tp - r.ta)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune donnée à comparer pour ' + SD_YEAR + '.</p>';
@@ -373,7 +373,7 @@ const SD_VIEWS = {
   management: {title: 'Coûts du personnel du Management', scope: ['MANAGEMENT']},
 };
 function staffViewBlocks(view) {
-  return [{static: `<section class="block" data-bid="staff-view-${view}"><div class="block-head"><h3>${esc(SD_VIEWS[view].title)}</h3></div><div class="block-body" id="staff-view" data-view="${view}"><p class="na">Chargement…</p></div></section>`}];
+  return [{static: `<section class="block" data-bid="staff-view-${view}"><div class="block-head"><h3>${esc(SD_VIEWS[view].title)}</h3></div><div class="block-body" id="staff-view" data-view="${view}"><p class="na loading">Chargement…</p></div></section>`}];
 }
 const sdLabel = k => (SD_SHARES.find(x => x[0] === k) || [k, k])[1];
 // Coût réel d'une personne depuis le 1er janvier (sans projection) : fiches saisies ou factures d'honoraires.

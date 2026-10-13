@@ -7,7 +7,7 @@ const lvStatus = {pending: ['À approuver', ''], approved: ['Validé', 'done'], 
 const lvDays = n => `${String(n).replace('.', LOCALE() === 'en-GB' ? '.' : ',')} ${n > 1 ? 'jours' : 'jour'}`;
 const lvDate = iso => fmtDate(iso);
 
-function leavesBlocks() { return [{static: '<section class="block" data-bid="lv"><div class="block-head"><h3>Congés</h3></div><div class="block-body" id="lv-view"><p class="na">Chargement…</p></div></section>'}]; }
+function leavesBlocks() { return [{static: '<section class="block" data-bid="lv"><div class="block-head"><h3>Congés</h3></div><div class="block-body" id="lv-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function lvLoad() {
   lv.err = null; lvDraw();
@@ -47,7 +47,7 @@ function lvDraw() {
   const v = document.getElementById('lv-view'); if (!v) return;
   const d = lv.data;
   if (lv.err) v.innerHTML = `<p class="err">${esc(lv.err)}</p>`;
-  else if (!d) v.innerHTML = '<p class="na">Chargement…</p>';
+  else if (!d) v.innerHTML = '<p class="na loading">Chargement…</p>';
   else if (!d.person.linked) v.innerHTML = '<p class="na">Votre adresse Google n’est liée à aucune fiche du staff : demandez au Super User de la renseigner (Planifier › Ressources › Staff interne).</p>';
   else {
     const bal = d.balances.map(b => `<div><small>${esc(t(b.label))}</small><b>${lvDays(b.remaining)}</b><small>${b.used ? `${esc(t('pris'))} ${b.used} · ` : ''}${esc(t('alloués'))} ${b.allocated}${b.pending ? ` · ${esc(t('en attente'))} ${b.pending}` : ''}</small></div>`).join('');

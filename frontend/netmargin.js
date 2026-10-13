@@ -154,10 +154,10 @@ function nmAssumptions(res) {
       ['Ils figurent dans le résultat comptable d’Odoo mais pas ici : la marge nette est avant amortissements et avant éléments financiers.', 'Voir le rapprochement avec le P&L d’Odoo pour les montants.']);
 }
 function nmHtml(d, scope) {
-  if (!d) return '<p class="na">Chargement…</p>';
+  if (!d) return '<p class="na loading">Chargement…</p>';
   if (sd.loaded && sd.restricted) return '<p class="na">La marge nette inclut les rémunérations : elle est réservée aux administrateurs de Logbook.</p>';
   if (nm.err) return `<p class="neg">${esc(nm.err)}</p>`;
-  if (!nm.ready) return '<p class="na">Chargement des coûts (personnel, frais généraux, véhicules)…</p>';
+  if (!nm.ready) return '<p class="na loading">Chargement des coûts (personnel, frais généraux, véhicules)…</p>';
   if (!ex.alloc) return `<p class="neg">Clé d’imputation des frais généraux indisponible${ex.allocErr ? ' : ' + esc(ex.allocErr) : ''}.</p>`;
   const res = nmCompute(d), c = res.cols, tot = nmSum(c, Object.keys(c)), xc = nmSum(c, ['XC']), cars = nmSum(c, NM_CARS);
   if (scope === 'all' && buSel !== 'all') scope = buSel === 'xc' ? 'xc' : buSel === 'cars' ? 'cars' : 'one';

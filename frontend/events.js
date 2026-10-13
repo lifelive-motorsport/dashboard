@@ -6,7 +6,7 @@ const peDay = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate
 const peToday = () => new Date().toISOString().slice(0, 10);
 let peTimer = null, peBusyTimer = null;
 
-function eventsBlocks() { return [{static: '<section class="block" data-bid="pe"><div class="block-head"><h3>Événements</h3></div><div class="block-body" id="pe-view"><p class="na">Chargement…</p></div></section>'}]; }
+function eventsBlocks() { return [{static: '<section class="block" data-bid="pe"><div class="block-head"><h3>Événements</h3></div><div class="block-body" id="pe-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function peLoad() {
   try {
@@ -38,7 +38,7 @@ const peVehicles = () => ((rs.vehicles || {}).items || []).filter(v => v.email);
 
 function peDraw() {
   const el = document.getElementById('pe-view'); if (!el) return;
-  if (!pe.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!pe.loaded) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (pe.error) { el.innerHTML = `<p class="neg">${esc(pe.error)}</p>`; return; }
   const c = pe.cfg, f = pe.form;
   const warn = [];

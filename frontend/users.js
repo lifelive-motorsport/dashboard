@@ -9,7 +9,7 @@ const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Adminis
 const usPages = () => CHAPTERS.flatMap(c => c.modules.map(m => [m.id, c.label + ' › ' + m.label, modulePages(m).filter(p => !SUPER_ONLY.has(p[0])).map(p => [p[0], m.groups ? p[2] + ' › ' + p[1] : p[1]])])).filter(([, , it]) => it.length);
 const usAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
 
-function usersBlocks() { return [{static: '<section class="block" data-bid="viewas"><div class="block-head"><h3>Se connecter en tant que…</h3></div><div class="block-body" id="viewas-view"><p class="na">Chargement…</p></div></section>'}, {static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na">Chargement…</p></div></section>'}]; }
+function usersBlocks() { return [{static: '<section class="block" data-bid="viewas"><div class="block-head"><h3>Se connecter en tant que…</h3></div><div class="block-body" id="viewas-view"><p class="na loading">Chargement…</p></div></section>'}, {static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function loadUsers() {
   if (us.dirty) return;                       // des modifications non enregistrées ne sont jamais écrasées par un rechargement (retour sur l'onglet, actualisation automatique)
@@ -36,7 +36,7 @@ function usAddSuggested() { (us.suggested || []).forEach(s => { if (!us.users.so
 function usAddSupers() { (us.fixed || []).filter(f => f.role === 'super').forEach(f => { if (!us.users.some(u => u.email === f.email)) us.users.unshift({email: f.email, role: 'pending', note: '', nickname: ''}); }); }
 function drawUsers() {
   const el = document.getElementById('users-view'); if (!el) return;
-  if (!us.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!us.loaded) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (us.error) { el.innerHTML = `<p class="neg">${esc(us.error)}</p>`; return; }
   const roles = usRoles();
   const sel = (v, i) => `<select class="sdin us-role" data-i="${i}">${roles.map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}${roles.some(([k]) => k === v) ? '' : `<option value="${esc(v)}" selected>${esc(usRoleLabel(v))}</option>`}</select>`;
@@ -102,7 +102,7 @@ async function loadViewAs() {
 function drawViewAs() {
   const el = document.getElementById('viewas-view'); if (!el) return;
   if (va.err) { el.innerHTML = `<p class="neg">${esc(va.err)}</p>`; return; }
-  if (!va.cands) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!va.cands) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   el.innerHTML = `<p class="na">Ouvrez Logbook comme le ferait la personne choisie : ses pages, ses droits et ses données. Pour tester une demande de congé ou un pointage de bout en bout, cochez « Autoriser les modifications » : vos actions seront alors faites <b>en son nom</b> (e-mails compris) et enregistrées dans un journal. La session dure 2 heures.</p>
     <div class="sdgrid"><label class="sdfield"><span>Utilisateur</span><select class="sdin" id="va-user"><option value="">— Choisir —</option>${va.cands.map(c => `<option value="${esc(c.email)}"${va.email === c.email ? ' selected' : ''}>${esc(c.name)}${c.info ? ' · ' + esc(c.info) : ''}</option>`).join('')}</select></label>
     <label class="sdfield"><span>Modifications</span><label class="chk"><input type="checkbox" id="va-write"${va.write ? ' checked' : ''}> <span>Autoriser les modifications (en son nom)</span></label></label></div>

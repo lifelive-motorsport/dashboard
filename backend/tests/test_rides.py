@@ -329,3 +329,11 @@ def test_ensembles_follow_the_list_order(api):
     for n in ("Freins", "Moteur", "Carburant"):
         api.post(f"/api/rides/cars/{c}/parts", json={"name": n, "group": True})
     assert [n["name"] for n in api.get(f"/api/rides/cars/{c}").json()["tree"]] == ["Moteur", "Freins", "Carburant"]
+
+
+def test_cars_list_reads_each_collection_once(api, monkeypatch):
+    calls = []
+    real = timesheets.Coll.all
+    monkeypatch.setattr(timesheets.Coll, "all", lambda self: (calls.append(1), real(self))[1])
+    cs = api.get("/api/rides/cars").json()["cars"]
+    assert len(cs) >= 2 and len(calls) <= 5                  # parts, runs, maintenances, voitures : une lecture chacune, quel que soit le nombre de voitures (avant : une par voiture et par collection)

@@ -14,7 +14,7 @@ const tsStamp = iso => new Date(iso).toLocaleString(LOCALE(), {day: 'numeric', m
 const tsPage = () => location.hash.includes('consigner/team') ? 'team' : 'mine';
 
 function tsBlocks(page) {
-  return [{static: `<section class="block" data-bid="ts"><div class="block-head"><h3>${page === 'team' ? 'Équipe' : 'Mes pointages'}</h3></div><div class="block-body" id="ts-view"><p class="na">Chargement…</p></div></section>`}];
+  return [{static: `<section class="block" data-bid="ts"><div class="block-head"><h3>${page === 'team' ? 'Équipe' : 'Mes pointages'}</h3></div><div class="block-body" id="ts-view"><p class="na loading">Chargement…</p></div></section>`}];
 }
 
 async function tsLoad(page) {
@@ -195,7 +195,7 @@ function tsDraw() {
   const page = tsPage();
   let h = '';
   if (ts.err) h = `<p class="err">${esc(ts.err)}</p>`;
-  else if (!ts.me) h = '<p class="na">Chargement…</p>';
+  else if (!ts.me) h = '<p class="na loading">Chargement…</p>';
   else if (!ts.me.role) h = '<p class="na">Vous n’êtes pas encore inscrit à l’atelier : demandez au Super User de renseigner votre compte Google et votre rôle (Planifier › Ressources › Staff interne › Atelier).</p>';
   else if (page === 'team' && ts.me.role !== 'chef') h = '<p class="na">Cette page est réservée au chef d’atelier.</p>';
   else h = (ts.msg ? `<p class="ts-msg">${esc(ts.msg)}</p>` : '') + (page === 'team' ? tsTeamHtml() : tsMineHtml());

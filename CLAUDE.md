@@ -8,6 +8,8 @@ Le cache du service worker (`frontend/sw.js`, constante `C`) se monte à chaque 
 
 Navigation : 4 chapitres / 8 modules, définis dans `frontend/modules.js` (registre) ; chaque page a une clé « groupe/page » dans `MENU` (`frontend/app.js`) et, côté serveur, ses routes et données dans `backend/app/access.py` (`PAGES`) : ajouter une page ou un module = renseigner ces trois endroits. Les droits des utilisateurs se donnent page par page (Administrer › Équipage).
 
+Indicateurs de chargement : tout texte « Chargement… » porte la classe `loading` (rond qui tourne, `style.css`). Liste du Garage : `rides.cars()` lit chaque collection une seule fois (`_snapshot`) ; « ← Voitures » affiche la liste en mémoire sans attendre.
+
 Affichage clair / sombre : bouton de l'en-tête (`frontend/theme.js`, choix gardé dans le navigateur sous `lm_theme`, appliqué avant l'affichage par un petit script de `index.html` ; sans choix, l'application suit la préférence de l'appareil) ; les couleurs viennent des variables de `style.css` (`:root[data-theme="dark|light"]`).
 
 Langues : l'interface est en français (langue source) avec un bouton FR / EN en haut à droite. Les traductions sont dans `frontend/i18n-en.js` (texte français exact -> anglais ; motifs pour les phrases à valeurs variables) ; un texte absent du dictionnaire reste en français. Tout nouveau texte visible doit être ajouté au dictionnaire. Les formats de nombres suivent `LOCALE()`.

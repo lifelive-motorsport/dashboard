@@ -29,7 +29,7 @@ const tnCmp = (a, b, dir) => a === null || b === null ? (a === null) - (b === nu
 const tnSortRows = rows => tn.sort.k === 'devis' ? rows : rows.slice().sort((x, y) => tnCmp(tnVal(x, tn.sort.k), tnVal(y, tn.sort.k), tn.sort.dir));
 
 function tn11Blocks() {
-  return [{static: '<section class="block" data-bid="tn11"><div class="block-head"><h3>Contrôle d’un devis TN11</h3></div><div class="block-body" id="tn11-view"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="tn11"><div class="block-head"><h3>Contrôle d’un devis TN11</h3></div><div class="block-body" id="tn11-view"><p class="na loading">Chargement…</p></div></section>'}];
 }
 const tnEur = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
 const tnEur0 = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', maximumFractionDigits: 0}).format(n);

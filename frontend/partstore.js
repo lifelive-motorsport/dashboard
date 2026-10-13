@@ -8,7 +8,7 @@ const psLim = (l = {}) => rdLimOf(l);
 const psMkNode = (parent, group) => ({id: psId(), parent_id: parent, name: '', reference: '', group, types: group ? [] : ['replace'], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim()]))});
 const psBlank = () => ({id: null, name: '', description: '', nodes: []});
 
-function partsBlocks() { return [{static: '<section class="block" data-bid="ps"><div id="ps-view"><p class="na">Chargement…</p></div></section>'}]; }
+function partsBlocks() { return [{static: '<section class="block" data-bid="ps"><div id="ps-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function psLoad() {
   ps.loading = true; psDraw();
@@ -41,7 +41,7 @@ function psDraw() {
     const cards = (ps.list || []).map(t => `<div class="ps-card"><div><b>${esc(t.name)}</b>${t.description ? `<br><small class="na">${esc(t.description)}</small>` : ''}<br><small class="na">${psSummary(t)}</small></div>
       <div class="rd-acts"><button type="button" class="mini" data-ps="open" data-t="${esc(t.id)}">✎ Modifier</button><button type="button" class="mini" data-ps="dup" data-t="${esc(t.id)}">⧉ Dupliquer</button><button type="button" class="mini danger" data-ps="deltpl" data-t="${esc(t.id)}" title="Supprimer ce modèle" aria-label="Supprimer ce modèle">🗑 Supprimer</button></div></div>`).join('');
     el.innerHTML = `<p class="na">Un modèle décrit l’architecture d’une voiture : ensembles (liste fixe : Moteur, Transmission, Freins…), sous-ensembles (Engine, Turbo…) et, pour chacun, les maintenances suivies avec leurs intervalles. On l’applique ensuite à une voiture depuis sa fiche dans le Garage.</p>
-      <div class="sdbar"><button type="button" class="primary" data-ps="new">＋ Nouveau modèle</button>${ps.loading ? '<small class="na">Chargement…</small>' : ''}</div>${msg}
+      <div class="sdbar"><button type="button" class="primary" data-ps="new">＋ Nouveau modèle</button>${ps.loading ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}
       ${cards ? `<div class="ps-list">${cards}</div>` : (ps.list ? '<p class="na">Aucun modèle : créez-en un (par exemple « Voiture circuit turbo 2 RM »).</p>' : '')}`;
     return;
   }

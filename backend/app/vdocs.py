@@ -82,12 +82,12 @@ def _public_file(f: dict) -> dict:
     return {k: v for k, v in f.items() if k != "key"}
 
 
-def view(key: str, now: date | None = None) -> list[dict]:
-    c = rides.car_of(key)
+def view(key: str, now: date | None = None, meta: dict | None = None, car: dict | None = None) -> list[dict]:
+    c = car or rides.car_of(key)
     if not c:
         raise LookupError("Voiture introuvable")
     now = now or today()
-    docs = (rides.cars_coll().get(key) or {}).get("docs", {})
+    docs = (meta if meta is not None else rides.cars_coll().get(key) or {}).get("docs", {})
     out = []
     for it in sorted(ITEMS, key=lambda i: unicodedata.normalize("NFD", i[1]).encode("ascii", "ignore").decode().lower()):      # ordre alphabétique (sans tenir compte des accents)
         if not applies(it, c["category"]):
@@ -101,8 +101,8 @@ def view(key: str, now: date | None = None) -> list[dict]:
     return out
 
 
-def alerts_of(key: str, now: date | None = None) -> list[dict]:
-    return [d for d in view(key, now) if d["state"] in ("warn", "over")]
+def alerts_of(key: str, now: date | None = None, meta: dict | None = None, car: dict | None = None) -> list[dict]:
+    return [d for d in view(key, now, meta, car) if d["state"] in ("warn", "over")]
 
 
 def _item(item: str, category: str) -> tuple:

@@ -7,7 +7,7 @@ const wlGroup = bu => bu === 'XC' ? 'xc' : bu === 'OTHERS' ? 'others' : 'cars';
 const wlBuOk = bu => wl.bu === 'all' ? bu !== 'OTHERS' : bu === 'ALL' || wlGroup(bu) === wl.bu;      // « Others » (transports privés) : seulement si on le choisit
 const wlHours = m => { const h = Math.floor(m / 60), r = m % 60; return h ? `${h} h${r ? String(r).padStart(2, '0') : ''}` : `${r} min`; };
 
-function wallBlocks() { return [{static: '<section class="block wl-block" data-bid="wl"><div id="wl-view"><p class="na">Chargement…</p></div></section>'}]; }
+function wallBlocks() { return [{static: '<section class="block wl-block" data-bid="wl"><div id="wl-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 const wlClockHtml = () => { const now = new Date(); return `${esc(now.toLocaleDateString(LOCALE(), {weekday: 'long', day: 'numeric', month: 'long'}))} · <b>${esc(now.toLocaleTimeString(LOCALE(), {hour: '2-digit', minute: '2-digit'}))}</b>`; };
 function wlTop() {
@@ -26,7 +26,7 @@ const wlDiff = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + '
 const wlCity = addr => { const parts = addr.split(',').map(x => x.trim()).filter(Boolean), c = (parts.length > 1 ? parts[parts.length - 2] : parts[0] || '').replace(/^[A-Z]{0,3}[- ]?\d[\d ]*\s*/, ''); return c || parts[0] || ''; };
 // Vue calendrier : 5 semaines (la semaine en cours d'abord), événements en barres de la couleur de leur BU, absences et jours fériés dans les cellules.
 function wlCalendar() {
-  const p = wl.plan; if (!p) return '<p class="na">Chargement…</p>';
+  const p = wl.plan; if (!p) return '<p class="na loading">Chargement…</p>';
   const R = Object.fromEntries(p.resources.map(r => [r.id, r])), today = new Date().toISOString().slice(0, 10), hol = (wl.snap && wl.snap.holidays) || {};
   const evs = p.events.filter(e => wlBuOk(e.bu)).sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end) || a.title.localeCompare(b.title));
   const away = {}; (p.leaves || []).forEach(l => { const n = (R[l.rid] || {}).name; if (!n) return; for (let d = l.start; d <= l.end; d = wlAdd(d, 1)) (away[d] = away[d] || []).push((n.split(/\s+/)[0]) + (l.half ? ' ½' : '')); });
@@ -60,7 +60,7 @@ function wlCalendar() {
 }
 function wlEvents() { return wl.mode === 'list' ? wlEventsList() : wlCalendar(); }
 function wlEventsList() {
-  const p = wl.plan; if (!p) return '<p class="na">Chargement…</p>';
+  const p = wl.plan; if (!p) return '<p class="na loading">Chargement…</p>';
   const R = Object.fromEntries(p.resources.map(r => [r.id, r])), today = new Date().toISOString().slice(0, 10), nm = x => (R[x.rid] || {}).name || '?';
   const evs = p.events.filter(e => e.end >= today && wlBuOk(e.bu)).sort((a, b) => a.start.localeCompare(b.start) || a.title.localeCompare(b.title));
   const away = (p.leaves || []).filter(l => l.start <= today && l.end >= today).map(l => (R[l.rid] || {}).name).filter(Boolean);
@@ -77,7 +77,7 @@ function wlEventsList() {
 }
 
 function wlAtelier() {
-  const s = wl.snap; if (!s) return '<p class="na">Chargement…</p>';
+  const s = wl.snap; if (!s) return '<p class="na loading">Chargement…</p>';
   const i = s.indicators[wl.bu] || s.indicators.all, tile = (v, l) => `<div class="wl-tile"><b>${v}</b><span>${esc(l)}</span></div>`;
   const inGroup = p => wl.bu === 'all' || p.all_bus || (wl.bu === 'xc' ? (p.bus || []).includes('XC') : (p.bus || []).some(k => k !== 'XC'));
   const jobs = s.jobs.filter(j => wl.bu === 'all' || j.group === 'ALL' || (wl.bu === 'xc' ? j.group === 'XC' : j.group === 'CARS'));

@@ -17,7 +17,7 @@ function plGridDays() { if (pl.span === 'week') return plDays(); const s = plMon
 const plRangeFetch = () => { const d = pl.mode === 'cal' ? plGridDays() : plDays(); return [d[0], d[d.length - 1]]; };
 const plLabel = () => pl.span === 'week' ? `Semaine ${plWeekNo(pl.anchor)} · ${plFmt(pl.anchor, {day: 'numeric', month: 'short'})} – ${plFmt(plAdd(pl.anchor, 6), {day: 'numeric', month: 'short', year: 'numeric'})}` : (s => s.charAt(0).toUpperCase() + s.slice(1))(plFmt(pl.anchor, {month: 'long', year: 'numeric'}));
 
-function planningBlocks() { return [BU_BAR(), {static: '<section class="block" data-bid="pl"><div class="block-head"><h3>Planning</h3></div><div class="block-body" id="pl-view"><p class="na">Chargement…</p></div></section>'}]; }
+function planningBlocks() { return [BU_BAR(), {static: '<section class="block" data-bid="pl"><div class="block-head"><h3>Planning</h3></div><div class="block-body" id="pl-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function plLoad() {
   if (!pl.anchor) pl.anchor = pl.span === 'week' ? plMonday(plToday()) : plMonthStart(plToday());
@@ -94,11 +94,11 @@ function plDraw() {
   const el = document.getElementById('pl-view'); if (!el) { plHideTip(); return; }
   plHideTip();
   if (pl.error) { el.innerHTML = `<p class="neg">${esc(pl.error)}</p>`; return; }
-  if (!pl.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!pl.loaded) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   const pill = (cls, k, label, on, extra = '') => `<button type="button" class="rs-pill ${cls}" data-k="${k}" aria-pressed="${on}"${extra}><span>${esc(label)}</span></button>`;
   const cats = plGroups(), nav = `<button type="button" class="mini pl-nav" data-d="-1" aria-label="Précédent">‹</button><button type="button" class="mini pl-nav" data-d="0">Aujourd’hui</button><button type="button" class="mini pl-nav" data-d="1" aria-label="Suivant">›</button>`;
   el.innerHTML = `<div class="sdbar pl-bar-top">${nav}<b class="pl-label">${esc(plLabel())}</b><span class="pl-sp"></span><div class="bu-filter">${pill('pl-mode', 'rows', 'Par ressource', pl.mode === 'rows')}${pill('pl-mode', 'cal', 'Calendrier', pl.mode === 'cal')}</div><div class="bu-filter">${pill('pl-span', 'week', 'Semaine', pl.span === 'week')}${pill('pl-span', 'month', 'Mois', pl.span === 'month')}</div></div>`
-    + `<div class="sdbar"><div class="bu-filter" role="group" aria-label="Filtrer par ressource">${pill('pl-res', 'all', 'Tous', pl.res === 'all')}${cats.map(([id, l]) => pill('pl-res', id, l, pl.res === id)).join('')}</div>${pl.mode === 'rows' ? `<label class="chk"><input type="checkbox" id="pl-empty" ${pl.hideEmpty ? 'checked' : ''}> Seulement les ressources occupées</label>` : ''}${pl.loading ? '<small class="na">Chargement…</small>' : ''}</div>`
+    + `<div class="sdbar"><div class="bu-filter" role="group" aria-label="Filtrer par ressource">${pill('pl-res', 'all', 'Tous', pl.res === 'all')}${cats.map(([id, l]) => pill('pl-res', id, l, pl.res === id)).join('')}</div>${pl.mode === 'rows' ? `<label class="chk"><input type="checkbox" id="pl-empty" ${pl.hideEmpty ? 'checked' : ''}> Seulement les ressources occupées</label>` : ''}${pl.loading ? '<small class="na loading">Chargement…</small>' : ''}</div>`
     + (pl.data.vehicles_message ? `<p class="na">${esc(pl.data.vehicles_message)}</p>` : '')
     + (pl.mode === 'rows' ? plRowsHtml() : plCalHtml())
     + '<small class="na">Barres : couleur de la BU · hachurées = événement non confirmé (TBC) · ✗ = invitation refusée. Pour un véhicule, la barre couvre toute l’immobilisation ; dans le calendrier, le trait fin sous une barre indique l’immobilisation des véhicules. Survolez une barre pour le détail.</small>';

@@ -31,7 +31,7 @@ async function exLoadVehicles() {
   try { ex.vusage = (await exGet(`/api/vehicles/usage?year=${EX_YEAR}`)); } catch (e) { ex.vusage = null; }
 }
 function vehiclesByBlocks() {
-  return [{static: '<section class="block" data-bid="veh-by"><div class="block-head"><h3>Coût par véhicule de service</h3></div><div class="block-body" id="exp-vehicles"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="veh-by"><div class="block-head"><h3>Coût par véhicule de service</h3></div><div class="block-body" id="exp-vehicles"><p class="na loading">Chargement…</p></div></section>'}];
 }
 // Imputation du coût de chaque véhicule aux BU, au prorata de ses jours de déplacement dans les agendas (une réservation = une BU ; Logistics à part).
 function exVehicleByBu(v) {
@@ -61,7 +61,7 @@ function exLinksEditor(v, cal) {
 function exDrawVehicles() {
   const el = document.getElementById('exp-vehicles'); if (!el) return;
   if (ex.vehErr) { el.innerHTML = `<p class="neg">${esc(ex.vehErr)}</p>`; return; }
-  const v = ex.veh; if (!v) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const v = ex.veh; if (!v) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (v.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme véhicule de service : voir « Données source ».</p>'; return; }
   const rows = v.vehicles.map(x => `<tr><td class="prod">${esc(x.vehicle)}${x.vehicle === '(non classé)' ? ' <small class="na" title="Libellé de compte sans le motif « Nature Util. Véhicule »">comptes ' + esc(x.accounts.join(', ')) + '</small>' : ''}</td>${v.types.map(t => `<td>${x.types[t] ? eur(x.types[t]) : '–'}</td>`).join('')}<td>${eur(x.total)}</td>
     <td class="sharecell"><span class="sharebar" style="width:${Math.round(Math.max(0, x.share) * 100)}%"></span><span>${pct(x.share)}</span></td></tr>`);
@@ -88,7 +88,7 @@ async function exLoadFuel() {
   try { ex.vfuel = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`); } catch (e) { ex.vfuel = null; }
 }
 function fuelBlocks() {
-  return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="veh-fuel"><div class="block-head"><h3>Carburant : Odoo, factures de la carte carburant et agenda</h3></div><div class="block-body" id="exp-fuel"><p class="na loading">Chargement…</p></div></section>'}];
 }
 const EX_BUS = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['LOGISTICS', 'Logistics']];
 const exLinks = () => (ex.veh || ex.vsplit || ex.vfuel || {}).links || {};
@@ -156,7 +156,7 @@ const exResKey = (usage, name) => { const u = exMatchUsage(usage, name); return 
 function exDrawFuel() {
   const el = document.getElementById('exp-fuel'); if (!el) return;
   if (ex.fuelErr) { el.innerHTML = `<p class="neg">${esc(ex.fuelErr)}</p>`; return; }
-  const f = ex.fuel; if (!f) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const f = ex.fuel; if (!f) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   const cal = f.calendar || {}, usage = cal.usage || [];
   const match = veh => exMatchUsage(usage, veh);
   // 1. Carburant encodé dans Odoo, par véhicule, rapproché des jours de réservation de l'agenda
@@ -191,14 +191,14 @@ async function exLoadAlloc() {
     if (!ex.keyDirty) { ex.keyMode = j.key_mode; ex.keyPct = j.xc_pct; } } catch (e) { ex.allocErr = e.message; }
 }
 function expensesRulesBlocks() {
-  return [{static: '<section class="block" data-bid="exp-rules"><div class="block-head"><h3>Imputation des frais généraux entre XC et CARS</h3></div><div class="block-body" id="exp-rules"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="exp-rules"><div class="block-head"><h3>Imputation des frais généraux entre XC et CARS</h3></div><div class="block-body" id="exp-rules"><p class="na loading">Chargement…</p></div></section>'}];
 }
 const EX_NAMES = {general: 'Frais généraux', vehicle: 'Véhicules de service'};
 function expensesSourceBlocks(kind = 'general') {
-  return [{static: `<section class="block" data-bid="exp-src-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : comptes retenus</h3></div><div class="block-body" id="exp-source" data-kind="${kind}"><p class="na">Chargement…</p></div></section>`}];
+  return [{static: `<section class="block" data-bid="exp-src-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : comptes retenus</h3></div><div class="block-body" id="exp-source" data-kind="${kind}"><p class="na loading">Chargement…</p></div></section>`}];
 }
 function expensesGeneralBlocks(kind = 'general') {
-  return [{static: `<section class="block" data-bid="exp-gen-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : résultat depuis le 1er janvier</h3></div><div class="block-body" id="exp-general" data-kind="${kind}"><p class="na">Chargement…</p></div></section>`}];
+  return [{static: `<section class="block" data-bid="exp-gen-${kind}"><div class="block-head"><h3>${EX_NAMES[kind]} : résultat depuis le 1er janvier</h3></div><div class="block-body" id="exp-general" data-kind="${kind}"><p class="na loading">Chargement…</p></div></section>`}];
 }
 
 function exSums() {
@@ -212,7 +212,7 @@ function exSums() {
 function exDrawSource() {
   const el = document.getElementById('exp-source'); if (!el) return;
   if (ex.err) { el.innerHTML = `<p class="neg">${esc(ex.err)}</p>`; return; }
-  if (!ex.src) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!ex.src) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   const kindMode = el.dataset.kind || 'general', s = {...ex.src}, canEdit = !!s.can_edit && s.can_save !== false, sums = exSums(), el2 = s.elsewhere || {};
   if (kindMode === 'vehicle') s.accounts = s.accounts.filter(a => ex.sel[a.code] === 'vehicle' || (s.vehicle_prefixes || []).some(p => a.code.startsWith(p)));      // comptes 615 et comptes déjà rangés en véhicules
   const sel = a => `<select class="sdin" data-ex-code="${a.code}"${canEdit ? '' : ' disabled'}>${exKinds.map(([v, l]) => `<option value="${v}"${(ex.sel[a.code] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
@@ -247,14 +247,14 @@ function exOdNote(g) {
 function exMonthBlock(g, kind) {
   const sel = `<select class="sdin" data-ex-month data-kind="${kind}">${g.all_months.map(p => `<option value="${p.month}"${p.month === ex.monthSelK[kind] ? ' selected' : ''}>${exMonth(p.month)} ${p.month.slice(0, 4)} : ${eur(p.amount)}</option>`).join('')}</select>`;
   const m = ex.monthK[kind];
-  const body = ex.monthErr ? `<p class="neg">${esc(ex.monthErr)}</p>` : !m ? '<p class="na">Chargement…</p>' : m.lines.length ? table(['Date', 'Pièce', 'Fournisseur', 'Compte', 'Libellé', 'Montant'], m.lines.map(l => `<tr><td>${fmtDate(l.date)}</td><td>${esc(l.move)}</td><td class="prod">${esc(l.partner)}</td><td>${esc(l.code)} <small class="na">${esc(l.name)}</small></td><td class="prod">${esc(l.label)}</td><td>${exEur2(l.amount)}</td></tr>`)
+  const body = ex.monthErr ? `<p class="neg">${esc(ex.monthErr)}</p>` : !m ? '<p class="na loading">Chargement…</p>' : m.lines.length ? table(['Date', 'Pièce', 'Fournisseur', 'Compte', 'Libellé', 'Montant'], m.lines.map(l => `<tr><td>${fmtDate(l.date)}</td><td>${esc(l.move)}</td><td class="prod">${esc(l.partner)}</td><td>${esc(l.code)} <small class="na">${esc(l.name)}</small></td><td class="prod">${esc(l.label)}</td><td>${exEur2(l.amount)}</td></tr>`)
       .concat([`<tr class="tot"><td colspan="5">Total du mois (${num(m.count)} écritures, dont les ${num(m.lines.length)} plus grosses ci-dessus)</td><td>${exEur2(m.total)}</td></tr>`]), 'prodtable sdtable') : '<p class="na">Aucune écriture ce mois-ci.</p>';
   return `<h4 class="sub">Détail d’un mois ${sel}</h4>${body}`;
 }
 function exDrawGeneral() {
   const el = document.getElementById('exp-general'); if (!el) return;
   if (ex.genErr) { el.innerHTML = `<p class="neg">${esc(ex.genErr)}</p>`; return; }
-  const kind = el.dataset.kind || 'general', name = EX_NAMES[kind], g = ex.genK[kind]; if (!g) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const kind = el.dataset.kind || 'general', name = EX_NAMES[kind], g = ex.genK[kind]; if (!g) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (g.empty) { el.innerHTML = '<p class="na">Aucun compte retenu comme ' + name.toLowerCase() + ' : choisissez-les dans « Données source ».</p>'; return; }
   const pts = g.series.map(p => ({label: exMonth(p.month), avg: p.amount, orders: 0, month: p.month}));
   el.innerHTML = `<div class="kpis">${kpi(name + ' depuis le 1er janvier', eur(g.total), '', g.configured ? '' : 'proposition de départ (non enregistrée)')}${kpi('Moyenne mensuelle', eur(g.monthly_avg), '', `mois clos : ${num(g.months)} (moyenne lissée)`)}${kpi('Projeté sur 1 an', eur(g.projected), '', 'moyenne mensuelle × 12')}</div>`
@@ -270,7 +270,7 @@ function exDrawGeneral() {
 function exDrawRules() {
   const el = document.getElementById('exp-rules'); if (!el) return;
   if (ex.allocErr) { el.innerHTML = `<p class="neg">${esc(ex.allocErr)}</p>`; return; }
-  const a = ex.alloc; if (!a) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const a = ex.alloc; if (!a) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   const mode = ex.keyMode || a.key_mode, canEdit = !!a.can_edit, pctXc = Math.min(100, Math.max(0, +ex.keyPct || 0));
   const shares = {revenue: a.shares.revenue, pct: {XC: pctXc / 100, CARS: 1 - pctXc / 100}};
   const amt = (m, g) => a.total * shares[m][g];
@@ -368,7 +368,7 @@ window.addEventListener('beforeunload', e => { if (ex.dirty || ((ex.keyDirty || 
 // ---- Véhicules de service › Imputation des frais véhicules : % indicatif (agendas) et % retenu (saisi) par véhicule, BU et frais généraux ----
 const EX_SPLIT = [['XC', 'XC'], ['MODERN_RALLY', 'Modern Rally'], ['HISTORIC_RALLY', 'Historic Rally'], ['HISTORIC_RACING', 'Historic Racing'], ['GENERAL', 'Frais généraux']];
 function splitBlocks() {
-  return [{static: '<section class="block" data-bid="veh-split"><div class="block-head"><h3>Imputation des frais véhicules aux BU et aux frais généraux</h3></div><div class="block-body" id="exp-split"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="veh-split"><div class="block-head"><h3>Imputation des frais véhicules aux BU et aux frais généraux</h3></div><div class="block-body" id="exp-split"><p class="na loading">Chargement…</p></div></section>'}];
 }
 async function exLoadSplit() {
   try { ex.vsplit = await exGet(`/api/expenses/vehicles?year=${EX_YEAR}&scope=all615`); ex.splitErr = null; } catch (e) { ex.splitErr = e.message; }
@@ -405,7 +405,7 @@ function exSplitTotals(v) {
 function exDrawSplit() {
   const el = document.getElementById('exp-split'); if (!el) return;
   if (ex.splitErr) { el.innerHTML = `<p class="neg">${esc(ex.splitErr)}</p>`; return; }
-  const v = ex.vsplit; if (!v) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  const v = ex.vsplit; if (!v) { el.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (v.empty) { el.innerHTML = '<p class="na">Aucun compte de la classe 615 : voir « Données source ».</p>'; return; }
   const cal = ex.vusage && ex.vusage.configured && !ex.vusage.error ? ex.vusage : null, canEdit = !!v.can_edit;
   const rowsAll = exSplitRows(v);

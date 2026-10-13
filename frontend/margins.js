@@ -13,7 +13,7 @@ async function loadMargins(force) {
   mg.loading = false; drawMargins();
 }
 function marginsBlocks() {
-  return [{static: '<section class="block" data-bid="margins"><div class="block-head"><h3>Contrôle des marges s/ produits : articles à code PIF</h3><span class="per-wrap"><small class="per-dates" id="mg-date">à date</small></span></div><div class="block-body" id="margins-view"><p class="na">Chargement…</p></div></section>'}];
+  return [{static: '<section class="block" data-bid="margins"><div class="block-head"><h3>Contrôle des marges s/ produits : articles à code PIF</h3><span class="per-wrap"><small class="per-dates" id="mg-date">à date</small></span></div><div class="block-body" id="margins-view"><p class="na loading">Chargement…</p></div></section>'}];
 }
 const mgEur = n => n == null ? '–' : new Intl.NumberFormat(LOCALE(), {style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2}).format(n);
 const mgPct = v => v == null ? '–' : (Math.round(v * 10) / 10).toFixed(1).replace('.', ',') + ' %';
@@ -35,7 +35,7 @@ const mgCell = (v, rate) => `<td class="mg-${rate || 'none'}" data-v="${v == nul
 function drawMargins() {
   const el = document.getElementById('margins-view'); if (!el) return;
   const d = mg.data;
-  if (!d) { el.innerHTML = mg.error ? `<p class="neg">${esc(mg.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  if (!d) { el.innerHTML = mg.error ? `<p class="neg">${esc(mg.error)}</p>` : '<p class="na loading">Chargement…</p>'; return; }
   if (d.unavailable) { el.innerHTML = `<p class="na">${esc(d.unavailable)}</p>`; return; }
   const dt = document.getElementById('mg-date'); if (dt) dt.textContent = 'Situation au ' + fmtDate(d.as_of);
   const s = d.summary, q = mg.q.trim().toLowerCase(), [fk, fv] = mg.filter === 'all' ? [null, null] : mg.filter.split(':');

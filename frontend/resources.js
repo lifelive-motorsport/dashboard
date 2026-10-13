@@ -18,7 +18,7 @@ const rsCmp = byName;
 const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p)).sort(rsCmp);
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
 
-const rsBlock = (id, title) => ({static: `<section class="block" data-bid="${id}"><div class="block-head"><h3>${title}</h3></div><div class="block-body" id="${id}"><p class="na">Chargement…</p></div></section>`});
+const rsBlock = (id, title) => ({static: `<section class="block" data-bid="${id}"><div class="block-head"><h3>${title}</h3></div><div class="block-body" id="${id}"><p class="na loading">Chargement…</p></div></section>`});
 // Trois pages : staff interne (compte Google), staff externe (contacts Odoo, BU concernées), véhicules (ressources Google Agenda)
 function resourcesBlocks(which) {
   return which === 'ext' ? [BU_BAR(), rsBlock('rs-ext', 'Staff externe')] : which === 'veh' ? [rsBlock('rs-veh', 'Véhicules')] : [BU_BAR(), rsBlock('rs-staff', 'Staff interne')];
@@ -59,7 +59,7 @@ function drawResources() {
 const RS_SBUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
 function rsDrawStaff() {
   const a = document.getElementById('rs-staff'); if (!a) return;
-  if (!rs.loaded) { a.innerHTML = '<p class="na">Chargement…</p>'; return; }
+  if (!rs.loaded) { a.innerHTML = '<p class="na loading">Chargement…</p>'; return; }
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
   const vis = rsVisible();
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}<br><small class="na">${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</small></td><td class="rs-fn">${esc(p.function || '')}</td>`
@@ -70,7 +70,7 @@ function rsDrawStaff() {
 }
 function rsDrawExt() {
   const b = document.getElementById('rs-ext'); if (!b) return;
-  if (!rs.loaded || rs.error) { b.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  if (!rs.loaded || rs.error) { b.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na loading">Chargement…</p>'; return; }
   const extIn = x => buSel === 'all' || (x.bus || []).some(k => (BU_KEYS[buSel] || []).includes(k));
   const RS_BUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
   const buCell = (e, i) => `<div class="rs-bus" role="group" aria-label="BU concernées">${RS_BUS.map(([k, sym, l]) => `<button type="button" class="rs-pill rs-ico rs-xbu" data-i="${i}" data-b="${k}" aria-pressed="${(e.bus || []).includes(k)}" aria-label="${esc(l)}" title="${esc(l)}">${BuSymbol(sym, {size: 15})}</button>`).join('')}${(e.bus || []).length ? '' : ' <small class="neg">à choisir</small>'}</div>`;
@@ -86,7 +86,7 @@ function rsDrawExt() {
 }
 function rsDrawVeh() {
   const c = document.getElementById('rs-veh'); if (!c) return;
-  if (!rs.loaded || rs.error) { c.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na">Chargement…</p>'; return; }
+  if (!rs.loaded || rs.error) { c.innerHTML = rs.error ? `<p class="neg">${esc(rs.error)}</p>` : '<p class="na loading">Chargement…</p>'; return; }
   const v = rs.vehicles;
   const cats = (v.categories || []).filter(k => (v.items || []).some(x => x.category === k.id));
   const vitems = (v.items || []).filter(x => rs.vcat === 'all' || x.category === rs.vcat);

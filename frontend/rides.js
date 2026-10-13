@@ -17,7 +17,7 @@ const RD_BUSYM = {XC: 'xc', MODERN_RALLY: 'mr', HISTORIC_RALLY: 'hrl', HISTORIC_
 const rdBuOk = c => buSel === 'all' || buMatchesFilter(RD_BUSYM[c.bu] || 'lifelive', buSel);      // une voiture sans BU n'apparaît que dans « ALL »
 const rdBuPills = (c) => `<div class="bu-filter rd-bupills" role="group" aria-label="BU de la voiture">${Object.entries(RD_BUSYM).map(([k, sym]) => `<button type="button" class="rs-pill rs-ico" data-rd="setbu" data-b="${k}" aria-pressed="${c.bu === k}" title="${esc(RD_BULAB[k])}" aria-label="${esc(RD_BULAB[k])}">${BuSymbol(sym, {size: 15})}</button>`).join('')}${c.bu ? '' : ' <small class="neg">BU à définir</small>'}</div>`;
 
-function ridesBlocks() { return [{static: '<section class="block" data-bid="rd"><div id="rd-view"><p class="na">Chargement…</p></div></section>'}]; }
+function ridesBlocks() { return [{static: '<section class="block" data-bid="rd"><div id="rd-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function rdLoad(force) {
   rd.loading = true; rdDraw();
@@ -30,14 +30,14 @@ async function rdLoad(force) {
 }
 async function rdLoadTemplates() { try { rd.templates = (await rsCall('/api/rides/templates')).templates; } catch { rd.templates = []; } rdDraw(); }
 async function rdLoadOdoo() { try { rd.odoo = await rsCall('/api/rides/odoo'); } catch (e) { rd.odoo = {accounts: [], suggestions: {}, unavailable: e.message}; } rdDraw(); }
-async function rdOpen(key) { try { rd.car = await rsCall('/api/rides/cars/' + encodeURIComponent(key)); rd.error = null; } catch (e) { rd.error = e.message; } rd.form = rd.run = rd.repl = null; rdDraw(); window.scrollTo({top: 0}); if (rd.car && !rd.car.odoo && !rd.odoo) rdLoadOdoo(); if (rd.car && !rd.templates) rdLoadTemplates(); }
+async function rdOpen(key) { const box = document.getElementById('rd-view'); if (box) box.innerHTML = '<p class="na loading">Chargement de la voiture…</p>'; try { rd.car = await rsCall('/api/rides/cars/' + encodeURIComponent(key)); rd.error = null; } catch (e) { rd.error = e.message; } rd.form = rd.run = rd.repl = null; rdDraw(); window.scrollTo({top: 0}); if (rd.car && !rd.car.odoo && !rd.odoo) rdLoadOdoo(); if (rd.car && !rd.templates) rdLoadTemplates(); }
 async function rdReload() { if (rd.car) { try { rd.car = await rsCall('/api/rides/cars/' + encodeURIComponent(rd.car.key)); } catch (e) { rd.error = e.message; } } try { const j = await rsCall('/api/rides/cars'); rd.cars = j.cars; rd.catalog = j.catalog; rd.circuits = j.circuits; rd.ensembles = j.ensembles || rd.ensembles; } catch {} rdDraw(); }
 
 // ---- Liste des voitures -----------------------------------------------------------------------------------------------------------------
 const rdChip = (state, n) => { const [c, l] = RD_STATE[state] || RD_STATE.none; return l ? `<span class="rd-chip ${c}">${state === 'ok' ? '' : '⚠ '}${esc(l)}${n ? ` · ${n}` : ''}</span>` : ''; };
 const rdPhoto = (c, big) => c.photo ? `<img class="rd-photo${big ? ' big' : ''}" src="/api/rides/cars/${encodeURIComponent(c.key)}/photo?t=${rd.photoT || 0}" alt="" loading="lazy">` : `<div class="rd-photo${big ? ' big' : ''} none" aria-hidden="true">${esc(c.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</div>`;
 function rdList() {
-  if (!rd.cars) return '<p class="na">Chargement…</p>';
+  if (!rd.cars) return '<p class="na loading">Chargement…</p>';
   const nNoBu = rd.cars.filter(c => !c.bu && !c.archived).length;
   const guessBar = nNoBu ? `<div class="note"><b>${nNoBu} voiture${nNoBu > 1 ? 's' : ''} sans BU.</b> <button type="button" data-rd="guessbu">Proposer les BU manquantes</button> <small class="na">d’après la catégorie (Rallye / Circuit) et le nom ; à vérifier ensuite voiture par voiture</small></div>` : '';
   const nNoOdoo = rd.cars.filter(c => !c.odoo && !c.archived).length;
@@ -54,12 +54,12 @@ function rdLinks(c) {
   const o = rd.odoo, link = (cfg && cfg.analytic_link && c.odoo) ? `<a class="olink" href="${esc(cfg.analytic_link.replace('{id}', encodeURIComponent(c.odoo.id)))}" target="_blank" rel="noopener noreferrer" title="Ouvrir dans Odoo">${esc(c.odoo.name)}</a>` : c.odoo ? esc(c.odoo.name) : '';
   let odoo;
   if (c.odoo) odoo = `<span class="pos">✓</span> ${link} <button type="button" class="mini" data-rd="unlinkodoo">Délier</button>`;
-  else if (!o) odoo = '<small class="na">Chargement des comptes Odoo…</small>';
+  else if (!o) odoo = '<small class="na loading">Chargement des comptes Odoo…</small>';
   else if (o.unavailable) odoo = `<small class="neg">${esc(o.unavailable)}</small>`;
   else { const s = o.suggestions[c.key], accts = o.accounts.slice().sort((a, b) => (s && a.id === s.id ? -1 : s && b.id === s.id ? 1 : a.name.localeCompare(b.name)));
     odoo = `<select class="sdin" id="rd-odoo-sel"><option value="">— Choisir le compte Odoo —</option>${accts.map(a => `<option value="${a.id}" ${s && a.id === s.id ? 'selected' : ''}>${esc(a.name)}${a.active ? '' : ' (archivé)'}${s && a.id === s.id ? ` — suggéré (${Math.round(s.score * 100)} %)` : ''}</option>`).join('')}</select> <button type="button" class="mini" data-rd="linkone">Relier</button>`; }
   const tpl = c.template ? `<span class="pos">✓</span> ${esc(c.template.name)} <small class="na">(les éléments déjà présents sont conservés, les manquants sont ajoutés)</small> ` : '<small class="na">aucun</small> ';
-  const tsel = rd.templates && rd.templates.length ? `<select class="sdin" id="rd-tpl-sel"><option value="">— Choisir un modèle —</option>${rd.templates.map(t => `<option value="${esc(t.id)}" ${c.template && c.template.id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select> <button type="button" class="mini" data-rd="applytpl">${c.template ? 'Réappliquer' : 'Appliquer'}</button>` : rd.templates ? '<small class="na">Aucun modèle : créez-en dans « Magasin de pièces ».</small>' : '<small class="na">Chargement des modèles…</small>';
+  const tsel = rd.templates && rd.templates.length ? `<select class="sdin" id="rd-tpl-sel"><option value="">— Choisir un modèle —</option>${rd.templates.map(t => `<option value="${esc(t.id)}" ${c.template && c.template.id === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select> <button type="button" class="mini" data-rd="applytpl">${c.template ? 'Réappliquer' : 'Appliquer'}</button>` : rd.templates ? '<small class="na">Aucun modèle : créez-en dans « Magasin de pièces ».</small>' : '<small class="na loading">Chargement des modèles…</small>';
   return `<div class="note rd-links"><div><b>Ressource Google Agenda</b> <span class="pos">✓</span> ${esc(c.name)}</div><div><b>Compte analytique Odoo (axe CARS)</b> ${odoo}</div><div><b>Modèle d’architecture</b> ${tpl}${tsel}</div></div>`;
 }
 
@@ -210,7 +210,7 @@ function rdDraw() {
   const msg = rd.msg && !rd.form && !rd.run && !rd.repl ? `<p class="na">${esc(rd.msg)}</p>` : '';
   if (!c) {
     const nArchBar = rd.cars ? rd.cars.filter(c => c.archived).length : 0;
-    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Circuits'}</button><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading ? '<small class="na">Chargement…</small>' : ''}</div>${msg}${rdSettings()}${rdList()}`;
+    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Circuits'}</button><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading && rd.cars ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rdSettings()}${rdList()}`;
     return;
   }
   const alertsHtml = c.alerts_list.length ? `<div class="rd-alerts">${c.alerts_list.map(a => a.type === 'inspection' ? `<span class="rd-chip warn" title="${esc((a.items || []).join('\n'))}">⚠ ${esc(a.label)}</span>` : `<span class="rd-chip ${a.state === 'over' ? 'neg' : 'warn'}" title="${rdKm(a.km)} km${a.limit_km ? ' / ' + rdKm(a.limit_km) : ''}">${a.state === 'over' ? '⛔' : '⚠'} ${esc(a.path)} · ${esc(a.label)} · ${rdPct(a.ratio)}</span>`).join(' ')}</div>` : '';
@@ -318,7 +318,7 @@ document.addEventListener('click', async e => {
     if (a === 'reread') { await rdLoad(true); return; }
     if (a === 'archive') { await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({archived: !rd.car.archived})}); rd.car.archived = !rd.car.archived; if (rd.car.archived) { rd.car = null; } return rdReload(); }
     if (a === 'delcar') { const c = rd.car; if (!confirm(`Supprimer définitivement « ${c.name} » ?\n\nSes ${c.parts} pièce(s), ses ${c.runs} run(s) et sa photo seront effacés, sans retour possible.${'\n\n'}Le véhicule reste dans Planifier › Ressources : laissez-le archivé s'il y figure encore.`)) return; const j = await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'DELETE'}); rd.car = null; rd.msg = `Données supprimées (${j.parts} pièce(s), ${j.runs} run(s)).`; return rdReload(); }
-    if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; await rdReload(); return; }
+    if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; rdDraw(); window.scrollTo({top: 0}); rdReload(); return; }          // la liste en mémoire s'affiche tout de suite, elle se rafraîchit en arrière-plan
     if (a === 'settings') { rd.settings = !rd.settings; rd.cat = null; return rdDraw(); }
     if (a === 'addpart') { rd.form = {id: null, parent_id: b.dataset.p || null, name: '', group: !b.dataset.p, serial: '', reference: '', types: [], lim: Object.fromEntries(RD_MAINT.map(([t]) => [t, rdLimBlank()])), km_start: '', hours_start: '', mounted_from: '', notes: ''}; rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
     if (a === 'editpart') { const n = rdFind(b.dataset.p); const tys = (n.types && n.types.length) ? n.types : (n.limit_km || n.limit_hours) ? ['replace'] : [], mm = n.maint || {}, lm = rdLimOf;

@@ -320,9 +320,11 @@ def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None) -> 
 RANK = {"none": 0, "ok": 1, "warn": 2, "over": 3}
 
 
-def tree(vehicle: str, runs: list[dict]) -> list[dict]:
-    parts = [p for p in parts_coll().all() if p["vehicle"] == vehicle]
-    logs = [l for l in maint_coll().all() if l["vehicle"] == vehicle]
+def tree(vehicle: str, runs: list[dict], parts: list[dict] | None = None, logs: list[dict] | None = None) -> list[dict]:
+    if parts is None:
+        parts = [p for p in parts_coll().all() if p["vehicle"] == vehicle]
+    if logs is None:
+        logs = [l for l in maint_coll().all() if l["vehicle"] == vehicle]
     by_parent: dict[str | None, list[dict]] = {}
     for p in parts:
         by_parent.setdefault(p.get("parent_id"), []).append(p)
@@ -536,32 +538,56 @@ def delete_car(key: str) -> dict:
     return n
 
 
-def car_overview(c: dict) -> dict:
+def _snapshot() -> dict:
+    """Une seule lecture de chaque collection pour toutes les voitures (la liste du Garage relisait toute la base une fois par voiture)."""
+    parts: dict[str, list] = {}
+    runs: dict[str, list] = {}
+    logs: dict[str, list] = {}
+    for p in parts_coll().all():
+        parts.setdefault(p["vehicle"], []).append(p)
+    for r in runs_coll().all():
+        runs.setdefault(r["vehicle"], []).append(r)
+    for l in maint_coll().all():
+        logs.setdefault(l["vehicle"], []).append(l)
+    return {"parts": parts, "runs": {k: sorted(v, key=lambda r: (r["date"], r["id"])) for k, v in runs.items()}, "logs": logs, "meta": {m.get("id"): m for m in cars_coll().all()}}
+
+
+def car_overview(c: dict, snap: dict | None = None, keep: dict | None = None) -> dict:
+    """Résumé d'une voiture. `snap` : lecture groupée de la base (liste) ; `keep` : reçoit l'arbre, les alertes et les runs déjà calculés (fiche détaillée)."""
     from . import vdocs
-    dal = vdocs.alerts_of(c["key"])
-    runs = _runs_of(c["key"])
-    nodes = tree(c["key"], runs)
+    key = c["key"]
+    if snap is None:
+        runs = _runs_of(key)
+        parts = [p for p in parts_coll().all() if p["vehicle"] == key]
+        logs = [l for l in maint_coll().all() if l["vehicle"] == key]
+        meta = cars_coll().get(key) or {}
+    else:
+        runs, parts, logs, meta = snap["runs"].get(key, []), snap["parts"].get(key, []), snap["logs"].get(key, []), snap["meta"].get(key, {})
+    nodes = tree(key, runs, parts, logs)
     al = alerts(nodes)
-    meta = cars_coll().get(c["key"]) or {}
+    dal = vdocs.alerts_of(key, meta=meta, car=c)
+    if keep is not None:
+        keep.update(nodes=nodes, alerts=al, runs=runs, meta=meta)
     state = max([a["state"] for a in al] + ["ok" if nodes else "none"], key=lambda s: RANK[s])
     return {**c, **{f: meta.get(f, "") for f in IDENTITY}, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "template": ({"id": meta["template_id"], "name": meta.get("template_name", "")} if meta.get("template_id") else None), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
             "doc_alerts": len(dal), "doc_over": sum(1 for a in dal if a["state"] == "over"),
             "km_total": round(sum(r.get("km") or 0 for r in runs), 1), "hours_total": round(sum(r.get("hours") or 0 for r in runs), 1),
-            "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts_coll().all() if p["vehicle"] == c["key"] and not p.get("removed_at") and not p.get("group"))}
+            "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts if not p.get("removed_at") and not p.get("group"))}
 
 
 def cars() -> list[dict]:
-    return sorted((car_overview(c) for c in race_cars()), key=lambda c: c["name"].lower())
+    snap = _snapshot()
+    return sorted((car_overview(c, snap) for c in race_cars()), key=lambda c: c["name"].lower())
 
 
 def car_detail(key: str) -> dict:
     c = car_of(key)
     if not c:
         raise LookupError("Voiture introuvable")
-    runs = _runs_of(key)
-    nodes = tree(key, runs)
     from . import vdocs
-    return {**car_overview(c), "docs": vdocs.view(key), "tree": nodes, "alerts_list": alerts(nodes), "runs_list": sorted(runs, key=lambda r: (r["date"], r["id"]), reverse=True)[:200]}
+    keep: dict = {}
+    ov = car_overview(c, keep=keep)
+    return {**ov, "docs": vdocs.view(key, meta=keep["meta"], car=c), "tree": keep["nodes"], "alerts_list": keep["alerts"], "runs_list": sorted(keep["runs"], key=lambda r: (r["date"], r["id"]), reverse=True)[:200]}
 
 
 # ---- Pièces -----------------------------------------------------------------------------------------------------------------------------

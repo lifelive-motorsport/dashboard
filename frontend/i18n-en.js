@@ -1520,6 +1520,7 @@ Object.assign(EN_T, {
   "démontée le {}": "removed on {}",
   "{} km": "{} km",
   "Modifier la pièce": "Edit the part",
+  "Chargement de la voiture…": "Loading the car…",
   "heures": "hours",
   "alerte %": "alert %",
   "Critère": "Criterion",

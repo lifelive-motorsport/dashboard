@@ -626,7 +626,7 @@ function blockHTML(b) {
   const dates = b.fixed ? 'à date' : `${fmtDate(f)} → ${fmtDate(t)}`;
   return `<section class="block" data-bid="${b.id}"><div class="block-head"><h3>${esc(b.title)}</h3>
     <span class="per-wrap">${b.fixed ? '' : selectHTML(b, p)}<small class="per-dates">${dates}</small></span></div>
-    <div class="block-body">${d ? b.render(d) : '<p class="na">Chargement…</p>'}</div></section>`;
+    <div class="block-body">${d ? b.render(d) : '<p class="na loading">Chargement…</p>'}</div></section>`;
 }
 
 function updateBlock(b) {   // ne redessine que ce bloc (conserve le défilement)

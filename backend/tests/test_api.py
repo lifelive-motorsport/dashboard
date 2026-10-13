@@ -81,7 +81,7 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     cl = TestClient(app)
     assert cl.get("/api/session").status_code == 401                                   # ni cookie ni jeton
     r = cl.post("/api/session", headers={"Authorization": "Bearer ok"})
-    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "full", "super": False, "name": "Md", "first": "Md", "profile": "Standard", "pages": None} and "lm_session" in r.headers["set-cookie"]
+    assert r.json() == {"email": "md@lifelive-motorsport.com", "session": True, "role": "custom", "super": False, "name": "Md", "first": "Md", "profile": "Non classé", "pages": []} and "lm_session" in r.headers["set-cookie"]
     assert "HttpOnly" in r.headers["set-cookie"] and "SameSite=strict" in r.headers["set-cookie"]
     assert cl.get("/api/session").json()["email"] == "md@lifelive-motorsport.com"      # le cookie suffit, plus de jeton Google
     good = a.make_session("md@lifelive-motorsport.com")
@@ -350,7 +350,7 @@ def test_users_admin(monkeypatch):
     assert c.put("/api/users", json={"users": [{"email": "pas-un-mail", "role": "xc"}]}).status_code == 422
     assert users.is_registered("ext@example.com") and users.role_of("ext@example.com") == "xc" or users.role_of("ext@example.com") == "cat:xc"        # AUTH désactivée (démo) : tout le monde peut gérer les utilisateurs
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
-    assert users.role_of("ext@example.com") == "cat:xc" and users.role_of("b@x.com") == "admin" and users.role_of("z@lifelive-motorsport.com") == "standard"
+    assert users.role_of("ext@example.com") == "cat:xc" and users.role_of("b@x.com") == "admin" and users.role_of("z@lifelive-motorsport.com") == "pending"
     monkeypatch.setattr(settings, "SUPER_USERS", ["z@lifelive-motorsport.com"])
     assert users.role_of("z@lifelive-motorsport.com") == "super"
     users.store().put([], "t"); users.invalidate()
@@ -706,3 +706,13 @@ def test_planning_page_is_allowed_for_categories_that_tick_it():
     assert access.path_ok("/api/planning", {"planifier/planning"}) and not access.path_ok("/api/planning", {"overview/ca"})
     assert not access.path_ok("/api/resources", {"planifier/planning"}) and not access.path_ok("/api/events", {"planifier/planning"})
     assert "planifier/planning" in access.PAGES and "planifier/events" not in access.PAGES
+
+def test_unregistered_domain_user_is_unclassified_and_sees_no_data(monkeypatch):
+    import app.users as u
+    monkeypatch.setattr(u.settings, "AUTH_ENABLED", True)
+    assert u.role_of("nouveau@lifelive-motorsport.com") == "pending" and u.pages_of("nouveau@lifelive-motorsport.com") == set()
+    assert u.identity("nouveau@lifelive-motorsport.com")["profile"] == "Non classé"
+    from app import access
+    assert not access.path_ok("/api/staff", set()) and not access.path_ok("/api/projection", set()) and access.path_ok("/api/session", set())
+    monkeypatch.setattr(u.settings, "AUTH_ENABLED", False)
+    assert u.pages_of("nouveau@lifelive-motorsport.com") is None                      # démonstration : tout reste ouvert

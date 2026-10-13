@@ -4,6 +4,7 @@ const homeHello = () => { const h = new Date().getHours(), day = h >= 5 && h < 1
 function homeBlocks() {
   const dt = new Date().toLocaleDateString(LOCALE(), {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
   const first = me.first || '';
+  if (pagesList && !pagesList.size) return [{static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''}${LANG === 'en' ? '!' : ' !'}</div><div class="who">${esc(me.name || me.email || '')} <span class="badge-profile">${esc(t('Non classé'))}</span></div></section>`}, {static: `<section class="block"><p class="na">${esc(t('Votre compte est actif, mais aucun accès ne vous a encore été attribué. Demandez au Super User de vous ranger dans une catégorie pour voir vos pages.'))}</p></section>`}];
   return [
     {static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''}${LANG === 'en' ? '!' : ' !'}</div><div class="who">${esc(me.name || me.email || '')}${me.profile ? ` <span class="badge-profile">${esc(me.profile)}</span>` : ''}</div><small class="na">${esc(dt.charAt(0).toUpperCase() + dt.slice(1))}</small></section>`},
     BU_BAR(),

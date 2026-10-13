@@ -1,6 +1,7 @@
 """Utilisateurs et rôles, gérés par le « Super User » dans Settings › Utilisateurs (document Firestore `dashboard/users`).
 
-Rôles : « admin » (saisit les ajustements, voit les données du personnel), « standard » (lecture de tout le reste), « xc » (uniquement les pages XC listées dans auth.XC_PATHS).
+Rôles : « admin » (saisit les ajustements, voit les données du personnel), « pending » (« Non classé » : accès à la plateforme mais aucune donnée, tant que le Super User n'a pas rangé la personne dans une catégorie ;
+c'est le rôle de toute personne du domaine non enregistrée, et l'ancien rôle « standard » en est devenu un synonyme), « xc » (ancien nom de la catégorie par défaut).
 Le Super User vient de SUPER_USERS (à défaut REFERENCE_EDITORS, puis ADMIN_EMAILS) : il ne peut pas être retiré depuis l'écran. Les variables ADMIN_EMAILS / XC_ONLY_EMAILS
 restent valables ; une adresse enregistrée dans l'écran l'emporte sur elles. Une adresse enregistrée peut se connecter même hors du domaine Workspace."""
 from __future__ import annotations
@@ -36,7 +37,7 @@ class Category(BaseModel):
 
 class Entry(BaseModel):
     email: str = Field(max_length=120)
-    role: str = Field(pattern=r"^(admin|standard|xc|cat:[a-z0-9_-]{1,30})$")
+    role: str = Field(pattern=r"^(admin|standard|pending|xc|cat:[a-z0-9_-]{1,30})$")
     note: str = Field(default="", max_length=120)          # nom complet affiché
     nickname: str = Field(default="", max_length=40)       # surnom : « Bonjour Raph ! »
 
@@ -132,21 +133,23 @@ def categories(cats: list[dict] | None = None) -> list[dict]:
 
 
 def role_of(email: str) -> str:
-    """« super », « admin », « standard » ou « cat:<id> »."""
+    """« super », « admin », « pending » (non classé) ou « cat:<id> »."""
     email = (email or "").lower()
     if email in supers():
         return "super"
     r = registry().get(email)
     if r:
-        return "cat:xc" if r == "xc" else r
+        return "cat:xc" if r == "xc" else "pending" if r == "standard" else r
     if email in settings.XC_ONLY_EMAILS:
         return "cat:xc"
-    return "admin" if email in settings.ADMIN_EMAILS else "standard"
+    return "admin" if email in settings.ADMIN_EMAILS else "pending"
 
 
 def pages_of(email: str) -> set[str] | None:
     """Pages accessibles ; None = toutes (Standard, Administrateur, Super User). Une catégorie supprimée ou inconnue ne donne accès à rien."""
     r = role_of(email)
+    if r == "pending":
+        return set() if settings.AUTH_ENABLED else None            # authentification désactivée (démonstration, essais) : tout est ouvert                                                  # non classé : la plateforme s'ouvre, aucune page ni donnée
     if not r.startswith("cat:"):
         return None
     registry()
@@ -178,6 +181,6 @@ def identity(email: str) -> dict:
         cat = next((c for c in categories() if c["id"] == r[4:]), None)
         profile = "Catégorie : " + (cat["name"] if cat else r[4:])
     else:
-        profile = {"super": "Super User", "admin": "Administrateur", "standard": "Standard"}.get(r, r)
+        profile = {"super": "Super User", "admin": "Administrateur", "pending": "Non classé"}.get(r, r)
     first = _cache["nicks"].get(email) or (name.split()[0] if name.split() else name)
     return {"name": name, "first": first, "profile": profile}

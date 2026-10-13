@@ -1,8 +1,8 @@
 // Settings › Utilisateurs : le Super User crée les utilisateurs et choisit leur rôle. Chargé avant app.js.
 let us = {loaded: false, users: [], categories: [], fixed: [], domain: '', error: null, msg: null, dirty: false, open: new Set(), draft: {email: '', name: '', nick: '', role: 'cat:xc'}};
 const usCatLabel = id => { const c = us.categories.find(x => x.id === id); return c ? 'Catégorie : ' + c.name : 'Catégorie supprimée'; };
-const usRoles = () => [['standard', 'Standard : consulte tout, sans modifier'], ['admin', 'Administrateur : saisit les ajustements et voit le personnel']].concat(us.categories.map(c => ['cat:' + c.id, 'Catégorie : ' + c.name]));
-const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Administrateur' : r === 'standard' ? 'Standard' : r.startsWith('cat:') ? usCatLabel(r.slice(4)) : r;
+const usRoles = () => [['pending', 'Non classé : accès à la plateforme, aucune donnée'], ['admin', 'Administrateur : saisit les ajustements et voit le personnel']].concat(us.categories.map(c => ['cat:' + c.id, 'Catégorie : ' + c.name]));
+const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Administrateur' : r === 'pending' || r === 'standard' ? 'Non classé' : r.startsWith('cat:') ? usCatLabel(r.slice(4)) : r;
 // Catalogue des pages cochables, par module (la page « Utilisateurs » n'est jamais attribuable) : [identifiant du module, libellé « Chapitre › Module », [[clé, libellé]]]
 const usPages = () => CHAPTERS.flatMap(c => c.modules.map(m => [m.id, c.label + ' › ' + m.label, modulePages(m).filter(p => !SUPER_ONLY.has(p[0])).map(p => [p[0], m.groups ? p[2] + ' › ' + p[1] : p[1]])])).filter(([, , it]) => it.length);
 const usAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
@@ -10,12 +10,13 @@ const usAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: '
 function usersBlocks() { return [{static: '<section class="block" data-bid="viewas"><div class="block-head"><h3>Se connecter en tant que…</h3></div><div class="block-body" id="viewas-view"><p class="na">Chargement…</p></div></section>'}, {static: '<section class="block" data-bid="users"><div class="block-head"><h3>Utilisateurs et rôles</h3></div><div class="block-body" id="users-view"><p class="na">Chargement…</p></div></section>'}]; }
 
 async function loadUsers() {
+  if (us.dirty) return;                       // des modifications non enregistrées ne sont jamais écrasées par un rechargement (retour sur l'onglet, actualisation automatique)
   try {
     const r = await fetch('/api/users', {headers: usAuth()});
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
     us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), loaded: true, error: null, dirty: false};
-    usAddSupers();
+    usAddSupers(); usAddSuggested();
   } catch (e) { us.error = e.message; us.loaded = true; }
 }
 
@@ -28,7 +29,9 @@ function usCatHtml(c, i) {
 
 // Le Super User figure dans la liste (nom et surnom modifiables ; son rôle vient de la configuration du serveur)
 const usIsSuper = email => (us.fixed || []).some(f => f.role === 'super' && f.email === email);
-function usAddSupers() { (us.fixed || []).filter(f => f.role === 'super').forEach(f => { if (!us.users.some(u => u.email === f.email)) us.users.unshift({email: f.email, role: 'standard', note: '', nickname: ''}); }); }
+// Les personnes du staff (Planifier › Ressources › Staff interne) apparaissent d'elles-mêmes, « Non classé » tant que le Super User ne les a pas rangées dans une catégorie
+function usAddSuggested() { (us.suggested || []).forEach(s => { if (!us.users.some(u => u.email === s.email)) us.users.push({email: s.email, role: 'pending', note: s.name, nickname: '', auto: true, info: s.function}); }); }
+function usAddSupers() { (us.fixed || []).filter(f => f.role === 'super').forEach(f => { if (!us.users.some(u => u.email === f.email)) us.users.unshift({email: f.email, role: 'pending', note: '', nickname: ''}); }); }
 function drawUsers() {
   const el = document.getElementById('users-view'); if (!el) return;
   if (!us.loaded) { el.innerHTML = '<p class="na">Chargement…</p>'; return; }
@@ -36,7 +39,7 @@ function drawUsers() {
   const roles = usRoles();
   const sel = (v, i) => `<select class="sdin us-role" data-i="${i}">${roles.map(([k, l]) => `<option value="${k}"${v === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}${roles.some(([k]) => k === v) ? '' : `<option value="${esc(v)}" selected>${esc(usRoleLabel(v))}</option>`}</select>`;
   const rows = us.users.map((u, i) => { const su = usIsSuper(u.email);
-    return `<tr><td>${esc(u.email)}${u.email.endsWith('@' + us.domain) ? '' : ' <small class="na">hors domaine</small>'}</td><td>${su ? '<span class="badge-profile">Super User</span>' : sel(u.role, i)}</td><td><input class="sdin us-note" data-i="${i}" value="${esc(u.note || '')}" placeholder="Nom complet" maxlength="120"></td><td><input class="sdin us-nick" data-i="${i}" value="${esc(u.nickname || '')}" placeholder="Surnom" maxlength="40"></td><td>${su ? '' : `<button type="button" class="danger us-del" data-i="${i}">Retirer</button>`}</td></tr>`; }).join('');
+    return `<tr><td>${esc(u.email)}${u.email.endsWith('@' + us.domain) ? '' : ' <small class="na">hors domaine</small>'}</td><td>${su ? '<span class="badge-profile">Super User</span>' : sel(u.role, i)}</td><td><input class="sdin us-note" data-i="${i}" value="${esc(u.note || '')}" placeholder="Nom complet" maxlength="120"></td><td><input class="sdin us-nick" data-i="${i}" value="${esc(u.nickname || '')}" placeholder="Surnom" maxlength="40"></td><td>${su || u.auto ? '' : `<button type="button" class="danger us-del" data-i="${i}">Retirer</button>`}</td></tr>`; }).join('');
   el.innerHTML = `<p class="na">Vous êtes Super User : vous créez les catégories d’utilisateurs (en cochant les pages accessibles), puis les utilisateurs et leur rôle. Une adresse enregistrée peut se connecter avec son compte Google, même hors du domaine @${esc(us.domain)}. Les modifications s’appliquent en moins d’une minute.</p>`
     + '<h4 class="sub">Catégories d’utilisateurs</h4>' + (us.categories.map(usCatHtml).join('') || '<p class="na">Aucune catégorie.</p>')
     + `<div class="sdbar"><input class="sdin" id="us-newcat" placeholder="Nom de la nouvelle catégorie" maxlength="60" style="max-width:300px"><button type="button" id="us-addcat">Créer la catégorie</button></div>`
@@ -46,15 +49,15 @@ function drawUsers() {
     + `<button type="button" class="primary" id="us-save"${us.dirty ? '' : ' disabled'}>Enregistrer</button>${us.msg ? `<span class="${us.msg.ok ? 'pos' : 'neg'}">${esc(us.msg.t)}</span>` : us.dirty ? '<span class="na">Modifications non enregistrées</span>' : ''}</div>`
     + '<h4 class="sub">Comptes définis par la configuration du serveur (non modifiables ici)</h4>'
     + table(['Adresse e-mail', 'Rôle', 'Origine'], us.fixed.map(f => `<tr><td>${esc(f.email)}</td><td>${esc(usRoleLabel(f.role))}</td><td><small class="na">${esc(f.source)}</small></td></tr>`), 'prodtable')
-    + '<small class="na"><b>Standard</b> voit toutes les pages sans rien modifier (les données du personnel restent masquées) ; <b>Administrateur</b> saisit les ajustements (MB, stock, hypothèses) et voit le personnel ; une <b>catégorie</b> n’ouvre que les pages cochées, en lecture seule : le serveur refuse tout le reste et ne transmet pas les chiffres des autres pages. Cocher une page de marge nette ouvre aussi les données qu’elle utilise (personnel, frais généraux, véhicules). Un rôle choisi ici l’emporte sur la configuration du serveur. Le Super User ne se modifie pas depuis cet écran, et cette page « Utilisateurs » ne peut pas être cochée.</small>';
+    + '<small class="na"><b>Non classé</b> : toute personne du domaine peut ouvrir Logbook, mais ne voit aucune donnée tant que vous ne l’avez pas rangée dans une catégorie (le staff apparaît ici automatiquement) ; <b>Administrateur</b> saisit les ajustements (MB, stock, hypothèses) et voit le personnel ; une <b>catégorie</b> n’ouvre que les pages cochées, en lecture seule : le serveur refuse tout le reste et ne transmet pas les chiffres des autres pages. Cocher une page de marge nette ouvre aussi les données qu’elle utilise (personnel, frais généraux, véhicules). Un rôle choisi ici l’emporte sur la configuration du serveur. Le Super User ne se modifie pas depuis cet écran, et cette page « Utilisateurs » ne peut pas être cochée.</small>';
 }
 async function usSave() {
   us.msg = null;
   try {
-    const r = await fetch('/api/users', {method: 'PUT', headers: {'Content-Type': 'application/json', ...usAuth()}, body: JSON.stringify({users: us.users.map(u => ({email: u.email, role: u.role, note: u.note || '', nickname: u.nickname || ''})), categories: us.categories.map(c => ({id: c.id, name: c.name.trim() || 'Sans nom', pages: c.pages}))})});
+    const r = await fetch('/api/users', {method: 'PUT', headers: {'Content-Type': 'application/json', ...usAuth()}, body: JSON.stringify({users: us.users.filter(u => !(u.auto && u.role === 'pending' && !u.nickname)).map(u => ({email: u.email, role: u.role, note: u.note || '', nickname: u.nickname || ''})), categories: us.categories.map(c => ({id: c.id, name: c.name.trim() || 'Sans nom', pages: c.pages}))})});
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : Array.isArray(j.detail) ? 'Adresse invalide' : 'Erreur ' + r.status);
-    us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), dirty: false, msg: {ok: true, t: 'Enregistré'}}; usAddSupers();
+    us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), dirty: false, msg: {ok: true, t: 'Enregistré'}}; usAddSupers(); usAddSuggested();
   } catch (e) { us.msg = {ok: false, t: e.message}; }
   drawUsers();
 }

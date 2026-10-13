@@ -162,7 +162,13 @@ def _users_view(doc: dict) -> dict:
     fixed = [{"email": e, "role": "super", "source": "SUPER_USERS"} for e in users.supers()]
     fixed += [{"email": e, "role": "admin", "source": "ADMIN_EMAILS"} for e in settings.ADMIN_EMAILS if e not in users.supers()]
     fixed += [{"email": e, "role": "cat:xc", "source": "XC_ONLY_EMAILS"} for e in settings.XC_ONLY_EMAILS]
-    return {**doc, "categories": users.categories(doc.get("categories") or []), "fixed": fixed, "domain": settings.ALLOWED_DOMAIN}
+    known = {u["email"].lower() for u in doc.get("users", [])} | {e.lower() for e in users.supers()}
+    try:
+        suggested = sorted(({"email": p["google_email"].lower(), "name": p["name"], "function": p.get("function", "")} for p in staff.store().get()["data"]["people"]
+                            if p.get("google_email") and p.get("active", True) and p["google_email"].lower() not in known), key=lambda s: s["name"].lower())
+    except Exception:
+        suggested = []
+    return {**doc, "categories": users.categories(doc.get("categories") or []), "fixed": fixed, "domain": settings.ALLOWED_DOMAIN, "suggested": suggested}
 
 
 @app.get("/api/users")

@@ -1,7 +1,9 @@
 // Settings › Utilisateurs : le Super User crée les utilisateurs et choisit leur rôle. Chargé avant app.js.
 let us = {loaded: false, users: [], categories: [], fixed: [], domain: '', error: null, msg: null, dirty: false, open: new Set(), draft: {email: '', name: '', nick: '', role: 'cat:xc'}};
 const usCatLabel = id => { const c = us.categories.find(x => x.id === id); return c ? 'Catégorie : ' + c.name : 'Catégorie supprimée'; };
-const usRoles = () => [['pending', 'Non classé : accès à la plateforme, aucune donnée'], ['admin', 'Administrateur : saisit les ajustements et voit le personnel']].concat(us.categories.map(c => ['cat:' + c.id, 'Catégorie : ' + c.name]));
+const usByName = (a, b) => a.name.localeCompare(b.name, 'fr', {numeric: true, sensitivity: 'base'});
+const usSorted = () => us.categories.slice().sort(usByName);               // ordre alphabétique (et non d'après la création)
+const usRoles = () => [['pending', 'Non classé : accès à la plateforme, aucune donnée'], ['admin', 'Administrateur : saisit les ajustements et voit le personnel']].concat(usSorted().map(c => ['cat:' + c.id, 'Catégorie : ' + c.name]));
 const usRoleLabel = r => r === 'super' ? 'Super User' : r === 'admin' ? 'Administrateur' : r === 'pending' || r === 'standard' ? 'Non classé' : r.startsWith('cat:') ? usCatLabel(r.slice(4)) : r;
 // Catalogue des pages cochables, par module (la page « Utilisateurs » n'est jamais attribuable) : [identifiant du module, libellé « Chapitre › Module », [[clé, libellé]]]
 const usPages = () => CHAPTERS.flatMap(c => c.modules.map(m => [m.id, c.label + ' › ' + m.label, modulePages(m).filter(p => !SUPER_ONLY.has(p[0])).map(p => [p[0], m.groups ? p[2] + ' › ' + p[1] : p[1]])])).filter(([, , it]) => it.length);
@@ -16,7 +18,7 @@ async function loadUsers() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur ' + r.status);
     us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), loaded: true, error: null, dirty: false};
-    usAddSupers(); usAddSuggested();
+    us.categories.sort(usByName); usAddSupers(); usAddSuggested();
   } catch (e) { us.error = e.message; us.loaded = true; }
 }
 
@@ -57,7 +59,7 @@ async function usSave() {
     const r = await fetch('/api/users', {method: 'PUT', headers: {'Content-Type': 'application/json', ...usAuth()}, body: JSON.stringify({users: us.users.filter(u => !(u.auto && u.role === 'pending' && !u.nickname)).map(u => ({email: u.email, role: u.role, note: u.note || '', nickname: u.nickname || ''})), categories: us.categories.map(c => ({id: c.id, name: c.name.trim() || 'Sans nom', pages: c.pages}))})});
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : Array.isArray(j.detail) ? 'Adresse invalide' : 'Erreur ' + r.status);
-    us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), dirty: false, msg: {ok: true, t: 'Enregistré'}}; usAddSupers(); usAddSuggested();
+    us = {...us, ...j, users: (j.users || []).map(u => u.role === 'xc' ? {...u, role: 'cat:xc'} : u), dirty: false, msg: {ok: true, t: 'Enregistré'}}; us.categories.sort(usByName); usAddSupers(); usAddSuggested();
   } catch (e) { us.msg = {ok: false, t: e.message}; }
   drawUsers();
 }

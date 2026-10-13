@@ -480,3 +480,7 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 #theme-btn{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;padding:0 8px}
 :root[data-theme="light"] .logo-on-dark{display:none}:root[data-theme="light"] .logo-on-light{display:block}:root[data-theme="dark"] .logo-on-dark{display:block}:root[data-theme="dark"] .logo-on-light{display:none}
 @media print{#theme-btn{display:none!important}}
+.rd-limrow{display:flex;gap:8px;align-items:flex-end;margin:6px 0;flex-wrap:wrap}
+.rd-lt{width:150px;flex:none;display:flex;flex-direction:column;line-height:1.2;padding-bottom:8px}
+.rd-lf{display:flex;flex-direction:column;gap:2px;flex:none}.rd-lf span{font-size:11px;color:var(--mut)}.rd-lf input{width:100%;box-sizing:border-box}
+.rd-lnote{flex:1 1 200px;min-width:160px}

@@ -102,6 +102,15 @@ def test_config_exposes_odoo_analytic_link_only_with_odoo_source(monkeypatch):
     monkeypatch.setattr(m.settings, "PROVIDER", "odoo")
     monkeypatch.setattr(m.settings, "ODOO_PUBLIC_URL", "https://lifelive.odoo.com/")
     assert c.get("/api/config").json()["analytic_link"] == "https://lifelive.odoo.com/odoo/account.analytic.account/{id}/action-183"
+    assert c.get("/api/config").json()["partner_link"] == "https://lifelive.odoo.com/odoo/contacts/{id}/action-1439"
+
+
+def test_hit_parade_rows_carry_partner_id():
+    from datetime import date
+    from app.providers.demo import DemoProvider
+    d = DemoProvider()
+    assert all(r["id"] for r in d.top_clients(date(2026, 1, 1), date(2026, 12, 31))["total"])
+    assert all(r["id"] for r in d.top_suppliers(date(2026, 1, 1), date(2026, 12, 31))["total"])
 
 
 def test_analytics_unconfigured_then_filters_and_buckets(monkeypatch):

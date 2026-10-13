@@ -63,6 +63,7 @@ STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")
 # Liens vers Odoo (événements, véhicules) : adresse publique d'Odoo (par défaut ODOO_URL) et modèle de lien vers un compte analytique
 ODOO_PUBLIC_URL = os.getenv("ODOO_PUBLIC_URL", "") or ODOO_URL
 ODOO_ANALYTIC_LINK = os.getenv("ODOO_ANALYTIC_LINK", "{base}/odoo/account.analytic.account/{id}/action-183")
+ODOO_PARTNER_LINK = os.getenv("ODOO_PARTNER_LINK", "{base}/odoo/contacts/{id}/action-1439")
 
 # Google Analytics 4 (trafic des webshops et du site vitrine). GA_PROPERTY_ID = identifiant NUMÉRIQUE de la propriété (pas « G-… »).
 GA_PROPERTY_ID = os.getenv("GA_PROPERTY_ID", "")

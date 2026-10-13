@@ -253,6 +253,7 @@ Object.assign(EN, {
   "Sessions et Utilisateurs": "Sessions and Users",
   "Période — Canaux d’acquisition": "Period — Acquisition channels",
   "Période — Pages les plus visitées (Google Analytics)": "Period — Most visited pages (Google Analytics)",
+  "Ouvrir dans Odoo": "Open in Odoo",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

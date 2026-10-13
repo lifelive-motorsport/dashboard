@@ -40,7 +40,7 @@ class DemoProvider:
 
         def board(total: float) -> list[dict]:
             w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
-            return [{"name": n, "ca": round(total * s * 0.8 * x / sum(w)), "open": round(total * s * 0.8 * x / sum(w) * (0.0 if i % 3 == 0 else 0.15 * (i % 5))),
+            return [{"name": n, "id": 1000 + i, "ca": round(total * s * 0.8 * x / sum(w)), "open": round(total * s * 0.8 * x / sum(w) * (0.0 if i % 3 == 0 else 0.15 * (i % 5))),
                      "invoices": 3 + (i * 7) % 11, "avg": round(total * s * 0.8 * x / sum(w) / (3 + (i * 7) % 11), 2)}
                     for i, (n, x) in enumerate(list(zip(names, w))[:15])]  # 15 premiers ≈ 80 % du CA
 
@@ -60,7 +60,7 @@ class DemoProvider:
 
         def board(total: float) -> list[dict]:
             w = sorted((rnd.random() ** 2 for _ in names), reverse=True)
-            return [{"name": n, "ca": round(total * s * 0.75 * x / sum(w)), "open": round(total * s * 0.75 * x / sum(w) * (0.0 if i % 4 == 0 else 0.1 * (i % 4))),
+            return [{"name": n, "id": 2000 + i, "ca": round(total * s * 0.75 * x / sum(w)), "open": round(total * s * 0.75 * x / sum(w) * (0.0 if i % 4 == 0 else 0.1 * (i % 4))),
                      "invoices": 2 + (i * 5) % 13, "avg": round(total * s * 0.75 * x / sum(w) / (2 + (i * 5) % 13), 2),
                      "mix": {"604": round(total * s * 0.75 * x / sum(w) * (0.5 - 0.03 * (i % 5))), "603": round(total * s * 0.75 * x / sum(w) * (0.2 + 0.05 * (i % 4))),
                              "602": round(total * s * 0.75 * x / sum(w) * 0.15), "autres": round(total * s * 0.75 * x / sum(w) * 0.05)}}

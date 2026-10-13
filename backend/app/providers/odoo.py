@@ -270,12 +270,15 @@ class OdooProvider:
             fam = mix_by_key(per_mix) if per_mix else {}
             agg: dict[str, float] = {}
             opn: dict[str, float] = {}
+            lead: dict[str, tuple[float, int]] = {}      # tiers principal d'un regroupement (plus gros montant) : cible du lien Odoo
             for pid, v in per_partner.items():
                 agg[key_of(pid)] = agg.get(key_of(pid), 0.0) + v
+                if v > lead.get(key_of(pid), (float("-inf"), 0))[0]:
+                    lead[key_of(pid)] = (v, pid)
             for pid, v in per_open.items():
                 opn[key_of(pid)] = opn.get(key_of(pid), 0.0) + v
             top = sorted(agg.items(), key=lambda kv: -kv[1])[:limit]
-            return [{"name": normalize_name(label[k]), "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None,
+            return [{"name": normalize_name(label[k]), "id": lead[k][1], "ca": round(v), "open": round(opn.get(k, 0.0)) if meta["open"] else None,
                      "invoices": inv.get(k, (0, 0.0))[0], "avg": round(inv[k][1] / inv[k][0], 2) if inv.get(k, (0, 0.0))[0] else None,
                      **({"mix": fam.get(k, {})} if per_mix else {})}
                     for k, v in top if v > 0]   # affichage uniformisé

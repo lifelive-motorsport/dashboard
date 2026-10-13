@@ -7,7 +7,7 @@ from __future__ import annotations
 ADJ = ("/api/adjustments", "/api/stockvar")
 NM = ADJ + ("/api/staff", "/api/expenses", "/api/vehicles", "/api/pnl/unassigned")      # marge nette : personnel, frais généraux, véhicules
 FIN = {"fin", "events_xc", "events_cars", "veh", "web"}                                   # P&L, clients, fournisseurs, événements, véhicules, webshops
-ALWAYS = ("/api/session", "/api/dashboard", "/api/feedback")
+ALWAYS = ("/api/session", "/api/dashboard", "/api/feedback", "/api/alerts")
 
 # page -> (routes d'API, jeux de données du tableau de bord)
 PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {

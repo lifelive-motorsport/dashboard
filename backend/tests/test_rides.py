@@ -183,3 +183,54 @@ def test_template_assign_and_maintenance_meters(api):
     assert api.put(f"/api/rides/templates/{t['id']}", json={**_tpl(), "description": "maj"}).json()["description"] == "maj"
     assert api.delete(f"/api/rides/templates/{t['id']}").status_code == 200
     assert api.get("/api/rides/templates").json() == {"templates": []}
+
+
+def test_vehicle_documents_alerts_files_and_mail(api, monkeypatch):
+    from datetime import date, timedelta
+    from app import mailer, vdocs
+    monkeypatch.setattr(vdocs, "_sent", None)
+    monkeypatch.setattr(timesheets, "_alert_coll", None, raising=False)
+    cs = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}
+    circ, rally = cs["BMW M3 E30"], cs["Porsche 992 Rally"]
+    keys = lambda k: {d["item"] for d in api.get(f"/api/rides/cars/{k}/docs").json()}
+    assert "transponder" in keys(circ) and "insurance" not in keys(circ)                      # circuit : pas d'immatriculation
+    assert "insurance" in keys(rally) and "transponder" not in keys(rally) and "fia" in keys(rally)
+    assert api.put(f"/api/rides/cars/{circ}/docs/insurance", json={"expires": "2026-12-01"}).status_code == 404
+    assert api.put(f"/api/rides/cars/{circ}/docs/fia", json={"expires": "pas une date"}).status_code == 422
+    today = vdocs.today()
+    soon, tomorrow, past, far = ((today + timedelta(days=n)).isoformat() for n in (10, 1, -2, 200))
+    api.put(f"/api/rides/cars/{circ}/docs/fia", json={"expires": soon, "note": "renouveler"})
+    api.put(f"/api/rides/cars/{circ}/docs/harness", json={"expires": tomorrow})
+    api.put(f"/api/rides/cars/{circ}/docs/seat", json={"expires": past})
+    api.put(f"/api/rides/cars/{circ}/docs/asn", json={"expires": far})
+    st = {d["item"]: d for d in api.get(f"/api/rides/cars/{circ}/docs").json()}
+    assert [st[i]["state"] for i in ("fia", "harness", "seat", "asn", "extinguisher")] == ["warn", "warn", "over", "ok", "none"]
+    api.put(f"/api/rides/cars/{circ}/docs/fia", json={"weeks": 1})                              # alerte réglée à 1 semaine : 10 jours = encore ok
+    assert {d["item"]: d for d in api.get(f"/api/rides/cars/{circ}/docs").json()}["fia"]["state"] == "ok"
+    d = api.get(f"/api/rides/cars/{circ}").json()
+    assert d["doc_alerts"] == 2 and d["doc_over"] == 1
+    # fichiers
+    r = api.post(f"/api/rides/cars/{circ}/docs/seat/files?name=fia.pdf", content=b"%PDF-1.4 x", headers={"Content-Type": "application/pdf"})
+    assert r.status_code == 200
+    fid = next(x for x in r.json() if x["item"] == "seat")["files"][0]["id"]
+    assert api.get(f"/api/rides/cars/{circ}/docs/seat/files/{fid}").content.startswith(b"%PDF")
+    assert api.post(f"/api/rides/cars/{circ}/docs/seat/files", content=b"x", headers={"Content-Type": "text/html"}).status_code == 422
+    assert api.delete(f"/api/rides/cars/{circ}/docs/seat/files/{fid}").status_code == 200
+    # accueil : visible du Super User
+    al = api.get("/api/alerts").json()["vehicle_docs"]
+    assert {a["item"] for a in al} == {"harness", "seat"} and al[0]["car_name"] == "BMW M3 E30"
+    # e-mail la veille de l'échéance, une seule fois
+    mailer.OUTBOX.clear()
+    monkeypatch.setattr(users, "supers", lambda: ["md@lifelive-motorsport.com"])
+    monkeypatch.setattr(timesheets, "workshop_people", lambda: [])
+    out = vdocs.send_expiry_mails(today)
+    assert [s["item"] for s in out["sent"]] == ["harness"] and "expire demain" in mailer.OUTBOX[0]["subject"]
+    assert vdocs.send_expiry_mails(today)["sent"] == []
+
+
+def test_workshop_manager_sees_only_his_bu_alerts():
+    from app import vdocs
+    xc, cars = {"super": False, "bus": ["XC"]}, {"super": False, "bus": ["CARS"]}
+    assert vdocs.visible(xc, "XC") and not vdocs.visible(xc, "MODERN_RALLY") and not vdocs.visible(xc, "")
+    assert vdocs.visible(cars, "HISTORIC_RACING") and vdocs.visible(cars, "") and not vdocs.visible(cars, "XC")
+    assert vdocs.status("2026-10-20", 3, __import__("datetime").date(2026, 10, 13)) == "warn"

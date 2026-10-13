@@ -8,6 +8,7 @@ function homeBlocks() {
   return [
     {static: `<section class="block home-hero"><div class="hello">${homeHello()}${first ? ' ' + esc(first) : ''}${LANG === 'en' ? '!' : ' !'}</div><div class="who">${esc(me.name || me.email || '')}${me.profile ? ` <span class="badge-profile">${esc(me.profile)}</span>` : ''}</div><small class="na">${esc(dt.charAt(0).toUpperCase() + dt.slice(1))}</small></section>`},
     BU_BAR(),
+    {static: '<section class="block home-alerts" data-bid="home-alerts" id="home-alerts-block" hidden><div class="block-head"><h3>Alertes</h3></div><div class="block-body" id="home-alerts"></div></section>'},
     {static: '<section class="block" data-bid="home-kpis"><div class="block-head"><h3>Vos indicateurs</h3><span class="per-wrap"><small class="per-dates">année en cours</small></span></div><div class="block-body" id="home-kpis"><p class="na">Chargement…</p></div></section>'},
     {static: '<section class="block" data-bid="home-news"><div class="block-head"><h3>Dernières mises à jour</h3></div><div class="block-body" id="home-news"></div></section>'},
   ];
@@ -15,8 +16,18 @@ function homeBlocks() {
 const homeGauge = (a, b, la, lb) => signedGauge([{v: a, label: la, color: 'var(--red)'}, {v: b, label: lb, color: 'var(--mut)'}]);
 const homeTile = (title, value, cl, sub, extra = '', href = '') => `<${href ? 'a href="' + href + '"' : 'div'} class="card home-tile"><div class="l">${esc(title)}</div><div class="v ${cl}">${value}</div>${sub ? `<div class="l">${sub}</div>` : ''}${extra}</${href ? 'a' : 'div'}>`;
 
+// Alertes : documents de voiture échus ou proches de l'échéance (Super User et chef d'atelier de la BU ; masqué pour les autres)
+async function homeAlerts() {
+  const box = document.getElementById('home-alerts'), blk = document.getElementById('home-alerts-block'); if (!box || !blk) return;
+  let a; try { a = (await rsCall('/api/alerts')).vehicle_docs || []; } catch { return; }
+  if (!a.length || !document.getElementById('home-alerts')) { blk.hidden = true; return; }
+  blk.hidden = false;
+  box.innerHTML = a.map(x => `<div class="al"><span class="rd-chip ${x.state === 'over' ? 'neg' : 'warn'}">${x.state === 'over' ? '⛔' : '⚠'} ${esc(t(x.state === 'over' ? 'Échu' : 'Échéance'))} ${fmtDate(x.expires)}</span> <b>${esc(x.car_name)}</b> · ${esc(x.label)}${allowedPage('consigner/rides') ? ` <a href="#/consigner/rides" data-k="${esc(x.car)}" data-home-car="1">${esc(t('Ouvrir la fiche'))}</a>` : ''}</div>`).join('');
+  if (typeof i18nNode === 'function' && LANG === 'en') i18nNode(blk);
+}
 async function homeDraw() {
   homeData = null;
+  homeAlerts();
   const news = document.getElementById('home-news');
   if (news) news.innerHTML = CHANGELOG.slice(0, 6).map(c => `<div class="news"><div class="news-h"><b>${esc(c.title)}</b> <span class="badge-profile">${esc(c.tag)}</span> <small class="na">${esc(c.date)}</small></div><ul>${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
   homeRedraw();
@@ -88,3 +99,5 @@ function homeEtpTile() {
   const list = `<div class="etp-list">${rows.map(r => `<div><span class="etp-dot" style="background:${r[2]}"></span>${esc(r[1])}<b>${homeEtpFmt(e[r[0]])}</b></div>`).join('')}</div>`;
   return homeTile('Effectifs (ETP)' + (buSel !== 'all' ? ' · ' + BU_PNL_LABEL[buSel] : ''), homeEtpFmt(tot), '', 'équivalents temps plein, imputés par BU', bar + list, '#/staff/people');
 }
+
+document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-home-car]'); if (a && typeof rd !== 'undefined') { rd.want = a.dataset.k; rd.car = null; } });

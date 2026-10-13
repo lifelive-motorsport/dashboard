@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, feedback, projection, rides, users, wall
+from . import access, feedback, projection, rides, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -848,6 +848,53 @@ async def rd_set_photo(key: str, request: Request, _user: str = Depends(granted(
         raise HTTPException(503, "Stockage des photos non configuré (variable TIMESHEETS_BUCKET)")
     data = await request.body()
     return _rd(rides.set_photo, key, data, request.headers.get("content-type") or "")
+
+
+@app.get("/api/rides/cars/{key}/docs")
+def rd_docs(key: str, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(vdocs.view, key)
+
+
+@app.put("/api/rides/cars/{key}/docs/{item}")
+def rd_set_doc(key: str, item: str, body: vdocs.DocIn, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(vdocs.set_doc, key, item, body)
+
+
+@app.post("/api/rides/cars/{key}/docs/{item}/files")
+async def rd_add_doc_file(key: str, item: str, request: Request, name: str = "document", _user: str = Depends(granted("consigner/rides"))):
+    if not timesheets.blobs().enabled:
+        raise HTTPException(503, "Stockage des documents non configuré (variable TIMESHEETS_BUCKET)")
+    data = await request.body()
+    return _rd(vdocs.add_file, key, item, name, request.headers.get("content-type") or "", data)
+
+
+@app.get("/api/rides/cars/{key}/docs/{item}/files/{fid}")
+def rd_get_doc_file(key: str, item: str, fid: str, _user: str = Depends(granted("consigner/rides"))):
+    data, ctype, name = _rd(vdocs.get_file, key, item, fid)
+    return RawResponse(data, media_type=ctype, headers={"Content-Disposition": f'inline; filename="{name}"', "Cache-Control": "private, max-age=300"})
+
+
+@app.delete("/api/rides/cars/{key}/docs/{item}/files/{fid}")
+def rd_del_doc_file(key: str, item: str, fid: str, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(vdocs.delete_file, key, item, fid)
+
+
+@app.get("/api/alerts")
+def home_alerts(user: str = Depends(require_user)):
+    """Module « Alertes » de l'accueil : documents de voiture échus ou proches de l'échéance, pour le Super User et le chef d'atelier de la BU."""
+    r = vdocs.viewer(user)
+    return {"vehicle_docs": vdocs.all_alerts(r) if r else []}
+
+
+@app.post("/api/cron/vehicle-docs")
+def cron_vehicle_docs(request: Request):
+    """Appelé chaque jour par Cloud Scheduler (même jeton OIDC que les rappels de pointage) : e-mail la veille de l'expiration d'un document de voiture."""
+    _cron_auth(request)
+    try:
+        return vdocs.send_expiry_mails()
+    except Exception as e:
+        log.exception("Alertes de documents impossibles")
+        raise HTTPException(503, f"Alertes impossibles : {e}")
 
 
 @app.post("/api/rides/cars/{key}/parts")

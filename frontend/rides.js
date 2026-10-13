@@ -22,6 +22,7 @@ async function rdLoad(force) {
     if (rd.car) rd.car = await rsCall('/api/rides/cars/' + encodeURIComponent(rd.car.key));
   } catch (e) { rd.error = e.message; }
   rd.loading = false; rdDraw();
+  if (rd.want) { const k = rd.want; rd.want = null; if (rd.cars && rd.cars.some(c => c.key === k)) rdOpen(k); }
 }
 async function rdLoadTemplates() { try { rd.templates = (await rsCall('/api/rides/templates')).templates; } catch { rd.templates = []; } rdDraw(); }
 async function rdLoadOdoo() { try { rd.odoo = await rsCall('/api/rides/odoo'); } catch (e) { rd.odoo = {accounts: [], suggestions: {}, unavailable: e.message}; } rdDraw(); }
@@ -41,7 +42,7 @@ function rdList() {
   if (rd.cars.length && !shown.length) return '<p class="na">Aucune voiture dans cette BU : la BU d’une voiture se choisit dans sa fiche.</p>';
   if (!rd.cars.length) return '<p class="na">Aucune voiture de course : elles viennent de Planifier › Ressources › Véhicules (catégories Rally et Circuit).</p>';
   return guessBar + odooBar + (nArch ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArch})</label>` : '') + `<div class="rd-grid">${shown.map(c => `<button type="button" class="rd-card${c.archived ? ' arch' : ''}" data-rd="open" data-k="${esc(c.key)}">${rdPhoto(c)}<div class="rd-cbody"><b>${esc(c.name)}${c.archived ? ' <span class="rd-chip">Archivée</span>' : ''}</b><small class="na">${c.odoo ? '<span class="pos" title="' + esc(c.odoo.name) + '">Odoo ✓</span>' : '<span class="neg">non reliée à Odoo</span>'} · ${c.bu ? esc(RD_BULAB[c.bu]) : '<span class="neg">BU à définir</span>'} · ${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${c.parts} pièce${c.parts > 1 ? 's' : ''}</small>
-    <div>${rdChip(c.state, c.alerts)}</div><small class="na">${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''}${c.last_run ? ' · dernier run ' + fmtDate(c.last_run) : ''}</small></div></button>`).join('')}</div>`;
+    <div>${rdChip(c.state, c.alerts)}${c.doc_alerts ? ` <span class="rd-chip ${c.doc_over ? 'neg' : 'warn'}" title="${esc(t('Documents à renouveler'))}">📄 ${c.doc_alerts}</span>` : ''}</div><small class="na">${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''}${c.last_run ? ' · dernier run ' + fmtDate(c.last_run) : ''}</small></div></button>`).join('')}</div>`;
 }
 
 // ---- Liens : ressource Google Agenda et compte analytique Odoo (axe CARS) --------------------------------------------------------------------
@@ -148,6 +149,21 @@ function rdSettings() {
     <div class="sdbar"><input class="sdin" data-rd-n="name" value="${esc(rd.circ.name)}" placeholder="Nom du circuit" style="max-width:240px"><input class="sdin" data-rd-n="length_km" value="${esc(rd.circ.length_km)}" placeholder="Longueur du tour (km)" style="max-width:190px" inputmode="decimal"><button type="button" data-rd="savecirc" ${rd.circ.name.trim() && rdNum(rd.circ.length_km) > 0 ? '' : 'disabled'}>Ajouter / mettre à jour</button></div></div>`;
 }
 
+// ---- Documents et validités de la voiture ---------------------------------------------------------------------------------------------------
+const rdDocChip = d => d.state === 'over' ? `<span class="rd-chip neg">⛔ ${esc(t('Échu depuis'))} ${-d.days} ${esc(t(-d.days > 1 ? 'jours' : 'jour'))}</span>` : d.state === 'warn' ? `<span class="rd-chip warn">⚠ ${esc(t('Échéance dans'))} ${d.days} ${esc(t(d.days > 1 ? 'jours' : 'jour'))}</span>` : d.state === 'ok' ? `<span class="rd-chip pos">✓ ${esc(t('Valide'))}</span>` : `<span class="rd-chip">${esc(t('Date non renseignée'))}</span>`;
+const rdSize = n => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+const rdDocAlerts = c => { const a = (c.docs || []).filter(d => d.state === 'over' || d.state === 'warn'); return a.length ? `<div class="rd-alerts">${a.map(d => `<span class="rd-chip ${d.state === 'over' ? 'neg' : 'warn'}">${d.state === 'over' ? '⛔' : '⚠'} ${esc(d.label)} · ${d.state === 'over' ? esc(t('échu')) : esc(t('échéance'))} ${fmtDate(d.expires)}</span>`).join(' ')}</div>` : ''; };
+function rdDocs(c) {
+  const url = (d, f) => `/api/rides/cars/${encodeURIComponent(c.key)}/docs/${d.item}/files/${f.id}`;
+  return `<h4 class="sub">Documents et validités</h4><small class="na">Chaque élément a une date limite : une alerte apparaît ici et sur l’accueil (Super User et chef d’atelier de la BU) quelques semaines avant l’échéance (3 par défaut), et un e-mail leur est envoyé la veille de l’expiration.</small>
+  <div class="rd-docs">${(c.docs || []).map(d => `<div class="rd-doc ${d.state}" data-item="${d.item}"><div class="rd-doc-h"><b>${esc(d.label)}</b> ${rdDocChip(d)}</div>
+    <div class="sdgrid"><label class="sdfield"><span>Date limite de validité</span>${dpField(`data-rd-d="expires" data-item="${d.item}"`, d.expires)}</label>
+    <label class="sdfield"><span>Alerte (semaines avant)</span><input class="sdin" type="number" min="1" max="52" step="1" data-rd-d="weeks" data-item="${d.item}" value="${d.weeks}"></label>
+    <label class="sdfield rd-doc-note"><span>Note</span><input class="sdin" data-rd-d="note" data-item="${d.item}" value="${esc(d.note)}"></label></div>
+    <div class="rd-files">${d.files.map(f => `<span class="rd-file"><a href="${url(d, f)}" target="_blank" rel="noopener">${/pdf/.test(f.ctype) ? '📄' : '🖼'} ${esc(f.name)}</a> <small class="na">${rdSize(f.size)} · ${fmtDate(f.created_at.slice(0, 10))}</small> <button type="button" class="mini danger" data-rd="delfile" data-item="${d.item}" data-f="${f.id}" title="Supprimer ce fichier">✕</button></span>`).join('')}
+    <label class="mini rd-upload">＋ Document<input type="file" accept="application/pdf,image/*" multiple hidden data-rd-up="${d.item}"></label></div></div>`).join('')}</div>`;
+}
+
 // ---- Dessin -----------------------------------------------------------------------------------------------------------------------------
 function rdDraw() {
   const el = document.getElementById('rd-view'); if (!el) return;
@@ -163,10 +179,10 @@ function rdDraw() {
   const alertsHtml = c.alerts_list.length ? `<div class="rd-alerts">${c.alerts_list.map(a => `<span class="rd-chip ${a.state === 'over' ? 'neg' : 'warn'}" title="${rdKm(a.km)} km${a.limit_km ? ' / ' + rdKm(a.limit_km) : ''}">${a.state === 'over' ? '⛔' : '⚠'} ${esc(a.path)} · ${esc(a.label)} · ${rdPct(a.ratio)}</span>`).join(' ')}</div>` : '';
   el.innerHTML = `<div class="sdbar"><button type="button" data-rd="back">← Voitures</button><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Circuits'}</button><span class="wl-sp"></span><button type="button" data-rd="archive">${c.archived ? '↩ Désarchiver' : '🗄 Archiver'}</button>${c.archived ? '<button type="button" class="danger" data-rd="delcar">🗑 Supprimer définitivement</button>' : ''}</div>${c.archived ? '<p class="na">Voiture archivée : cachée du Garage, ses données sont conservées. « Supprimer définitivement » efface ses pièces, ses runs et sa photo.</p>' : ''}${msg}${rdSettings()}
     <div class="rd-head"><label class="rd-photobtn" title="Changer la photo">${rdPhoto(c, true)}<input type="file" id="rd-photo-in" accept="image/*" hidden><small class="na">📷 Photo</small></label>
-      <div><h3 style="margin:0">${esc(c.name)}</h3><small class="na">${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''} · ${c.runs} run${c.runs > 1 ? 's' : ''}</small><div>${rdChip(c.state, c.alerts)}</div>${rdBuPills(c)}</div></div>${rdLinks(c)}${alertsHtml}
+      <div><h3 style="margin:0">${esc(c.name)}</h3><small class="na">${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''} · ${c.runs} run${c.runs > 1 ? 's' : ''}</small><div>${rdChip(c.state, c.alerts)}</div>${rdBuPills(c)}</div></div>${rdLinks(c)}${alertsHtml}${rdDocAlerts(c)}${rdDocs(c)}
     <h4 class="sub">Pièces <button type="button" class="mini" data-rd="addpart" data-p="">＋ Groupe ou pièce</button> <label class="chk rd-rm"><input type="checkbox" id="rd-removed" ${rd.showRemoved ? 'checked' : ''}> afficher les pièces démontées</label></h4>
     ${rd.form && !rd.form.id && !rd.form.parent_id || rd.form && rd.form.id && rdFind(rd.form.id) && !rdFind(rd.form.id).parent_id ? rdPartForm() : ''}
-    <div class="rd-tree">${c.tree.length ? c.tree.map(n => rdNode(n, 0)).join('') : '<p class="na">Aucune pièce : ajoutez un groupe (par exemple Motorisation) puis ses pièces (Moteur, Turbo…), ou utilisez le catalogue.</p>'}</div>
+    <div class="rd-tree">${c.tree.length ? c.tree.map(n => rdNode(n, 0)).join('') : '<p class="na">Aucune pièce : ajoutez un groupe (par exemple Motorisation) puis ses pièces (Moteur, Turbo…), ou appliquez un modèle du Magasin de pièces.</p>'}</div>
     ${rd.form && (rd.form.parent_id || (rd.form.id && rdFind(rd.form.id) && rdFind(rd.form.id).parent_id)) ? rdPartForm() : ''}${rdReplForm()}${rdMaintForm()}
     <h4 class="sub">Roulages <button type="button" class="mini" data-rd="newrun">＋ Nouveau run</button></h4>${rdRunForm()}${rdRuns(c)}`;
   window.scrollTo(...sav);
@@ -198,6 +214,21 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target; if (!document.getElementById('rd-view')) return;
+  if (t.dataset.rdD !== undefined) {                // documents : enregistrement dès la saisie
+    const f = t.dataset.rdD, body = f === 'weeks' ? {weeks: parseInt(t.value) || 0} : f === 'expires' ? {expires: t.value || ''} : {note: t.value};
+    try { rd.car.docs = await rsCall(`/api/rides/cars/${encodeURIComponent(rd.car.key)}/docs/${t.dataset.item}`, {method: 'PUT', body: JSON.stringify(body)}); await rdReload(); } catch (err) { rdErr(err); }
+    return;
+  }
+  if (t.dataset.rdUp) {
+    const item = t.dataset.rdUp, files = [...t.files]; t.value = '';
+    try { for (const f of files) {
+      const r = await fetch(`/api/rides/cars/${encodeURIComponent(rd.car.key)}/docs/${item}/files?name=${encodeURIComponent(f.name)}`, {method: 'POST', headers: {...rsAuth(), 'Content-Type': f.type || 'application/octet-stream'}, body: f}), j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Envoi impossible');
+      rd.car.docs = j; }
+      await rdReload();
+    } catch (err) { rdErr(err); }
+    return;
+  }
   if (t.classList.contains('dp-h')) {               // dates (calendrier maison)
     if (t.dataset.rdF === 'mounted_from' && rd.form) rd.form.mounted_from = t.value || '';
     else if (t.dataset.rdU === 'date' && rd.run) { rd.run.date = t.value; const b = document.querySelector('[data-rd=saverun]'); if (b) b.disabled = !(rd.run.name.trim() && rd.run.date); }
@@ -227,6 +258,7 @@ document.addEventListener('click', async e => {
   const a = b.dataset.rd, k = rd.car && rd.car.key;
   try {
     if (a === 'open') return rdOpen(b.dataset.k);
+    if (a === 'delfile') { if (!confirm(t('Supprimer ce fichier ?'))) return; rd.car.docs = await rsCall(`/api/rides/cars/${encodeURIComponent(k)}/docs/${b.dataset.item}/files/${b.dataset.f}`, {method: 'DELETE'}); return rdReload(); }
     if (a === 'setbu') { const bu = rd.car.bu === b.dataset.b ? '' : b.dataset.b; await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({bu})}); rd.car.bu = bu; return rdReload(); }
     if (a === 'linkodoo') { const j = await rsCall('/api/rides/link-odoo', {method: 'POST', body: '{}'}); rd.msg = j.linked.length ? `Reliées à Odoo : ` + j.linked.map(x => `${x.name} → ${x.odoo}`).join(' · ') + '. À vérifier dans chaque fiche.' : 'Aucune correspondance assez sûre : reliez les voitures une par une dans leur fiche.'; rd.odoo = null; return rdReload(); }
     if (a === 'linkone') { const v = parseInt((document.getElementById('rd-odoo-sel') || {}).value); if (!v) throw new Error('Choisissez un compte Odoo.'); await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({odoo_id: v})}); rd.odoo = null; return rdReload(); }

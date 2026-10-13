@@ -28,7 +28,7 @@ const peBuLabel = id => ((pe.cfg && pe.cfg.bus.find(b => b.id === id)) || {}).la
 // Réponse d'un invité dans Google Agenda : accepté, sans réponse, refusé (pour un véhicule : conflit de réservation), peut-être
 const PE_RSVP = {accepted: ['✓', 'ok', 'A accepté'], needsAction: ['…', 'wait', 'N’a pas encore répondu'], declined: ['✗', 'no', 'A refusé'], tentative: ['?', 'wait', 'Peut-être']};
 const peRsvp = st => { const [i, c, t] = PE_RSVP[st] || PE_RSVP.needsAction; return `<span class="rsvp ${c}" title="${t}" aria-label="${t}">${i}</span>`; };
-const peStaffIn = p => !!pe.form.bu && (p.all_bus || ((p.alloc || {})[pe.form.bu] || 0) > 0);
+const peStaffIn = p => !!pe.form.bu && (p.all_bus || (p.bus || []).includes(pe.form.bu));
 const peExtIn = x => !!pe.form.bu && (x.bus || []).includes(pe.form.bu);
 const peStaffShown = () => peStaffList().filter(p => pe.showAll || peStaffIn(p) || pe.form.staff.includes(p.email));
 const peExtShown = () => rs.externals.filter(x => pe.showAll || peExtIn(x) || pe.form.externals.includes(x.email)).sort(peCmp);

@@ -118,7 +118,7 @@ function tsTeamHtml() {
   const tm = ts.team; if (!tm) return '';
   const days = Array.from({length: 7}, (_, i) => plAdd(ts.start, i));
   const head = `<tr><th>Personne</th>${days.map(d => `<th class="num">${esc(plFmt(d, {weekday: 'short'}))} ${+d.slice(8)}</th>`).join('')}<th class="num">Total</th><th class="num">Occupation</th><th class="num">Facturable</th><th class="num">À valider</th></tr>`;
-  const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => ((r.alloc || {})[k] || 0) > 0);
+  const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => (r.bus || []).includes(k));
   const rows = tm.rows.filter(r => inBu(r) || r.summary.count > 0).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
       + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" class="okbtn" data-ts="valall" data-u="${esc(r.user)}"${tsCoarse() ? ' data-hold' : ''}>${tsCoarse() ? 'Maintenir pour valider la semaine' : 'Valider toute la semaine'}</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
@@ -167,7 +167,7 @@ function tsReadonlyList(j) {
 const TS_STATE = {done: '✓ Pointé', waiting: '⏳ Pas encore', late: '⚠ En retard', absent: '🌴 Absent', off: 'Jour non travaillé'};
 function tsCockpitHtml() {
   const c = ts.cockpit; if (!c) return '';
-  const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => ((r.alloc || {})[k] || 0) > 0);
+  const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => (r.bus || []).includes(k));
   const rows = c.rows.filter(inBu).map(r => `<tr><td><b>${esc(r.name)}</b></td><td><span class="ts-st ${r.state}">${esc(t(TS_STATE[r.state]))}</span>${r.reason ? ` <small class="na">${esc(r.reason)}</small>` : ''}${r.minutes ? ` <b>${tsDur(r.minutes)}</b>` : ''}</td><td>${r.missing.map(d => `<span class="ts-st late">${esc(plFmt(d, {weekday: 'short', day: 'numeric', month: 'short'}))}</span>`).join(' ') || '<span class="ts-st done">✓</span>'}</td></tr>`).join('');
   return `<div class="block-head"><h3>Aujourd’hui à l’atelier</h3><small class="na">${esc(plFmt(c.date, {weekday: 'long', day: 'numeric', month: 'long'}))} · ${esc(t('pointages attendus après'))} ${esc(c.cutoff)}</small></div><div class="tblwrap"><table class="sdtable ts-cp"><thead><tr><th>Personne</th><th>Aujourd’hui</th><th>Pointages manquants (14 jours)</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="na">Aucun membre de l’atelier pour cette BU.</td></tr>'}</tbody></table></div><div class="block-head"><h3>Semaine</h3></div>`;
 }

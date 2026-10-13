@@ -690,7 +690,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 def get_resources(user: str = Depends(granted("planifier/res_staff", "planifier/res_ext", "planifier/res_veh"))):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
-        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", ""), "work_days": p.get("work_days", [0, 1, 2, 3, 4])}
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "bus": staff.resource_bus(p), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", ""), "work_days": p.get("work_days", [0, 1, 2, 3, 4])}
                   for p in staff.store().get()["data"]["people"]]
         res = copy.deepcopy(resources.store().get())
     except Exception:
@@ -731,6 +731,7 @@ def put_resource_externals(body: resources.SaveBody, user: str = Depends(granted
 class StaffEmailBody(BaseModel):
     email: str | None = Field(default=None, max_length=120)         # seuls les champs fournis sont modifiés
     all_bus: bool | None = None
+    resource_bus: list[str] | None = None
     workshop: str | None = None
     work_days: list[int] | None = None
 
@@ -748,6 +749,8 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
             person["google_email"] = body.email
         if body.all_bus is not None:
             person["all_bus"] = body.all_bus
+        if body.resource_bus is not None:
+            person["resource_bus"] = body.resource_bus
         if body.workshop is not None:
             person["workshop"] = body.workshop
         if body.work_days is not None:
@@ -764,7 +767,7 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
     saved = next(p for p in doc["data"]["people"] if p["id"] == pid)
-    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"], "workshop": saved.get("workshop", ""), "work_days": saved.get("work_days", [0, 1, 2, 3, 4])}
+    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"], "bus": staff.resource_bus(saved), "workshop": saved.get("workshop", ""), "work_days": saved.get("work_days", [0, 1, 2, 3, 4])}
 
 
 @app.get("/api/resources/directory-users")
@@ -1043,7 +1046,7 @@ def ts_team(start: date, bu: str = "all", user: str = Depends(require_user)):
     rows = []
     for p in sorted(people, key=lambda p: p["name"].lower()):
         ents = [e for e in all_ents if e["user"] == p["google_email"].lower() and timesheets.chef_for(r, jm.get(e["job_id"]))]
-        rows.append({"name": p["name"], "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
+        rows.append({"name": p["name"], "alloc": p.get("alloc", {}), "bus": staff.resource_bus(p), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
                      "entries": [timesheets.entry_view(timesheets.public_attachments(e), user, r, jm) for e in sorted(ents, key=lambda e: (e["date"], e["created_at"]))]})
     return {"start": a, "rows": rows}
 

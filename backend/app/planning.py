@@ -436,7 +436,7 @@ def planning_view(d_from: date, d_to: date) -> dict:
         if not p.get("active", True):
             continue
         rid = "s:" + p["id"]
-        res.append({"id": rid, "kind": "staff", "name": p["name"], "bus": [k for k in BU_KEYS if (p.get("alloc") or {}).get(k, 0) > 0], "all_bus": bool(p.get("all_bus")), "function": p.get("function", "")})
+        res.append({"id": rid, "kind": "staff", "name": p["name"], "bus": staff.resource_bus(p), "all_bus": bool(p.get("all_bus")), "function": p.get("function", "")})
         if p.get("google_email"):
             by_email[p["google_email"].lower()] = rid
     for x in resources.store().get()["data"]["externals"]:

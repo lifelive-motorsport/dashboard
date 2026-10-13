@@ -38,7 +38,7 @@ function wlEvents() {
 function wlAtelier() {
   const s = wl.snap; if (!s) return '<p class="na">Chargement…</p>';
   const i = s.indicators[wl.bu] || s.indicators.all, tile = (v, l) => `<div class="wl-tile"><b>${v}</b><span>${esc(l)}</span></div>`;
-  const inGroup = p => wl.bu === 'all' || p.all_bus || (wl.bu === 'xc' ? (p.alloc.XC || 0) > 0 : ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS', 'CARS'].some(k => (p.alloc[k] || 0) > 0));
+  const inGroup = p => wl.bu === 'all' || p.all_bus || (wl.bu === 'xc' ? (p.bus || []).includes('XC') : (p.bus || []).some(k => k !== 'XC'));
   const jobs = s.jobs.filter(j => wl.bu === 'all' || j.group === 'ALL' || (wl.bu === 'xc' ? j.group === 'XC' : j.group === 'CARS'));
   const people = s.people.filter(inGroup);
   const job = j => `<div class="wl-job ${j.today.length ? 'live' : ''}"><div class="wl-title">${esc(j.title)}</div><div class="wl-meta">${esc(j.vehicle || j.event || '')}${j.minutes_week ? ` · ${esc(wlHours(j.minutes_week))} cette semaine` : ''}</div>

@@ -445,7 +445,7 @@ def test_resources_super_user_only_and_demo_flow(monkeypatch):
     assert c.put("/api/resources/staff/r1", json={"email": "pas-un-mail"}).status_code == 422
     assert c.put("/api/resources/staff/nope", json={"email": ""}).status_code == 404
     both = c.put("/api/resources/staff/r1", json={"all_bus": True}).json()
-    assert both == {"id": "r1", "email": "test@lifelive-motorsport.com", "all_bus": True, "workshop": "", "work_days": [0, 1, 2, 3, 4]}          # seuls les champs fournis changent
+    assert both == {"id": "r1", "email": "test@lifelive-motorsport.com", "all_bus": True, "bus": [], "workshop": "", "work_days": [0, 1, 2, 3, 4]}          # seuls les champs fournis changent
     assert c.get("/api/resources").json()["staff"][0]["all_bus"] is True
     assert c.put("/api/resources/staff/r1", json={"all_bus": False}).json()["all_bus"] is False
     got = c.get("/api/resources").json()["staff"]

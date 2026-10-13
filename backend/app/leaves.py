@@ -106,15 +106,11 @@ def balances(person: dict | None, email: str, year: int) -> list[dict]:
 # ---- Qui valide ---------------------------------------------------------------------------------------------------------------------------
 
 def _groups(person: dict | None) -> set[str]:
-    """BU de l'équipe d'un mécanicien : XC et / ou CARS, d'après son imputation (toutes les BU si elle est vide ou « toutes »)."""
-    if not person or person.get("all_bus") or not person.get("alloc"):
+    """BU de l'équipe d'un mécanicien : XC et / ou CARS, d'après ses BU de ressource (toutes les BU si aucune ou « toutes »)."""
+    from . import staff
+    if not person or person.get("all_bus"):
         return {"XC", "CARS"}
-    out = set()
-    for k, v in person["alloc"].items():
-        if v and k == "XC":
-            out.add("XC")
-        elif v and k in ("MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING"):
-            out.add("CARS")
+    out = {"XC" if k == "XC" else "CARS" for k in staff.resource_bus(person)}
     return out or {"XC", "CARS"}
 
 

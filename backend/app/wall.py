@@ -24,8 +24,8 @@ def _job_in(group: str, view: str) -> bool:
 
 
 def _person_in(p: dict, view: str) -> bool:
-    a = p.get("alloc") or {}
-    return view == "all" or bool(p.get("all_bus")) or (a.get("XC", 0) > 0 if view == "xc" else any(a.get(k, 0) > 0 for k in CARS_KEYS))
+    bus = p.get("bus") or []
+    return view == "all" or bool(p.get("all_bus")) or (("XC" in bus) if view == "xc" else any(k != "XC" for k in bus))
 
 
 def snapshot(now: datetime | None = None) -> dict:
@@ -63,7 +63,7 @@ def snapshot(now: datetime | None = None) -> dict:
     open_jobs.sort(key=lambda x: (not x["today"], -x["minutes_week"], x["title"].lower()))
     closed = [j for j in jobs.values() if j.get("closed_at") and j["closed_at"][:10] >= mon.isoformat()]
     ck = timesheets.cockpit(now)
-    rows = [{"name": r["name"], "alloc": r["alloc"], "all_bus": r["all_bus"], "workshop": r["workshop"], "state": r["state"], "reason": r["reason"], "minutes": r["minutes"]} for r in ck["rows"]]
+    rows = [{"name": r["name"], "bus": r["bus"], "all_bus": r["all_bus"], "workshop": r["workshop"], "state": r["state"], "reason": r["reason"], "minutes": r["minutes"]} for r in ck["rows"]]
     ind = {}
     for v in VIEWS:
         mine = [r for r in rows if _person_in(r, v)]

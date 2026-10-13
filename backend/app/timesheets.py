@@ -693,7 +693,7 @@ def missing_for(person: dict | None, email: str, lookback: int = 14, now: dateti
 
 def cockpit(now: datetime | None = None) -> dict:
     """État du jour de chaque membre de l'atelier : absent (congé, événement), pointé, pas encore (avant l'heure limite) ou en retard ; et ses jours manquants des 14 derniers jours."""
-    from . import presence
+    from . import presence, staff as staff_mod
     now = now or presence.local_now()
     today = now.date()
     people = workshop_people()
@@ -721,7 +721,7 @@ def cockpit(now: datetime | None = None) -> dict:
             state = "late"
         else:
             state = "waiting"
-        rows.append({"name": p["name"], "user": em, "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "state": state, "reason": reason or "",
+        rows.append({"name": p["name"], "user": em, "alloc": p.get("alloc", {}), "bus": staff_mod.resource_bus(p), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "state": state, "reason": reason or "",
                      "minutes": mins.get(em, 0), "missing": [d.isoformat() for d in miss.get(em, [])]})
     return {"date": today.isoformat(), "cutoff": presence.cutoff(today).strftime("%H:%M"), "rows": rows}
 

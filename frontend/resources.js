@@ -12,8 +12,8 @@ function rsMatch(users) {
   });
   return out;
 }
-// Une personne relève d'une BU si une part de son imputation y va (le filtre « ALL » montre tout le monde, y compris le support et le management)
-const rsInBu = p => buSel === 'all' || p.all_bus || (BU_KEYS[buSel] || []).some(k => ((p.alloc || {})[k] || 0) > 0);
+// Une personne relève d'une BU si elle y est cochée comme ressource (indépendamment de l'imputation des coûts) (le filtre « ALL » montre tout le monde, y compris le support et le management)
+const rsInBu = p => buSel === 'all' || p.all_bus || (BU_KEYS[buSel] || []).some(k => (p.bus || []).includes(k));
 const rsCmp = byName;
 const rsVisible = () => rs.staff.filter(p => p.active && rsInBu(p)).sort(rsCmp);
 const rsMail = v => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
@@ -56,16 +56,17 @@ function drawResources() {
     if (a) { a.querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); const d = a.querySelector('#rs-dir'); if (d) d.remove(); }
   }
 }
+const RS_SBUS = [['XC', 'xc', 'XC'], ['MODERN_RALLY', 'mr', 'Modern Rally'], ['HISTORIC_RALLY', 'hrl', 'Historic Rally'], ['HISTORIC_RACING', 'hrc', 'Historic Racing']];
 function rsDrawStaff() {
   const a = document.getElementById('rs-staff'); if (!a) return;
   if (!rs.loaded) { a.innerHTML = '<p class="na">Chargement…</p>'; return; }
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
   const vis = rsVisible();
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}</td><td>${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${esc(p.function || '')}</td>`
-    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td><td><select class="sdin rs-ws" data-pid="${esc(p.id)}">${RS_WS.map(([v, l]) => `<option value="${v}"${(p.workshop || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td><td class="rs-days">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((l, i) => `<button type="button" class="rs-wd${(p.work_days || [0, 1, 2, 3, 4]).includes(i) ? ' on' : ''}" data-pid="${esc(p.id)}" data-d="${i}" title="${['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][i]}">${l}</button>`).join('')}</td><td><label class="chk" title="Proposée pour toutes les BU, quelle que soit son imputation"><input type="checkbox" class="rs-allbu" data-pid="${esc(p.id)}" ${p.all_bus ? 'checked' : ''}> <small class="na">toutes</small></label></td></tr>`;
+    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:200px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td><td><select class="sdin rs-ws" data-pid="${esc(p.id)}">${RS_WS.map(([v, l]) => `<option value="${v}"${(p.workshop || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td><td class="rs-days">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((l, i) => `<button type="button" class="rs-wd${(p.work_days || [0, 1, 2, 3, 4]).includes(i) ? ' on' : ''}" data-pid="${esc(p.id)}" data-d="${i}" title="${['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][i]}">${l}</button>`).join('')}</td><td><div class="rs-bus" role="group" aria-label="BU de ressource">${RS_SBUS.map(([k, sym, l]) => `<button type="button" class="rs-pill rs-ico rs-sbu" data-pid="${esc(p.id)}" data-b="${k}" aria-pressed="${(p.bus || []).includes(k)}" aria-label="${esc(l)}" title="${esc(l)}">${BuSymbol(sym, {size: 15})}</button>`).join('')}</div></td><td><label class="chk" title="Proposée pour toutes les BU, quelle que soit son imputation"><input type="checkbox" class="rs-allbu" data-pid="${esc(p.id)}" ${p.all_bus ? 'checked' : ''}> <small class="na">toutes</small></label></td></tr>`;
   const nSugg = Object.keys(rs.sugg).length;
-  a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
-    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google', 'Atelier', 'Jours de présence', 'Toutes les BU'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
+  a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; les BU de ressource (indépendantes de l’imputation des coûts) décident où la personne est proposée : Événements, Planning, Cockpit, Équipe.</p>'
+    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google', 'Atelier', 'Jours de présence', 'BU de ressource', 'Toutes les BU'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active n’est ressource de cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
 }
 function rsDrawExt() {
   const b = document.getElementById('rs-ext'); if (!b) return;
@@ -128,6 +129,12 @@ document.addEventListener('change', async e => {
 document.addEventListener('click', async e => {
   const vc = e.target.closest && e.target.closest('.rs-vcat'); if (vc) { rs.vcat = vc.dataset.c; drawResources(); return; }
   const t = e.target.closest && e.target.closest('button'); if (!t || !document.getElementById('rs-ext')) return;
+  if (t.classList.contains('rs-sbu')) {
+    const p = rs.staff.find(x => x.id === t.dataset.pid), b = t.dataset.b; if (!p) return;
+    const next = (p.bus || []).includes(b) ? p.bus.filter(y => y !== b) : (p.bus || []).concat([b]);
+    rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({resource_bus: next})}).then(j => { p.bus = j.bus; drawResources(); }).catch(err => alert(err.message));
+    return;
+  }
   if (t.classList.contains('rs-xbu')) { const x = rs.externals[+t.dataset.i], b = t.dataset.b; x.bus = (x.bus || []).includes(b) ? x.bus.filter(y => y !== b) : (x.bus || []).concat([b]); rs.dirty = true; rs.msg = null; drawResources(); return; }
   if (t.classList.contains('rs-del')) { rs.externals.splice(+t.dataset.i, 1); rs.dirty = true; rs.msg = null; drawResources(); }
   else if (t.classList.contains('rs-add')) {

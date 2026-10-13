@@ -504,3 +504,24 @@ def test_wall_shows_the_staff_name_even_without_workshop_role(api, monkeypatch):
     timesheets.entries().put("x1", {"id": "x1", "job_id": jid, "user": "raphael.deborman@lifelive-motorsport.com", "date": date.today().isoformat(), "minutes": 60, "created_at": "2026-01-01T00:00:00+00:00"})
     j = next(x for x in api.get("/api/wall").json()["jobs"] if x["title"] == "Révision BMW")
     assert "Raphaël de Borman" in j["today"]
+
+
+def test_resource_bus_is_independent_from_cost_allocation(api, monkeypatch):
+    from app import presence
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {})
+    cur = staff.store().get()
+    people = [dict(p) for p in cur["data"]["people"]]
+    for p in people:
+        if p["id"] == "c1":
+            p["alloc"] = {"XC": 5.0, "MODERN_RALLY": 95.0}               # Julien : un peu de coûts XC, mais ressource CARS
+    assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
+    assert staff.resource_bus(next(p for p in people if p["id"] == "c1")) == ["XC", "MODERN_RALLY"]       # ancienne fiche : déduit de l'imputation
+    monkeypatch.setattr(users, "is_super", lambda e: True)
+    r = api.put("/api/resources/staff/c1", json={"resource_bus": ["HISTORIC_RACING", "MODERN_RALLY"]})
+    assert r.status_code == 200 and r.json()["bus"] == ["MODERN_RALLY", "HISTORIC_RACING"]
+    assert api.put("/api/resources/staff/c1", json={"resource_bus": ["NOPE"]}).status_code == 422
+    snap = api.get("/api/wall").json()
+    julien = next(x for x in snap["people"] if x["name"] == "Julien Durbecq")
+    assert julien["bus"] == ["MODERN_RALLY", "HISTORIC_RACING"]
+    from app import wall
+    assert not wall._person_in(julien, "xc") and wall._person_in(julien, "cars")                     # plus dans l'équipe XC

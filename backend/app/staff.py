@@ -56,6 +56,17 @@ class Partner(BaseModel):
     name: str = Field(max_length=160)
 
 
+RES_BUS = ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING")
+
+
+def resource_bus(p: dict) -> list[str]:
+    """BU de ressource d'une fiche : le choix explicite, à défaut (anciennes fiches) les BU où une part d'imputation est > 0."""
+    rb = p.get("resource_bus")
+    if rb is None:
+        return [k for k in RES_BUS if ((p.get("alloc") or {}).get(k) or 0) > 0]
+    return [k for k in RES_BUS if k in rb]
+
+
 class Person(BaseModel):
     id: str
     name: str = Field(min_length=1, max_length=120)
@@ -85,6 +96,14 @@ class Person(BaseModel):
     leave_alloc: dict[str, dict[str, float]] = Field(default_factory=dict)                  # soldes de congés alloués : année -> type de congé -> jours (saisie initiale, Odoo Payroll pas encore utilisé)
     work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4], max_length=7)       # jours de présence habituels (0 = lundi … 6 = dimanche) : alertes d'oubli de pointage
     all_bus: bool = False                                               # proposée pour toutes les BU (filtres de Ressources et d'Événements), quelle que soit son imputation
+    resource_bus: list[str] | None = None                               # BU où la personne est une ressource (Événements, Planning, Cockpit, Équipe) : indépendant de l'imputation des coûts ; None = pas encore choisi, déduit de l'imputation
+
+    @field_validator("resource_bus")
+    @classmethod
+    def _resource_bus(cls, v):
+        if v is not None and any(k not in RES_BUS for k in v):
+            raise ValueError("BU inconnue")
+        return v if v is None else [k for k in RES_BUS if k in v]
 
     @field_validator("leave_alloc")
     @classmethod

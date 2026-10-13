@@ -788,3 +788,11 @@ def test_feedback_mail_to_super_users(monkeypatch):
     for _ in range(feedback.MAX_PER_HOUR):
         c.post("/api/feedback", json=ok)
     assert c.post("/api/feedback", json=ok).status_code == 429
+
+
+def test_adjustment_measure_costs_is_accepted(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import adjustments
+    m = adjustments.Adjustment.model_validate({"id": "x1", "label": "Imola", "bu": "HISTORIC_RACING", "kind": "meeting", "enabled": True, "sel": [{"id": 1, "name": "Imola"}], "measure": "costs"})
+    assert m.measure == "costs"

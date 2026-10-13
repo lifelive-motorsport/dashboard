@@ -8,7 +8,7 @@ const ADJ_BUS = [['HISTORIC_RACING', 'Historic Racing'], ['HISTORIC_RALLY', 'His
                  ['CARS_OTHERS', 'CARS Others'], ['XC', 'XC']];
 const ADJ_BU_LABEL = Object.fromEntries(ADJ_BUS);
 const ADJ_KINDS = {manual: 'Montant saisi à la main', meeting: 'Événements (axe MEETING)', car: 'Véhicules (axe CARS)'};
-const ADJ_MEASURES = {result: 'Résultat après amortissement (CA − coûts directs − autres charges − dotations)', margin: 'Contribution à la MB (CA − coûts directs)'};
+const ADJ_MEASURES = {result: 'Résultat après amortissement (CA − coûts directs − autres charges − dotations)', margin: 'Contribution à la MB (CA − coûts directs)', costs: 'Coûts directs seulement (réintègre les frais déjà engagés, le CA reste)'};
 const MB_PAGES = new Set(['overview/mb', 'overview/xcvscars', 'cars/general', 'cars/bu', 'xc/general']);
 
 const adjAuth = () => (typeof token !== 'undefined' && token) ? {Authorization: 'Bearer ' + token} : {};
@@ -37,8 +37,10 @@ function adjEffects(d) {
     } else {
       const src = a.kind === 'car' ? vh : ev;
       const vals = (a.sel || []).map(s => src[s.id]).filter(Boolean);
-      const v = vals.reduce((t, e) => t + (a.measure === 'margin' ? e.ca - e.direct_costs : (e.result_accounting ?? e.result)), 0);
-      effect = -v; detail = `${vals.length} / ${(a.sel || []).length} actif${vals.length > 1 ? 's' : ''} sur la période`;
+      const sum = k => vals.reduce((t, e) => t + (e[k] || 0), 0);
+      if (a.measure === 'costs') effect = sum('direct_costs');                                         // la MB reprend les coûts directs déjà engagés, sans retirer le CA
+      else effect = -vals.reduce((t, e) => t + (a.measure === 'margin' ? e.ca - e.direct_costs : (e.result_accounting ?? e.result)), 0);
+      detail = `${vals.length} / ${(a.sel || []).length} actif${vals.length > 1 ? 's' : ''} sur la période · CA ${eur(sum('ca'))} · coûts directs ${eur(sum('direct_costs'))}` + (a.measure === 'result' ? ` · autres charges ${eur(sum('other_costs'))} · dotations ${eur(sum('amort'))}` : '');
     }
     return {...a, effect, detail};
   });
@@ -91,7 +93,7 @@ function adjRecon(d) {
 function adjPageBlocks() {
   const recon = {...B('recon', 'Rapprochement : MB comptable → MB ajustée', d => adjRecon(d)), raw: true};
   const editor = {static: '<section class="block" data-bid="adj-ed"><div class="block-head"><h3>Ajustements enregistrés</h3></div><div class="block-body" id="adj-editor"></div></section>'};
-  return [recon, editor, NOTE('Un ajustement corrige la marge brute d’une BU sans toucher à la comptabilité : rien n’est écrit dans Odoo. Montant à la main : effet sur la MB (positif = la MB augmente), à la date indiquée. Événements / véhicules : on retire de la MB la balance des comptes analytiques sélectionnés, calculée sur la période affichée. Choisissez un seul mode par élément pour éviter un double comptage (un véhicule et son événement). Le détail par ligne d’activité n’est pas ajusté. L’interrupteur « MB comptable / MB ajustée » se trouve en haut des pages de marge brute.')];
+  return [recon, editor, NOTE('Un ajustement corrige la marge brute d’une BU sans toucher à la comptabilité : rien n’est écrit dans Odoo. Montant à la main : effet sur la MB (positif = la MB augmente), à la date indiquée. Événements / véhicules : selon la mesure choisie, on retire de la MB la balance des comptes analytiques sélectionnés, calculée sur la période affichée (Contribution = CA − coûts directs ; Résultat = après autres charges et dotations), ou bien on réintègre seulement les coûts directs déjà engagés (le CA reste). Choisissez un seul mode par élément pour éviter un double comptage (un véhicule et son événement). Le détail par ligne d’activité n’est pas ajusté. L’interrupteur « MB comptable / MB ajustée » se trouve en haut des pages de marge brute.')];
 }
 
 const adjId = () => 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);

@@ -32,7 +32,7 @@ class Adjustment(BaseModel):
     enabled: bool = True
     amount: float = Field(default=0.0, ge=-1e8, le=1e8)                    # kind = manual : effet sur la MB (+ = MB plus haute)
     date: str | None = None                                                 # kind = manual : date d'effet (AAAA-MM-JJ)
-    measure: Literal["result", "margin"] = "result"                       # selection : résultat après amortissement | CA − frais directs
+    measure: Literal["result", "margin", "costs"] = "result"              # selection : résultat après amortissement | CA − frais directs | frais directs seuls (réintégrés dans la MB)
     sel: list[Selected] = Field(default_factory=list, max_length=200)
     note: str = Field(default="", max_length=300)
 

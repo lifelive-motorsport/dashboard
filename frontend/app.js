@@ -634,7 +634,7 @@ async function fillBlock(b, force) {
 function render(force) {
   let key = route(); if (!item(key) || !allowedPage(key)) key = homePage();
   const {grp: g, it} = item(key);
-  renderNav(key); buLogo(pageBu(key));
+  renderNav(key); renderTabbar(key); buLogo(pageBu(key));
   $('page-title').innerHTML = pageTitle(key);
   const blocks = PAGES[key] ? PAGES[key]() : [];
   const bar = adjBar(key); if (bar) blocks.unshift(bar);
@@ -766,3 +766,22 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
     busy = false; show(0); el.style.transform = 'translateY(-60px)';
   });
 })();
+
+
+// Barre d'onglets en bas (mobile) : les pages d'usage quotidien à portée de pouce ; « Équipe » n'apparaît que pour un chef d'atelier
+const TAB_ICONS = {
+  'home/welcome': '<path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/>',
+  'planifier/planning': '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
+  'consigner/timesheets': '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  'consigner/team': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 5a3.5 3.5 0 0 1 0 7M18 14c2.3.6 3.5 2.6 3.5 6"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>'};
+let tabMeAsked = false;
+function renderTabbar(key) {
+  const bar = $('tabbar'); if (!bar) return;
+  const chef = typeof ts !== 'undefined' && ts.me && ts.me.role === 'chef';
+  if (typeof ts !== 'undefined' && !ts.me && !tabMeAsked && allowedPage('consigner/team')) { tabMeAsked = true; rsCall('/api/timesheets/me').then(m => { ts.me = m; renderTabbar(current.key || key); }).catch(() => {}); }
+  const items = [['home/welcome', 'Accueil'], ['planifier/planning', 'Planning'], ['consigner/timesheets', 'Ma semaine'], ['consigner/team', 'Équipe']].filter(([k]) => allowedPage(k) && (k !== 'consigner/team' || chef));
+  bar.innerHTML = items.map(([k, l]) => `<a href="#/${k}" class="${k === key ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICONS[k]}</svg><span>${esc(l)}</span></a>`).join('')
+    + `<button type="button" id="tab-menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">${TAB_ICONS.menu}</svg><span>Menu</span></button>`;
+  $('tab-menu').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
+}

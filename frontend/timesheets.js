@@ -26,7 +26,11 @@ async function tsLoad(page) {
       ts.jobs = (await rsCall('/api/timesheets/jobs')).jobs;
       if (page === 'team') {
         if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; ts.tpls = (await rsCall('/api/timesheets/templates')).templates; }
-      } else ts.week = await rsCall(`/api/timesheets/week?start=${ts.start}`);
+      } else {
+        ts.week = await rsCall(`/api/timesheets/week?start=${ts.start}`);
+        const dr = !ts.form && tsDraft();
+        if (dr) { ts.form = {...tsBlank(), ...dr, id: null}; ts.pend = {photos: [], audio: null}; ts.msg = 'Brouillon restauré : votre pointage en cours de saisie a été retrouvé.'; }
+      }
     }
   } catch (e) { ts.err = e.message; }
   ts.loading = false; tsDraw();
@@ -36,14 +40,20 @@ async function tsLoad(page) {
 const tsNav = () => `<div class="ts-nav"><button type="button" data-ts="prev" aria-label="Semaine précédente">‹</button><b>${esc(`Semaine ${plWeekNo(ts.start)} · ${plFmt(ts.start, {day: 'numeric', month: 'short'})} – ${plFmt(plAdd(ts.start, 6), {day: 'numeric', month: 'short', year: 'numeric'})}`)}</b><button type="button" data-ts="next" aria-label="Semaine suivante">›</button><button type="button" data-ts="today">Aujourd’hui</button></div>`;
 const tsKpis = s => `<div class="ts-kpis"><div><small>Heures pointées</small><b>${tsDur(s.total)}</b></div><div><small>Facturables</small><b>${tsDur(s.billable)}</b></div><div><small>Taux d’occupation</small><b>${tsPct(s.occupancy)}</b></div><div><small>Taux facturable</small><b>${tsPct(s.billable_rate)}</b></div><div><small>Horaire théorique</small><b>${s.theoretical ? tsDur(s.theoretical) : '–'}</b></div></div>`;
 
+const tsCoarse = () => !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
 function tsEntryHtml(e, mine) {
   const a = (ts.me.assignments.find(x => x.id === (e.job.assignment || e.assignment)) || {}).label, sy = (ts.me.systems.find(x => x.id === e.system) || {}).label;
   const att = (e.attachments || []).map(x => { const u = `/api/timesheets/entries/${e.id}/attachments/${x.id}`; return x.kind === 'photo' ? `<img class="ts-ph" src="${u}" loading="lazy" alt="Photo">` : x.expired ? '<span class="ts-n">🎙 Mémo supprimé (conservé 90 jours)</span>' : `<audio controls preload="none" src="${u}"></audio>`; }).join('');
-  const lock = e.validated ? '<span class="ts-lock ok">✓ Validé</span>' : e.can_edit && !(ts.me.role === 'chef') ? `<span class="ts-lock">Modifiable jusqu’à</span> <span class="ts-lock">${esc(tsStamp(e.editable_until))}</span>` : e.can_edit ? '' : '<span class="ts-lock bad">🔒 Verrouillé</span>';
-  const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">Modifier</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
-  const val = ts.me.role === 'chef' && !mine ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="${e.validated ? 0 : 1}">${e.validated ? 'Annuler la validation' : 'Valider'}</button>` : '';
-  return `<div class="ts-entry"><div class="ts-top"><b>${esc(e.job.title)}</b>${e.job.billable ? '<span class="ts-tag">Facturable</span>' : ''}<span class="ts-min">${tsDur(e.minutes)}</span></div>
-    <div class="ts-sub">${[a && (e.job.assignment || e.assignment) !== 'autre' ? a : '', sy && e.system !== 'autre' ? sy : ''].filter(Boolean).map(esc).join(' · ')}${e.text ? ' — ' + esc(e.text) : ''}</div>${tsLinesHtml(e)}${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}</div></div>`;
+  const coarse = tsCoarse(), hold = coarse ? ' data-hold' : '';
+  const lock = e.status === 'returned' ? '<span class="ts-lock bad">↩ Info requise</span>' : e.validated ? `<span class="ts-lock ok">✓ ${e.status === 'adjusted' ? 'Validé (ajusté)' : 'Validé'}</span>` : e.can_edit && !(ts.me.role === 'chef') ? `<span class="ts-lock">Modifiable jusqu’à</span> <span class="ts-lock">${esc(tsStamp(e.editable_until))}</span>` : e.can_edit ? '' : '<span class="ts-lock bad">🔒 Verrouillé</span>';
+  const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">${e.status === 'returned' ? 'Corriger' : 'Modifier'}</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
+  const chef = ts.me.role === 'chef' && !mine;
+  const val = chef ? (e.validated ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="0">Annuler la validation</button>` : `<button type="button" class="okbtn" data-ts="val" data-id="${e.id}" data-v="1"${hold}>${coarse ? 'Maintenir pour valider' : 'Valider'}</button>${e.status === 'returned' ? '' : `<button type="button" data-ts="rej" data-id="${e.id}">Renvoyer</button>`}`) : '';
+  const th = e.thread || [], last = th.length ? th[th.length - 1] : null;
+  const note = e.status === 'returned' && e.return_reason ? `<div class="ts-reason"><b>Motif :</b> ${esc(e.return_reason)}</div>` : (e.status === 'adjusted' || e.status === 'sent') && last && last.kind !== 'reject' ? `<div class="ts-reason soft">${esc(last.by)} : ${esc(last.text)}</div>` : '';
+  const done = e.job_done ? '<span class="ts-tag">Job terminé</span>' : '';
+  return `<div class="ts-entry"><div class="ts-top"><b>${esc(e.job.title)}</b>${e.job.billable ? '<span class="ts-tag">Facturable</span>' : ''}${done}<span class="ts-min">${tsDur(e.minutes)}</span></div>
+    <div class="ts-sub">${[a && (e.job.assignment || e.assignment) !== 'autre' ? a : '', sy && e.system !== 'autre' ? sy : ''].filter(Boolean).map(esc).join(' · ')}${e.text ? ' — ' + esc(e.text) : ''}</div>${note}${tsLinesHtml(e)}${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}</div></div>`;
 }
 
 function tsLinesHtml(e) {
@@ -82,6 +92,7 @@ function tsFormHtml() {
     ${ts.me.attachments ? `<div class="ts-media"><label class="btn">📷 Prendre une photo<input type="file" accept="image/*" capture="environment" hidden data-ts-file></label>
       <label class="btn">🖼 Galerie<input type="file" accept="image/*" multiple hidden data-ts-file></label>
       <button type="button" data-ts="rec" class="${ts.rec ? 'rec' : ''}">${ts.rec ? '⏹ Arrêter' : '🎙 Mémo vocal'}</button></div><div class="ts-att">${saved}${photos}${audio}</div>` : ''}
+    ${['atelier', 'event'].includes((ts.jobs.find(j => j.id === f.job_id) || {}).kind) ? `<div class="sdfield"><span>Le job est-il terminé ?</span><div class="ts-chips"><button type="button" class="ts-chip${f.job_done ? ' sel' : ''}" data-ts="jd" data-v="1">Oui</button><button type="button" class="ts-chip${f.job_done ? '' : ' sel'}" data-ts="jd" data-v="0">Non</button></div>${f.job_done ? '<small class="na">Le job sera clôturé : il n’apparaîtra plus dans la liste (le chef d’atelier peut le rouvrir).</small>' : ''}</div>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="save"${ts.busy ? ' disabled' : ''}>Enregistrer</button><button type="button" data-ts="cancel">Annuler</button></div></div>`;
 }
 
@@ -89,7 +100,8 @@ function tsMineHtml() {
   const w = ts.week; if (!w) return '';
   const days = Array.from({length: 7}, (_, i) => plAdd(ts.start, i)), t = plToday();
   const byDay = Object.fromEntries(days.map(d => [d, w.entries.filter(e => e.date === d)]));
-  return `${tsNav()}${tsKpis(w.summary)}${ts.form ? tsFormHtml() : '<div class="sdbar"><button type="button" class="primary" data-ts="new">+ Nouveau pointage</button></div>'}
+  const back = w.entries.filter(e => e.status === 'returned').length;
+  return `${tsNav()}${back ? `<div class="ts-msg">↩ <span>Pointages à corriger</span> <b>${back}</b></div>` : ''}${tsKpis(w.summary)}${ts.form ? tsFormHtml() : '<div class="sdbar ts-add"><button type="button" class="primary" data-ts="new">+ Nouveau pointage</button></div>'}
     ${days.map(d => { const es = byDay[d], tot = w.summary.by_day[d] || 0;
       return `<div class="ts-day${d === t ? ' today' : ''}"><div class="ts-dh"><b>${esc(plFmt(d, {weekday: 'long', day: 'numeric', month: 'short'}))}</b><span>${tot ? tsDur(tot) : ''}</span></div>${es.map(e => tsEntryHtml(e, true)).join('') || ''}</div>`; }).join('')}`;
 }
@@ -101,7 +113,7 @@ function tsTeamHtml() {
   const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => ((r.alloc || {})[k] || 0) > 0);
   const rows = tm.rows.filter(r => inBu(r) || r.summary.count > 0).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
-      + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" data-ts="valall" data-u="${esc(r.user)}">Valider toute la semaine</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
+      + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" class="okbtn" data-ts="valall" data-u="${esc(r.user)}"${tsCoarse() ? ' data-hold' : ''}>${tsCoarse() ? 'Maintenir pour valider la semaine' : 'Valider toute la semaine'}</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
   return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
 }
 
@@ -177,10 +189,20 @@ function tsDraw() {
 }
 
 // ---- Formulaire ---------------------------------------------------------------------------------------------------------------------------------------------------
-const tsBlank = () => ({id: null, job_id: '', date: plToday(), minutes: 60, system: 'autre', text: ''});
+const tsBlank = () => ({id: null, job_id: '', date: plToday(), minutes: 60, system: 'autre', text: '', lines: [], job_done: false});
+// Brouillon : le pointage en cours de saisie est gardé sur l'appareil (iOS ferme volontiers les applications installées) ; les photos et mémos, trop lourds, ne le sont pas
+const TS_DRAFT = 'lm_ts_draft';
+function tsDraft(f) {
+  try {
+    if (f === null) return localStorage.removeItem(TS_DRAFT);
+    if (f === undefined) return JSON.parse(localStorage.getItem(TS_DRAFT) || 'null');
+    if (f.job_id || f.text) localStorage.setItem(TS_DRAFT, JSON.stringify({job_id: f.job_id, date: f.date, minutes: f.minutes, system: f.system, text: f.text, lines: f.lines || [], job_done: !!f.job_done}));
+  } catch {}
+}
 function tsReadForm() {
   const v = document.getElementById('ts-view'); if (!v || !ts.form) return;
   v.querySelectorAll('[data-f]').forEach(el => { ts.form[el.dataset.f] = el.value; });
+  if (!ts.form.id) tsDraft(ts.form);
   if (v.querySelector('[data-ts-line]')) ts.form.lines = [...v.querySelectorAll('[data-ts-line]:checked:not(:disabled)')].map(c => c.dataset.tsLine);
 }
 function tsReadJob() {
@@ -234,14 +256,19 @@ async function tsUpload(eid, blob, name) {
 async function tsSave() {
   tsReadForm(); const f = ts.form;
   if (!f.job_id) { ts.msg = 'Choisissez un job.'; tsDraw(); return; }
+  const jb = ts.jobs.find(j => j.id === f.job_id);
+  if (f.job_done && jb && jb.checklist) {                               // le job est terminé mais la liste n'est pas complète : on demande confirmation
+    const left = jb.checklist.sections.flatMap(sec => sec.lines).filter(l => !(l.done && l.entry_id !== f.id) && !(f.lines || []).includes(l.id)).length;
+    if (left && !confirm(`${t('Il reste des lignes non cochées')} (${left}). ${t('Terminer quand même ?')}`)) return;
+  }
   ts.busy = true; ts.msg = null; tsDraw();
   try {
-    const body = JSON.stringify({job_id: f.job_id, date: f.date, minutes: f.minutes, system: f.system, text: f.text, lines: f.lines || []});
+    const body = JSON.stringify({job_id: f.job_id, date: f.date, minutes: f.minutes, system: f.system, text: f.text, lines: f.lines || [], job_done: !!f.job_done});
     const e = await rsCall(f.id ? `/api/timesheets/entries/${f.id}` : '/api/timesheets/entries', {method: f.id ? 'PUT' : 'POST', body});
     let i = 1;
     for (const p of ts.pend.photos) await tsUpload(e.id, p, `photo-${i++}.jpg`);
     if (ts.pend.audio) await tsUpload(e.id, ts.pend.audio, 'memo-vocal');
-    ts.form = null; ts.pend = {photos: [], audio: null};
+    ts.form = null; ts.pend = {photos: [], audio: null}; tsDraft(null);
   } catch (e) { ts.msg = e.message; }
   ts.busy = false; await tsLoad(tsPage());
 }
@@ -258,10 +285,13 @@ document.addEventListener('click', async ev => {
   const a = b.dataset.ts, page = tsPage();
   if (a === 'prev' || a === 'next' || a === 'today') { ts.start = a === 'today' ? plMonday(plToday()) : plAdd(ts.start, a === 'next' ? 7 : -7); return tsLoad(page); }
   if (a === 'open') { const u = b.dataset.u; ts.open.has(u) ? ts.open.delete(u) : ts.open.add(u); return tsDraw(); }
-  if (a === 'new') { ts.form = tsBlank(); ts.pend = {photos: [], audio: null}; return tsDraw(); }
-  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text, lines: e.line_ids || [], atts: e.attachments || []}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
-  if (a === 'cancel') { if (ts.rec) ts.rec.stop(); ts.form = null; ts.msg = null; return tsDraw(); }
+  if (a === 'new') { ts.form = tsBlank(); ts.pend = {photos: [], audio: null}; tsDraw(); return; }
+  if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text, lines: e.line_ids || [], job_done: !!e.job_done, atts: e.attachments || []}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
+  if (a === 'cancel') { if (ts.rec) ts.rec.stop(); ts.form = null; ts.msg = null; tsDraft(null); return tsDraw(); }
   if (a === 'del') { if (!confirm(t('Supprimer ce pointage ?'))) return; return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}`, {method: 'DELETE'})); }
+  if (a === 'jd') { tsReadForm(); ts.form.job_done = b.dataset.v === '1'; return tsDraw(); }
+  if (a === 'rej') { const why = await tsAsk(t('Renvoyer le pointage'), t('Motif (obligatoire) : ce que le mécanicien doit corriger'), t('Renvoyer')); if (!why) return; return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/reject`, {method: 'POST', body: JSON.stringify({reason: why})})); }
+  if ((a === 'val' || a === 'valall') && b.hasAttribute('data-hold') && !b._held) { ts.msg = 'Maintenez le bouton enfoncé pour valider.'; return tsDraw(); }
   if (a === 'val') return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}));
   if (a === 'valall') { const r = ts.team.rows.find(x => x.user === b.dataset.u); return tsDo(async () => { for (const e of r.entries.filter(x => !x.validated)) await rsCall(`/api/timesheets/entries/${e.id}/validate?validated=true`, {method: 'POST'}); }); }
   if (['dur', 'step', 'day'].includes(a)) {
@@ -345,3 +375,24 @@ window.addEventListener('hashchange', tsLbClose);
 
 // Photo introuvable (fichier supprimé) : message à la place de l'image cassée
 document.addEventListener('error', e => { const im = e.target; if (im && im.tagName === 'IMG' && im.classList.contains('ts-ph') && im.closest('#ts-view') && /\/attachments\//.test(im.src)) { const m = document.createElement('span'); m.className = 'ts-n'; m.textContent = t('Photo supprimée'); im.replaceWith(m); } }, true);
+
+document.addEventListener('input', e => { if (e.target.closest && e.target.closest('#ts-view .ts-form')) { clearTimeout(tsReadForm.t); tsReadForm.t = setTimeout(tsReadForm, 400); } });
+
+// Dialogue de saisie d'un motif (renvoi d'un pointage)
+function tsAsk(title, label, ok) {
+  return new Promise(res => {
+    const el = document.createElement('div'); el.className = 'ts-dlg';
+    el.innerHTML = `<div class="ts-dlgbox" role="dialog" aria-label="${esc(title)}"><h4>${esc(title)}</h4><label class="sdfield"><span>${esc(label)}</span><textarea class="sdin" rows="4" maxlength="500"></textarea></label><div class="sdbar"><button type="button" class="primary" data-k="ok">${esc(ok)}</button><button type="button" data-k="no">${esc(t('Annuler'))}</button></div></div>`;
+    document.body.appendChild(el); const ta = el.querySelector('textarea'); ta.focus();
+    const end = v => { el.remove(); res(v); };
+    el.addEventListener('click', e => { const k = e.target.dataset && e.target.dataset.k; if (k === 'ok') { if (ta.value.trim().length < 3) { ta.focus(); return; } end(ta.value.trim()); } else if (k === 'no' || e.target === el) end(null); });
+  });
+}
+// Appui long (écrans tactiles) : valider demande de maintenir le bouton, pour éviter une validation par erreur
+(() => {
+  let tm = null, btn = null;
+  const stop = () => { clearTimeout(tm); if (btn) btn.classList.remove('holding'); btn = null; };
+  document.addEventListener('pointerdown', e => { const b = e.target.closest && e.target.closest('[data-hold]'); if (!b) return; btn = b; b.classList.add('holding'); tm = setTimeout(() => { b._held = true; stop(); b.click(); setTimeout(() => { b._held = false; }, 300); }, 700); });
+  ['pointerup', 'pointerleave', 'pointercancel', 'scroll'].forEach(t => document.addEventListener(t, stop, true));
+  document.addEventListener('contextmenu', e => { if (e.target.closest && e.target.closest('[data-hold]')) e.preventDefault(); });
+})();

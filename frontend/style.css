@@ -380,3 +380,19 @@ textarea.sdin{width:100%;font:inherit;resize:vertical}
 .ts-lb .lb-p,.ts-lb .lb-s{width:56px;height:56px}.ts-lb .lb-n{bottom:calc(env(safe-area-inset-bottom) + 16px)}
 #ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 8px);z-index:900;width:38px;height:38px;margin-left:-19px;border-radius:50%;background:var(--card);border:1px solid var(--line);box-shadow:0 2px 8px #0004;display:flex;align-items:center;justify-content:center;opacity:0;transform:translateY(-60px);pointer-events:none;transition:opacity .15s}
 #ptr svg{width:20px;height:20px;color:var(--fg)}#ptr.spin svg{animation:ptrspin .8s linear infinite}@keyframes ptrspin{to{transform:rotate(360deg)}}
+
+.ts-reason{margin-top:6px;padding:6px 10px;border-left:3px solid var(--neg);background:color-mix(in srgb,var(--neg) 10%,transparent);border-radius:4px;font-size:13px;white-space:pre-wrap}.ts-reason.soft{border-left-color:var(--line);background:none;color:var(--mut)}
+.ts-act button.okbtn,button.okbtn{border-color:var(--grn);color:var(--grn)}[data-hold]{position:relative;overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}[data-hold].holding::after{content:"";position:absolute;inset:0;background:color-mix(in srgb,var(--grn) 35%,transparent);transform-origin:left;animation:tshold .7s linear forwards}@keyframes tshold{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.ts-dlg{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px}.ts-dlgbox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;width:min(480px,100%);display:flex;flex-direction:column;gap:12px}.ts-dlgbox h4{margin:0}
+
+/* Barre d'onglets mobile */
+#tabbar{display:none}
+@media (max-width:899px){
+  #tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--bg);border-top:1px solid var(--line);padding:6px 4px calc(env(safe-area-inset-bottom) + 6px)}
+  #tabbar a,#tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:52px;justify-content:center;color:var(--mut);text-decoration:none;font:inherit;font-size:11px;background:none;border:0;cursor:pointer;padding:0}
+  #tabbar svg{width:24px;height:24px}#tabbar a.on{color:var(--fg);font-weight:600}#tabbar a.on svg{stroke-width:2.4}
+  body.nav-open #tabbar{display:none}
+  main{padding-bottom:96px!important}footer{margin-bottom:72px}
+  .ts-add{position:sticky;bottom:calc(env(safe-area-inset-bottom) + 70px);z-index:35;margin:8px 0}.ts-add button{width:100%;min-height:54px;font-size:17px;box-shadow:0 4px 14px #0005;border-radius:14px}
+}
+@media print{#tabbar{display:none!important}}

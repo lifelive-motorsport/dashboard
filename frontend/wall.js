@@ -37,7 +37,7 @@ function wlEvents() {
 
 function wlAtelier() {
   const s = wl.snap; if (!s) return '<p class="na">Chargement…</p>';
-  const i = s.indicators, tile = (v, l) => `<div class="wl-tile"><b>${v}</b><span>${esc(l)}</span></div>`;
+  const i = s.indicators[wl.bu] || s.indicators.all, tile = (v, l) => `<div class="wl-tile"><b>${v}</b><span>${esc(l)}</span></div>`;
   const inGroup = p => wl.bu === 'all' || p.all_bus || (wl.bu === 'xc' ? (p.alloc.XC || 0) > 0 : ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS', 'CARS'].some(k => (p.alloc[k] || 0) > 0));
   const jobs = s.jobs.filter(j => wl.bu === 'all' || j.group === 'ALL' || (wl.bu === 'xc' ? j.group === 'XC' : j.group === 'CARS'));
   const people = s.people.filter(inGroup);

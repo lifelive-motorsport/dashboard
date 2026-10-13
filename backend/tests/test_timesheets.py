@@ -482,7 +482,9 @@ def test_wall_snapshot_has_no_money_and_needs_the_page(api, monkeypatch):
     s = r.json()
     j = next(x for x in s["jobs"] if x["title"] == "Révision Porsche")
     assert j["vehicle"] == "Porsche 911" and j["minutes_week"] == 90 and j["today"] == ["Nolan Collinet"]
-    assert s["indicators"]["jobs_open"] >= 1 and s["indicators"]["hours_week"] >= 1.5
+    assert s["indicators"]["all"]["jobs_open"] >= 1 and s["indicators"]["all"]["hours_week"] >= 1.5
+    assert s["indicators"]["cars"]["hours_week"] >= 1.5 and s["indicators"]["xc"]["hours_week"] == 0      # job CARS : compté dans CARS, pas dans XC
+    assert s["indicators"]["xc"]["expected"] <= s["indicators"]["all"]["expected"]
     assert "€" not in str(s) and "amount" not in str(s)
     as_(api, NOBODY)
     monkeypatch.setattr(users, "pages_of", lambda e: {"planifier/planning"})

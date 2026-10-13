@@ -64,7 +64,7 @@ STOCK_LOCATION_LIKE = os.getenv("STOCK_LOCATION_LIKE", "")
 ODOO_PUBLIC_URL = os.getenv("ODOO_PUBLIC_URL", "") or ODOO_URL
 ODOO_ANALYTIC_LINK = os.getenv("ODOO_ANALYTIC_LINK", "{base}/odoo/account.analytic.account/{id}/action-183")
 ODOO_PARTNER_LINK = os.getenv("ODOO_PARTNER_LINK", "{base}/odoo/contacts/{id}/action-1439")            # fournisseurs : factures fournisseurs du contact (action 1439)
-ODOO_CLIENT_LINK = os.getenv("ODOO_CLIENT_LINK", "{base}/odoo/contacts/{id}/invoicing")                          # clients : onglet Facturation du contact (l'action 1439 ne montre que des factures fournisseurs, donc rien pour un client)
+ODOO_CLIENT_LINK = os.getenv("ODOO_CLIENT_LINK", "{base}/odoo/contacts/{id}")                          # clients : fiche du contact, où le bouton « Facturé » ouvre les factures du client (l'action 1439 = factures fournisseurs, vide pour un client ; /invoicing n'est pas filtré par contact)
 
 # Google Analytics 4 (trafic des webshops et du site vitrine). GA_PROPERTY_ID = identifiant NUMÉRIQUE de la propriété (pas « G-… »).
 GA_PROPERTY_ID = os.getenv("GA_PROPERTY_ID", "")

@@ -33,7 +33,7 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['wall','Écran atelier'], ['rides','Roulages'], ['consumables','Consommables']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
 const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/wall','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);

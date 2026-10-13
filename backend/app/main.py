@@ -778,7 +778,7 @@ def wall_snapshot(_user: str = Depends(granted("consigner/wall"))):
     try:
         return wall.snapshot()
     except Exception:
-        log.exception("Écran atelier indisponible")
+        log.exception("Cockpit indisponible")
         raise HTTPException(503, "Données momentanément indisponibles.")
 
 

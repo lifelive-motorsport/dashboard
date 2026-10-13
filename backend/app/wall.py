@@ -1,4 +1,4 @@
-"""Écran mural de l'atelier (Consigner › Écran atelier) : instantané en lecture seule, sans aucun montant financier.
+"""Écran mural de l'atelier (Piloter › Cockpit) : instantané en lecture seule, sans aucun montant financier.
 
 Jobs ouverts (avec heures de la semaine et personnes qui ont pointé aujourd'hui), présence du jour (cockpit des pointages) et indicateurs globaux de la semaine.
 Le planning des événements vient de GET /api/planning (même source, mêmes règles de BU)."""

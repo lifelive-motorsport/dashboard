@@ -279,7 +279,6 @@ Object.assign(EN, {
   "Envoi…": "Sending…",
   "Envoyer": "Send",
   "Fermer": "Close",
-  "Écran atelier": "Workshop screen",
   "Atelier": "Workshop",
   "Toutes les BU": "All BUs",
   "⛶ Plein écran": "⛶ Full screen",

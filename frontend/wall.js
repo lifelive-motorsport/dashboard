@@ -1,4 +1,4 @@
-// Écran mural de l'atelier (Consigner › Écran atelier) : lecture seule, rafraîchi toutes les 60 s, sans montants. Vues « Événements » (planning à venir) et « Atelier » (jobs, présence, indicateurs).
+// Écran mural de l'atelier (Piloter › Cockpit ; clé `consigner/wall`) : lecture seule, rafraîchi toutes les 60 s, sans montants. Vues « Événements » (planning à venir) et « Atelier » (jobs, présence, indicateurs).
 const wl = {view: 'events', bu: 'all', plan: null, snap: null, error: null, at: null, timer: null, clock: null, loading: false, full: false};
 const WL_BU = {XC: ['var(--bu-xc)', 'XC'], MODERN_RALLY: ['var(--bu-mr-ui)', 'Modern Rally'], HISTORIC_RALLY: ['var(--bu-hrl)', 'Historic Rally'], HISTORIC_RACING: ['var(--bu-hrc)', 'Historic Racing'], OTHERS: ['var(--mut)', 'Others']};
 const WL_STATE = {done: ['ok', 'Pointé'], waiting: ['wait', 'À venir'], late: ['late', 'Pas encore pointé'], absent: ['off', 'Absent'], off: ['off', 'Repos']};

@@ -2,7 +2,8 @@
 // `groups` : groupes de pages du MENU rangés dans le module ; `pages` : pages du module. Les droits d'accès (catégories d'utilisateurs) se donnent page par page.
 const CHAPTERS = [
   {id: 'piloter', n: '01', label: 'Piloter', modules: [
-    {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']}]},
+    {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']},
+    {id: 'wall', label: 'Cockpit', source: 'Logbook · Google Agenda', pages: ['consigner/wall']}]},
   {id: 'planifier', n: '02', label: 'Planifier', modules: [
     {id: 'planning', label: 'Planning', source: 'Google Agenda', pages: ['planifier/planning']},
     {id: 'events', label: 'Événements', source: 'Google Agenda', pages: ['planifier/events']},
@@ -10,7 +11,6 @@ const CHAPTERS = [
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team']},
     {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
-    {id: 'wall', label: 'Écran atelier', source: 'Logbook · Google Agenda', pages: ['consigner/wall']},
     {id: 'rides', label: 'Roulages', source: 'Logbook', pages: ['consigner/rides']},
     {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
   {id: 'administrer', n: '04', label: 'Administrer', modules: [

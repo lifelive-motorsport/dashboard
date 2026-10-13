@@ -72,5 +72,8 @@ def snapshot(now: datetime | None = None) -> dict:
         ind[v] = {"jobs_open": sum(1 for j in open_jobs if _job_in(j["group"], v)), "jobs_closed_week": sum(1 for j in closed if _job_in(_bu_group(j.get("bu", "CARS")), v)),
                   "hours_week": round(tot / 60, 1), "billable_pct": round(100 * bil / tot) if tot else None,
                   "present": sum(1 for r in expected if r["state"] == "done"), "expected": len(expected), "absent": sum(1 for r in mine if r["state"] == "absent")}
-    return {"now": now.isoformat(timespec="minutes"), "date": today.isoformat(), "week_from": mon.isoformat(), "indicators": ind,
+    hol = {}
+    for y in {today.year, (today + timedelta(days=70)).year}:
+        hol.update({d.isoformat(): n for d, n in presence.holidays_be(y).items() if mon <= d <= mon + timedelta(days=70)})
+    return {"holidays": hol, "now": now.isoformat(timespec="minutes"), "date": today.isoformat(), "week_from": mon.isoformat(), "indicators": ind,
             "jobs": open_jobs, "people": rows}

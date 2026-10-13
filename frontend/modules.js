@@ -1,4 +1,4 @@
-// Registre des modules de Logbook : 4 chapitres, 8 modules (docs/BRAND.md §9). Chargé avant app.js.
+// Registre des modules de Logbook : 5 chapitres (docs/BRAND.md §9). Chargé avant app.js.
 // `groups` : groupes de pages du MENU rangés dans le module ; `pages` : pages du module. Les droits d'accès (catégories d'utilisateurs) se donnent page par page.
 const CHAPTERS = [
   {id: 'piloter', n: '01', label: 'Piloter', modules: [
@@ -11,16 +11,19 @@ const CHAPTERS = [
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team']},
     {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
-    {id: 'rides', label: 'Roulages', source: 'Logbook', sub: true, pages: ['consigner/rides', 'consigner/parts']},
     {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
-  {id: 'administrer', n: '04', label: 'Administrer', modules: [
+  {id: 'technique', n: '04', label: 'Opérer', modules: [
+    {id: 'garage', label: 'Garage', source: 'Logbook · Odoo · Google Agenda', pages: ['consigner/rides']},
+    {id: 'parts', label: 'Magasin de pièces', source: 'Logbook', pages: ['consigner/parts']},
+    {id: 'runs', label: 'Roulages', source: 'Logbook', pages: ['consigner/runs']}]},
+  {id: 'administrer', n: '05', label: 'Administrer', modules: [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},
     {id: 'connections', label: 'Connexions', source: 'Odoo · Google', pages: ['others/tags']}]},
 ];
 // Pages réservées au Super User : jamais attribuables à une catégorie d'utilisateurs (Événements et Ressources sont cochables ; la modification des fiches du staff reste au Super User)
 const SUPER_ONLY = new Set(['others/users']);
 // Pages que seul le Super User ou une catégorie qui les a cochées ouvre (ni « Administrateur » ni les autres)
-const GRANT_ONLY = new Set(['consigner/wall', 'consigner/rides', 'consigner/parts', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
+const GRANT_ONLY = new Set(['consigner/wall', 'consigner/rides', 'consigner/parts', 'consigner/runs', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
 // Toutes les pages d'un module, dans l'ordre : [clé, libellé]
 function modulePages(mod) {
   const out = [];

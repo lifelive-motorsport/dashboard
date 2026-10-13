@@ -81,7 +81,7 @@ function rdNode(n, depth) {
   const pad = `style="padding-left:${depth * 22}px"`;
   const ms = n.group ? '' : (n.meters && n.meters.length) ? n.meters.map(rdMeter).join('') : `<div class="rd-m"><small class="na">${rdKm(n.km)} km · pas de maintenance suivie</small></div>`;
   const hasMaint = (n.types || []).some(t => t !== 'replace');
-  const acts = n.removed_at ? `<small class="na">démontée le ${fmtDate(n.removed_at)}</small>` : `<span class="rd-acts">${depth < 3 ? `<button type="button" class="mini" data-rd="addpart" data-p="${esc(n.id)}" title="Ajouter dessous">＋</button>` : ''}${hasMaint ? `<button type="button" class="mini" data-rd="maint" data-p="${esc(n.id)}" title="Enregistrer une révision / une vidange">🛠</button>` : ''}<button type="button" class="mini" data-rd="editpart" data-p="${esc(n.id)}" title="Modifier">✎</button>${n.group ? '' : `<button type="button" class="mini" data-rd="replace" data-p="${esc(n.id)}" title="Remplacer (démonter et monter une neuve)">⟳</button>`}<button type="button" class="mini" data-rd="delpart" data-p="${esc(n.id)}" title="Supprimer">🗑</button></span>`;
+  const acts = n.removed_at ? `<small class="na">démontée le ${fmtDate(n.removed_at)}</small>` : `<span class="rd-acts">${hasMaint ? `<button type="button" class="mini" data-rd="maint" data-p="${esc(n.id)}" title="Enregistrer une révision / une vidange">🛠</button>` : ''}${n.group ? '' : `<button type="button" class="mini" data-rd="editpart" data-p="${esc(n.id)}" title="Modifier">✎</button>`}${n.group ? '' : `<button type="button" class="mini" data-rd="replace" data-p="${esc(n.id)}" title="Remplacer (démonter et monter une neuve)">⟳</button>`}<button type="button" class="mini" data-rd="delpart" data-p="${esc(n.id)}" title="Supprimer">🗑</button></span>`;
   return `<div class="rd-row ${n.group ? 'grp' : ''} ${n.removed_at ? 'gone' : ''}" ${pad}><span class="rd-name">${hasKids ? `<button type="button" class="rd-fold" data-rd="fold" data-p="${esc(n.id)}" aria-label="${esc(tx(folded ? 'Déplier' : 'Replier'))}">${folded ? '▸' : '▾'}</button>` : n.group ? '▾ ' : ''}${esc(n.name)}${n.reference ? ` <small class="na">${esc(n.reference)}</small>` : ''}${n.serial ? ` <small class="na">${esc(n.serial)}</small>` : ''}${folded ? ` <small class="na">· ${rdCount(n)} ${esc(tx('éléments'))}</small>` : ''}</span>${n.group && !n.removed_at ? rdChip(n.state === 'ok' ? 'none' : n.state) : ''}<span class="rd-ms">${ms}</span>${acts}</div>`
     + (folded ? '' : n.children.map(c => rdNode(c, depth + 1)).join(''));
 }
@@ -121,44 +121,12 @@ function rdReplForm() {
     <div class="sdbar"><button type="button" class="primary" data-rd="saverepl">Remplacer</button><button type="button" data-rd="cancelform">Annuler</button>${rd.msg ? `<span class="neg">${esc(rd.msg)}</span>` : ''}</div></div>`;
 }
 
-// ---- Runs -------------------------------------------------------------------------------------------------------------------------------
-const rdRunBlank = () => ({id: null, date: rdToday(), name: '', kind: 'circuit', circuit: '', laps: '', stages: [{name: '', length_km: '', passes: 1}], km: '', hours: '', drivers: '', notes: ''});
-function rdRunKm(r) {
-  if (rdNum(r.km) != null) return rdNum(r.km);
-  if (r.kind === 'rally') return r.stages.reduce((s, x) => s + (rdNum(x.length_km) || 0) * (parseInt(x.passes) || 0), 0);
-  const c = rd.circuits.find(x => x.name === r.circuit), len = c ? c.length_km : rdNum(r.newlen); return len && r.laps ? len * parseInt(r.laps) : null;
-}
-function rdNewCirc() {
-  const r = rd.run; if (!r || r.kind !== 'circuit' || !r.circuit.trim() || rd.circuits.find(c => c.name === r.circuit)) return '';
-  return `<div class="note">Circuit inconnu : <label>longueur du tour (km) <input class="sdin" data-rd-u="newlen" value="${esc(r.newlen || '')}" style="max-width:100px" inputmode="decimal"></label> <small class="na">enregistrée avec le circuit au premier run, ou déduite d’un PDF du chronométreur plus tard</small></div>`;
-}
-function rdRunForm() {
-  const r = rd.run; if (!r) return '';
-  const km = rdRunKm(r);
-  const circ = `<label class="sdfield"><span>Circuit</span><input class="sdin" data-rd-u="circuit" list="rd-circ" value="${esc(r.circuit)}" placeholder="Choisir ou saisir un circuit"></label><datalist id="rd-circ">${rd.circuits.map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>
-    <label class="sdfield"><span>Tours</span><input class="sdin" data-rd-u="laps" value="${esc(r.laps)}" style="max-width:100px" inputmode="numeric"></label>`;
-  const stages = `<div class="rd-stages">${r.stages.map((s, i) => `<div class="sdbar"><input class="sdin" data-rd-s="name" data-i="${i}" value="${esc(s.name)}" placeholder="Spéciale" style="max-width:220px"><input class="sdin" data-rd-s="length_km" data-i="${i}" value="${esc(s.length_km)}" placeholder="km" style="max-width:90px" inputmode="decimal"><span>×</span><input class="sdin" data-rd-s="passes" data-i="${i}" value="${esc(s.passes)}" style="max-width:70px" inputmode="numeric"><small class="na">passage(s)</small><button type="button" class="mini" data-rd="delstage" data-i="${i}" aria-label="Retirer">✕</button></div>`).join('')}<button type="button" class="mini" data-rd="addstage">＋ Spéciale</button></div>`;
-  return `<div class="note rd-form"><b>${r.id ? 'Modifier le run' : 'Nouveau run'}</b>
-    <div class="sdgrid"><label class="sdfield"><span>Date</span>${dpField('data-rd-u="date"', r.date)}</label><label class="sdfield"><span>Nom</span><input class="sdin" data-rd-u="name" value="${esc(r.name)}" placeholder="Essais libres, Spa Six Hours…"></label>
-    <div class="sdfield"><span>Type</span><div class="bu-filter"><button type="button" class="rs-pill" data-rd="kind" data-k="circuit" aria-pressed="${r.kind === 'circuit'}">Circuit</button><button type="button" class="rs-pill" data-rd="kind" data-k="rally" aria-pressed="${r.kind === 'rally'}">Rallye</button></div></div></div>
-    ${r.kind === 'circuit' ? `<div class="sdgrid">${circ}</div><div id="rd-newcirc">${rdNewCirc()}</div>` : stages}
-    <div class="sdgrid"><label class="sdfield"><span>Kilomètres (si connus : remplace le calcul)</span><input class="sdin" data-rd-u="km" value="${esc(r.km)}" style="max-width:140px" inputmode="decimal"></label><label class="sdfield"><span>Temps de roulage (heures)</span><input class="sdin" data-rd-u="hours" value="${esc(r.hours)}" style="max-width:140px" inputmode="decimal"></label>
-    <label class="sdfield"><span>Pilote(s)</span><input class="sdin" data-rd-u="drivers" value="${esc(r.drivers)}" placeholder="Séparés par des virgules"></label></div>
-    <label class="sdfield"><span>Notes</span><input class="sdin" data-rd-u="notes" value="${esc(r.notes)}"></label>
-    <p class="rd-km">${km == null ? 'Kilomètres : à compléter' : `<b>${rdKm(km)} km</b> comptés pour toutes les pièces montées`}</p>
-    <div class="sdbar"><button type="button" class="primary" data-rd="saverun" ${r.name.trim() && r.date ? '' : 'disabled'}>Enregistrer</button><button type="button" data-rd="cancelform">Annuler</button>${rd.msg ? `<span class="neg">${esc(rd.msg)}</span>` : ''}</div></div>`;
-}
+// ---- Roulages de la voiture : participations (la création des roulages se fait dans Opérer › Roulages) -----------------------------------------
 function rdRuns(c) {
-  if (!c.runs_list.length) return '<p class="na">Aucun run enregistré.</p>';
-  return table(['Date', 'Run', 'Circuit / rallye', 'Km', 'Heures', 'Pilote(s)', ''], c.runs_list.map(r => `<tr><td>${fmtDate(r.date)}</td><td class="prod">${esc(r.name)}</td><td>${r.kind === 'rally' ? 'Rallye' + (r.stages.length ? ` · ${r.stages.length} spéciale${r.stages.length > 1 ? 's' : ''}` : '') : esc(r.circuit || '')}${r.laps ? ` · ${r.laps} t` : ''}</td><td>${rdKm(r.km)}</td><td>${r.hours != null ? rdKm(r.hours) : '–'}</td><td>${esc((r.drivers || []).join(', '))}</td><td class="rd-acts"><button type="button" class="mini" data-rd="editrun" data-r="${esc(r.id)}" title="Modifier">✎</button><button type="button" class="mini" data-rd="delrun" data-r="${esc(r.id)}" title="Supprimer">🗑</button></td></tr>`), 'prodtable');
-}
-
-// ---- Réglages : catalogue de pièces et circuits ------------------------------------------------------------------------------------------
-function rdSettings() {
-  if (!rd.settings) return '';
-  return `<div class="note rd-form"><b>Circuits</b><p class="na">Longueur du tour : sert à calculer les kilomètres (tours × longueur). Les architectures de pièces se construisent dans « Magasin de pièces ».</p>
-    ${rd.circuits.length ? `<div class="rd-circs">${rd.circuits.map(c => `<span class="tagchip">${esc(c.name)} <small class="na">${rdKm(c.length_km)} km</small></span>`).join(' ')}</div>` : '<p class="na">Aucun circuit enregistré.</p>'}
-    <div class="sdbar"><input class="sdin" data-rd-n="name" value="${esc(rd.circ.name)}" placeholder="Nom du circuit" style="max-width:240px"><input class="sdin" data-rd-n="length_km" value="${esc(rd.circ.length_km)}" placeholder="Longueur du tour (km)" style="max-width:190px" inputmode="decimal"><button type="button" data-rd="savecirc" ${rd.circ.name.trim() && rdNum(rd.circ.length_km) > 0 ? '' : 'disabled'}>Ajouter / mettre à jour</button></div></div>`;
+  const head = `<h4 class="sub">Roulages <button type="button" class="mini" data-rd="assoc">＋ ${esc(tx('Associer à un roulage'))}</button></h4>`;
+  if (!c.runs_list.length) return head + `<p class="na">${esc(tx('Cette voiture n’est associée à aucun roulage. Les roulages se créent dans Opérer › Roulages.'))}</p>`;
+  return head + table(['Date', 'Roulage', 'Circuit / rallye', 'Km', 'Heures', 'Pilote(s)', ''], c.runs_list.map(r => `<tr><td>${fmtDate(r.date)}</td><td class="prod">${esc(r.name)}</td><td>${r.kind === 'rally' ? 'Rallye' + (r.stages.length ? ` · ${r.stages.length} spéciale${r.stages.length > 1 ? 's' : ''}` : '') : esc(r.circuit || '')}${r.laps ? ` · ${r.laps} t` : ''}</td><td>${rdKm(r.km)}</td><td>${r.hours != null ? rdKm(r.hours) : '–'}</td><td>${esc((r.drivers || []).join(', '))}</td>
+    <td class="rd-acts"><button type="button" class="mini" data-rd="editrun" data-r="${esc(r.id)}" title="${esc(tx('Modifier la participation'))}">✎</button><button type="button" class="mini" data-rd="delrun" data-r="${esc(r.id)}" title="${esc(tx('Retirer cette voiture du roulage'))}">✕</button></td></tr>`));
 }
 
 // ---- Documents et validités de la voiture ---------------------------------------------------------------------------------------------------
@@ -210,18 +178,18 @@ function rdDraw() {
   const msg = rd.msg && !rd.form && !rd.run && !rd.repl ? `<p class="na">${esc(rd.msg)}</p>` : '';
   if (!c) {
     const nArchBar = rd.cars ? rd.cars.filter(c => c.archived).length : 0;
-    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Circuits'}</button><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading && rd.cars ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rdSettings()}${rdList()}`;
+    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading && rd.cars ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rdList()}`;
     return;
   }
   const alertsHtml = c.alerts_list.length ? `<div class="rd-alerts">${c.alerts_list.map(a => a.type === 'inspection' ? `<span class="rd-chip warn" title="${esc((a.items || []).join('\n'))}">⚠ ${esc(a.label)}</span>` : `<span class="rd-chip ${a.state === 'over' ? 'neg' : 'warn'}" title="${rdKm(a.km)} km${a.limit_km ? ' / ' + rdKm(a.limit_km) : ''}">${a.state === 'over' ? '⛔' : '⚠'} ${esc(a.path)} · ${esc(a.label)} · ${rdPct(a.ratio)}</span>`).join(' ')}</div>` : '';
-  el.innerHTML = `<div class="sdbar"><button type="button" data-rd="back">← Voitures</button><button type="button" data-rd="settings">${rd.settings ? 'Fermer les réglages' : '⚙ Circuits'}</button><span class="wl-sp"></span><button type="button" data-rd="archive">${c.archived ? '↩ Désarchiver' : '🗄 Archiver'}</button>${c.archived ? '<button type="button" class="danger" data-rd="delcar">🗑 Supprimer définitivement</button>' : ''}</div>${c.archived ? '<p class="na">Voiture archivée : cachée du Garage, ses données sont conservées. « Supprimer définitivement » efface ses pièces, ses runs et sa photo.</p>' : ''}${msg}${rdSettings()}
+  el.innerHTML = `<div class="sdbar"><button type="button" data-rd="back">← Voitures</button><span class="wl-sp"></span><button type="button" data-rd="archive">${c.archived ? '↩ Désarchiver' : '🗄 Archiver'}</button>${c.archived ? '<button type="button" class="danger" data-rd="delcar">🗑 Supprimer définitivement</button>' : ''}</div>${c.archived ? '<p class="na">Voiture archivée : cachée du Garage, ses données sont conservées. « Supprimer définitivement » efface ses pièces, ses runs et sa photo.</p>' : ''}${msg}
     <div class="rd-head"><label class="rd-photobtn" title="Changer la photo">${rdPhoto(c, true)}<input type="file" id="rd-photo-in" accept="image/*" hidden><small class="na">📷 Photo</small></label>
       <div><h3 style="margin:0">${esc(c.name)}</h3><small class="na">${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''} · ${c.runs} run${c.runs > 1 ? 's' : ''}</small><div>${rdChip(c.state, c.alerts)}</div>${rdBuPills(c)}</div></div>${rdLinks(c)}${rdIdentity(c)}${alertsHtml}${rdDocAlerts(c)}${rdDocs(c)}
-    <h4 class="sub">Pièces <button type="button" class="mini" data-rd="addpart" data-p="">＋ Ensemble</button>${rdHasFold(c.tree) ? ` <button type="button" class="mini" data-rd="foldall" data-on="0">${esc(tx('Tout déplier'))}</button> <button type="button" class="mini" data-rd="foldall" data-on="1">${esc(tx('Tout replier'))}</button>` : ''}${rdHasRemoved(c.tree) ? ` <label class="chk rd-rm"><input type="checkbox" id="rd-removed" ${rd.showRemoved ? 'checked' : ''}> afficher les pièces démontées</label>` : ''}</h4>
+    <h4 class="sub">Pièces ${rdHasFold(c.tree) ? ` <button type="button" class="mini" data-rd="foldall" data-on="0">${esc(tx('Tout déplier'))}</button> <button type="button" class="mini" data-rd="foldall" data-on="1">${esc(tx('Tout replier'))}</button>` : ''}${rdHasRemoved(c.tree) ? ` <label class="chk rd-rm"><input type="checkbox" id="rd-removed" ${rd.showRemoved ? 'checked' : ''}> afficher les pièces démontées</label>` : ''}</h4>
     ${rd.form && !rd.form.id && !rd.form.parent_id || rd.form && rd.form.id && rdFind(rd.form.id) && !rdFind(rd.form.id).parent_id ? rdPartForm() : ''}
-    <div class="rd-tree">${c.tree.length ? c.tree.map(n => rdNode(n, 0)).join('') : '<p class="na">Aucune pièce : ajoutez un ensemble (par exemple Moteur) ou appliquez un modèle du Magasin de pièces.</p>'}</div>
+    <div class="rd-tree">${c.tree.length ? c.tree.map(n => rdNode(n, 0)).join('') : '<p class="na">Aucune pièce : choisissez un modèle d’architecture ci-dessus (modèles construits dans Opérer › Magasin de pièces).</p>'}</div>
     ${rd.form && (rd.form.parent_id || (rd.form.id && rdFind(rd.form.id) && rdFind(rd.form.id).parent_id)) ? rdPartForm() : ''}${rdReplForm()}${rdMaintForm()}
-    <h4 class="sub">Roulages <button type="button" class="mini" data-rd="newrun">＋ Nouveau run</button></h4>${rdRunForm()}${rdRuns(c)}`;
+    ${rdRuns(c)}`;
   rdDocFilter();
   window.scrollTo(...sav);
 }
@@ -243,12 +211,10 @@ document.addEventListener('input', e => {
   if (t.dataset.rdF !== undefined && rd.form && !t.classList.contains('dp-h')) {
     rd.form[t.dataset.rdF] = t.type === 'checkbox' ? t.checked : t.value;
     const b = document.querySelector('[data-rd=savepart]'); if (b) b.disabled = !rd.form.name.trim();
-  } else if (t.dataset.rdU !== undefined && rd.run && !t.classList.contains('dp-h')) { rd.run[t.dataset.rdU] = t.value; const needRedraw = false; if (t.dataset.rdU === 'circuit') { const nc = document.getElementById('rd-newcirc'); if (nc) nc.innerHTML = rdNewCirc(); } const ph = document.querySelector('.rd-km'); if (!needRedraw && ph) { const km = rdRunKm(rd.run); ph.innerHTML = km == null ? 'Kilomètres : à compléter' : `<b>${rdKm(km)} km</b> comptés pour toutes les pièces montées`; } const b = document.querySelector('[data-rd=saverun]'); if (b) b.disabled = !(rd.run.name.trim() && rd.run.date); }
+  }
   else if (t.dataset.rdFl !== undefined && rd.form) { const [ty, k] = t.dataset.rdFl.split('.'); rd.form.lim[ty][k] = t.value; }
   else if (t.dataset.rdM !== undefined && rd.mf && !t.classList.contains('dp-h')) rd.mf[t.dataset.rdM] = t.value;
-  else if (t.dataset.rdS !== undefined && rd.run) { rd.run.stages[+t.dataset.i][t.dataset.rdS] = t.value; const ph = document.querySelector('.rd-km'); if (ph) { const km = rdRunKm(rd.run); ph.innerHTML = km == null ? 'Kilomètres : à compléter' : `<b>${rdKm(km)} km</b> comptés pour toutes les pièces montées`; } }
   else if (t.dataset.rdR !== undefined && rd.repl && !t.classList.contains('dp-h')) rd.repl[t.dataset.rdR] = t.value;
-  else if (t.dataset.rdN !== undefined) { rd.circ[t.dataset.rdN] = t.value; const b = document.querySelector('[data-rd=savecirc]'); if (b) b.disabled = !(rd.circ.name.trim() && rdNum(rd.circ.length_km) > 0); }
 });
 document.addEventListener('change', async e => {
   const t = e.target; if (!document.getElementById('rd-view')) return;
@@ -279,7 +245,6 @@ document.addEventListener('change', async e => {
   }
   if (t.classList.contains('dp-h')) {               // dates (calendrier maison)
     if (t.dataset.rdF === 'mounted_from' && rd.form) rd.form.mounted_from = t.value || '';
-    else if (t.dataset.rdU === 'date' && rd.run) { rd.run.date = t.value; const b = document.querySelector('[data-rd=saverun]'); if (b) b.disabled = !(rd.run.name.trim() && rd.run.date); }
     else if (t.dataset.rdR === 'on' && rd.repl) rd.repl.on = t.value;
     else if (t.dataset.rdM === 'date' && rd.mf) rd.mf.date = t.value;
     return;
@@ -319,8 +284,6 @@ document.addEventListener('click', async e => {
     if (a === 'archive') { await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'PUT', body: JSON.stringify({archived: !rd.car.archived})}); rd.car.archived = !rd.car.archived; if (rd.car.archived) { rd.car = null; } return rdReload(); }
     if (a === 'delcar') { const c = rd.car; if (!confirm(`Supprimer définitivement « ${c.name} » ?\n\nSes ${c.parts} pièce(s), ses ${c.runs} run(s) et sa photo seront effacés, sans retour possible.${'\n\n'}Le véhicule reste dans Planifier › Ressources : laissez-le archivé s'il y figure encore.`)) return; const j = await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'DELETE'}); rd.car = null; rd.msg = `Données supprimées (${j.parts} pièce(s), ${j.runs} run(s)).`; return rdReload(); }
     if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; rdDraw(); window.scrollTo({top: 0}); rdReload(); return; }          // la liste en mémoire s'affiche tout de suite, elle se rafraîchit en arrière-plan
-    if (a === 'settings') { rd.settings = !rd.settings; rd.cat = null; return rdDraw(); }
-    if (a === 'addpart') { rd.form = {id: null, parent_id: b.dataset.p || null, name: '', group: !b.dataset.p, serial: '', reference: '', types: [], lim: Object.fromEntries(RD_MAINT.map(([t]) => [t, rdLimBlank()])), km_start: '', hours_start: '', mounted_from: '', notes: ''}; rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
     if (a === 'editpart') { const n = rdFind(b.dataset.p); const tys = (n.types && n.types.length) ? n.types : (n.limit_km || n.limit_hours) ? ['replace'] : [], mm = n.maint || {}, lm = rdLimOf;
       rd.form = {id: n.id, parent_id: n.parent_id, name: n.name, group: !!n.group, serial: n.serial || '', reference: n.reference || '', types: tys, lim: {replace: lm(n), revision: lm(mm.revision || {}), revision2: lm(mm.revision2 || {}), fluids: lm(mm.fluids || {}), inspection: lm(mm.inspection || {})}, km_start: n.km_start || '', hours_start: n.hours_start || '', mounted_from: n.mounted_from || '', notes: n.notes || ''}; rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
     if (a === 'savepart') { const f = rd.form, body = rdPartBody(f); await rsCall(f.id ? '/api/rides/parts/' + encodeURIComponent(f.id) : `/api/rides/cars/${encodeURIComponent(k)}/parts`, {method: f.id ? 'PUT' : 'POST', body: JSON.stringify(body)}); rd.form = null; rd.msg = null; return rdReload(); }
@@ -332,23 +295,8 @@ document.addEventListener('click', async e => {
     if (a === 'delmaint') { if (!confirm('Supprimer cette maintenance ? Le compteur reprend depuis la précédente.')) return; await rsCall('/api/rides/maint/' + encodeURIComponent(b.dataset.m), {method: 'DELETE'}); const m = rd.mf; await rdReload(); rd.mf = m; return rdDraw(); }
     if (a === 'applytpl') { const v = (document.getElementById('rd-tpl-sel') || {}).value; if (!v) throw new Error('Choisissez un modèle.'); const j = await rsCall(`/api/rides/cars/${encodeURIComponent(k)}/template`, {method: 'POST', body: JSON.stringify({template_id: v})}); rd.msg = `Modèle « ${j.template.name} » appliqué : ${j.created} élément(s) créé(s), ${j.kept} déjà présent(s) conservé(s).`; return rdReload(); }
     if (a === 'cancelform') { rd.form = rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
-    if (a === 'newrun') { rd.run = rdRunBlank(); rd.form = rd.repl = null; rd.msg = null; return rdDraw(); }
-    if (a === 'editrun') { const r = rd.car.runs_list.find(x => x.id === b.dataset.r); rd.run = {id: r.id, date: r.date, name: r.name, kind: r.kind, circuit: r.circuit || '', laps: r.laps || '', stages: r.stages.length ? r.stages.map(s => ({...s})) : [{name: '', length_km: '', passes: 1}], km: r.source === 'manual' && !r.laps && !r.stages.length ? r.km : '', hours: r.hours ?? '', drivers: (r.drivers || []).join(', '), notes: r.notes || ''}; rd.form = rd.repl = null; rd.msg = null; return rdDraw(); }
-    if (a === 'kind') { rd.run.kind = b.dataset.k; return rdDraw(); }
-    if (a === 'addstage') { rd.run.stages.push({name: '', length_km: '', passes: 1}); return rdDraw(); }
-    if (a === 'delstage') { rd.run.stages.splice(+b.dataset.i, 1); if (!rd.run.stages.length) rd.run.stages.push({name: '', length_km: '', passes: 1}); return rdDraw(); }
-    if (a === 'saverun') {
-      const r = rd.run, known = rd.circuits.find(c => c.name === r.circuit);
-      if (r.kind === 'circuit' && r.circuit.trim() && !known && rdNum(r.newlen) > 0) await rsCall('/api/rides/circuits', {method: 'POST', body: JSON.stringify({name: r.circuit.trim(), length_km: rdNum(r.newlen)})});
-      else if (r.kind === 'circuit' && r.circuit.trim() && !known && parseInt(r.laps) > 0 && rdNum(r.km) == null) throw new Error('Indiquez la longueur du tour de ce circuit, ou saisissez les kilomètres.');
-      const circ = r.kind === 'circuit' ? r.circuit.trim() : '';
-      if (circ && !known && rdNum(r.newlen) > 0) { const j = await rsCall('/api/rides/cars'); rd.circuits = j.circuits; }
-      const body = {date: r.date, name: r.name.trim(), kind: r.kind, circuit: circ, laps: r.kind === 'circuit' ? (parseInt(r.laps) || 0) : 0,
-        stages: r.kind === 'rally' ? r.stages.filter(s => rdNum(s.length_km) > 0).map(s => ({name: s.name || '', length_km: rdNum(s.length_km), passes: parseInt(s.passes) || 1})) : [],
-        km: rdNum(r.km), hours: rdNum(r.hours), drivers: r.drivers.split(',').map(x => x.trim()).filter(Boolean), notes: r.notes || ''};
-      await rsCall(r.id ? '/api/rides/runs/' + encodeURIComponent(r.id) : `/api/rides/cars/${encodeURIComponent(k)}/runs`, {method: r.id ? 'PUT' : 'POST', body: JSON.stringify(body)}); rd.run = null; rd.msg = null; return rdReload();
-    }
-    if (a === 'delrun') { if (!confirm('Supprimer ce run ? Les kilomètres des pièces seront recalculés.')) return; await rsCall('/api/rides/runs/' + encodeURIComponent(b.dataset.r), {method: 'DELETE'}); return rdReload(); }
-    if (a === 'savecirc') { const j = await rsCall('/api/rides/circuits', {method: 'POST', body: JSON.stringify({name: rd.circ.name.trim(), length_km: rdNum(rd.circ.length_km)})}); rd.circuits = rd.circuits.filter(c => c.id !== j.id).concat([j]).sort((x, y) => x.name.localeCompare(y.name)); rd.circ = {name: '', length_km: ''}; return rdDraw(); }
+    if (a === 'editrun') { const r = rd.car.runs_list.find(x => x.id === b.dataset.r); return ptOpen({sid: r.session_id, key: rd.car.key, carName: rd.car.name, run: r, after: rdReload}); }
+    if (a === 'assoc') return ptOpen({key: rd.car.key, carName: rd.car.name, after: rdReload});
+    if (a === 'delrun') { if (!confirm(tx('Retirer cette voiture de ce roulage ? Les kilomètres des pièces seront recalculés.'))) return; await rsCall('/api/rides/runs/' + encodeURIComponent(b.dataset.r), {method: 'DELETE'}); return rdReload(); }
   } catch (err) { rdErr(err); }
 });

@@ -8,7 +8,7 @@ from app.main import app
 
 @pytest.fixture()
 def api(monkeypatch):
-    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates"):
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
         monkeypatch.setattr(rides, n, None)
     monkeypatch.setattr(timesheets, "_blobs", None)
     monkeypatch.setattr(users, "is_super", lambda e: True)
@@ -337,3 +337,43 @@ def test_cars_list_reads_each_collection_once(api, monkeypatch):
     monkeypatch.setattr(timesheets.Coll, "all", lambda self: (calls.append(1), real(self))[1])
     cs = api.get("/api/rides/cars").json()["cars"]
     assert len(cs) >= 2 and len(calls) <= 5                  # parts, runs, maintenances, voitures : une lecture chacune, quel que soit le nombre de voitures (avant : une par voiture et par collection)
+
+
+def test_sessions_group_cars_and_runs_are_associated(api):
+    cs = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}
+    m3, p992 = cs["BMW M3 E30"], cs["Porsche 992 Rally"]
+    api.post("/api/rides/circuits", json={"name": "Dijon", "length_km": 3.8})
+    assert api.post("/api/rides/sessions", json={"date": "2026-06-04", "name": "Essais", "circuit": "Inconnu", "kind": "circuit"}).status_code == 422
+    s = api.post("/api/rides/sessions", json={"date": "2026-06-04", "name": "Essais Dijon", "kind": "circuit", "circuit": "Dijon"}).json()
+    r = api.post(f"/api/rides/sessions/{s['id']}/cars/{m3}", json={"laps": 22, "hours": 1.5, "drivers": ["Max"]})
+    assert r.status_code == 200 and r.json()["km"] == 83.6 and r.json()["session_id"] == s["id"]
+    assert api.post(f"/api/rides/sessions/{s['id']}/cars/{m3}", json={"laps": 5}).status_code == 422             # une seule fois par voiture
+    assert api.post(f"/api/rides/sessions/{s['id']}/cars/{p992}", json={"laps": 10}).status_code == 200
+    ses = api.get("/api/rides/sessions").json()["sessions"]
+    assert len(ses) == 1 and {c["name"] for c in ses[0]["cars"]} == {"BMW M3 E30", "Porsche 992 Rally"} and ses[0]["km_total"] == 121.6
+    # le roulage change : les voitures suivent (date, circuit -> kilomètres recalculés)
+    api.post("/api/rides/circuits", json={"name": "Spa", "length_km": 7.0})
+    api.put(f"/api/rides/sessions/{s['id']}", json={"date": "2026-06-05", "name": "Essais Spa", "kind": "circuit", "circuit": "Spa"})
+    d = api.get(f"/api/rides/cars/{m3}").json()
+    assert d["runs_list"][0]["date"] == "2026-06-05" and d["runs_list"][0]["km"] == 154.0 and d["runs_list"][0]["name"] == "Essais Spa"
+    # rallye : les spéciales du roulage sont recopiées dans l'association
+    rs = api.post("/api/rides/sessions", json={"date": "2026-07-01", "name": "Ypres", "kind": "rally", "stages": [{"name": "ES1", "length_km": 10, "passes": 2}]}).json()
+    assoc = api.post(f"/api/rides/sessions/{rs['id']}/cars/{p992}", json={}).json()
+    assert assoc["km"] == 20.0
+    # un run saisi directement (import, API) est rattaché au bon roulage, créé au besoin ; deux voitures même date et nom = même roulage
+    api.post(f"/api/rides/cars/{m3}/runs", json={"date": "2026-08-01", "name": "Test", "km": 50})
+    api.post(f"/api/rides/cars/{p992}/runs", json={"date": "2026-08-01", "name": "test", "km": 60})
+    ses = api.get("/api/rides/sessions").json()["sessions"]
+    assert next(s2 for s2 in ses if s2["name"] == "Test")["km_total"] == 110 and len(ses) == 3
+    # dissocier une voiture, puis supprimer un roulage
+    rid = d["runs_list"][0]["id"]
+    assert api.delete(f"/api/rides/runs/{rid}").status_code == 200 and api.get(f"/api/rides/cars/{m3}").json()["runs"] == 1
+    assert api.delete(f"/api/rides/sessions/{s['id']}").json() == {"cars": 1}
+
+
+def test_legacy_runs_are_attached_to_sessions(api):
+    m3 = car(api)["key"]
+    rides.runs_coll().put("r-old", {"id": "r-old", "vehicle": m3, "date": "2026-05-01", "name": "Ancien", "kind": "circuit", "circuit": "", "laps": 0, "stages": [], "km": 40, "hours": None, "drivers": [], "event_id": "", "notes": "", "created_by": "x", "created_at": "2026-05-01T00:00:00+00:00"})
+    ses = api.get("/api/rides/sessions").json()["sessions"]
+    assert len(ses) == 1 and ses[0]["name"] == "Ancien" and ses[0]["cars"][0]["km"] == 40
+    assert rides.runs_coll().get("r-old")["session_id"] == ses[0]["id"] and api.get("/api/rides/sessions").json()["sessions"][0]["id"] == ses[0]["id"]      # une seule fois

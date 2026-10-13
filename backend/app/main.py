@@ -981,8 +981,33 @@ def rd_delete_run(rid: str, _user: str = Depends(granted("consigner/rides"))):
     return {"ok": True}
 
 
+@app.get("/api/rides/sessions")
+def rd_sessions(_user: str = Depends(granted("consigner/runs", "consigner/rides"))):
+    return {"sessions": rides.list_sessions(), "circuits": rides.list_circuits()}
+
+
+@app.post("/api/rides/sessions")
+def rd_add_session(body: rides.SessionIn, user: str = Depends(granted("consigner/runs"))):
+    return _rd(rides.save_session, None, body, user)
+
+
+@app.put("/api/rides/sessions/{sid}")
+def rd_update_session(sid: str, body: rides.SessionIn, user: str = Depends(granted("consigner/runs"))):
+    return _rd(rides.save_session, sid, body, user)
+
+
+@app.delete("/api/rides/sessions/{sid}")
+def rd_delete_session(sid: str, _user: str = Depends(granted("consigner/runs"))):
+    return _rd(rides.delete_session, sid)
+
+
+@app.post("/api/rides/sessions/{sid}/cars/{key}")
+def rd_associate(sid: str, key: str, body: rides.AssocIn, user: str = Depends(granted("consigner/runs", "consigner/rides"))):
+    return _rd(rides.associate, sid, key, body, user)
+
+
 @app.post("/api/rides/circuits")
-def rd_save_circuit(body: rides.CircuitIn, _user: str = Depends(granted("consigner/rides"))):
+def rd_save_circuit(body: rides.CircuitIn, _user: str = Depends(granted("consigner/rides", "consigner/runs"))):
     return _rd(rides.save_circuit, body)
 
 

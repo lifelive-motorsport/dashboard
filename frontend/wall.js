@@ -69,14 +69,21 @@ function wlStart() { wlStop(); wlDraw(); wlLoad(); wl.timer = setInterval(wlLoad
 function wlStop() { clearInterval(wl.timer); clearInterval(wl.clock); wl.timer = wl.clock = null; if (wl.full) wlFull(false); }
 function wlFull(on) {
   wl.full = on; document.body.classList.toggle('wall-full', on);
-  let x = document.getElementById('wl-exit'); if (x) x.remove();
-  if (on) { x = document.createElement('button'); x.id = 'wl-exit'; x.type = 'button'; x.dataset.wl = 'full'; x.textContent = '✕ Quitter le plein écran'; document.body.appendChild(x); }
   try { if (on && !document.fullscreenElement) document.documentElement.requestFullscreen(); else if (!on && document.fullscreenElement) document.exitFullscreen(); } catch {}
   wlDraw();
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && wl.full) wlFull(false); });
+// Boutons de l'écran : l'élément visé est retrouvé aussi par sa position (marge de 8 px), même si un autre élément capte le clic ou si la zone cliquable est décalée par le navigateur en plein écran.
+const wlHit = e => {
+  const t = e.target.closest && e.target.closest('[data-wl]'); if (t) return t;
+  const m = 8; let best = null, bd = 1e9;      // le plus proche dans la marge
+  document.querySelectorAll('#wl-view [data-wl]').forEach(b => { const r = b.getBoundingClientRect(), dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right), dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom), d = Math.hypot(dx, dy); if (d <= m && d < bd) { best = b; bd = d; } });
+  return best;
+};
+document.addEventListener('mousemove', e => { if (!wl.full || !document.getElementById('wl-view')) return; document.body.style.cursor = wlHit(e) ? 'pointer' : ''; });
 document.addEventListener('click', e => {
-  const b = e.target.closest && e.target.closest('[data-wl]'); if (!b || !document.getElementById('wl-view')) return;
+  if (!document.getElementById('wl-view')) return;
+  const b = wlHit(e); if (!b) return;
   const a = b.dataset.wl;
   if (a === 'view') { wl.view = b.dataset.k; if (wl.view === 'atelier' && wl.bu === 'others') wl.bu = 'all'; wlDraw(); }
   else if (a === 'bu') { wl.bu = b.dataset.k; wlDraw(); }

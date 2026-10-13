@@ -113,3 +113,4 @@ PUBLIC_URL = os.getenv("PUBLIC_URL", "")                            # adresse de
 CRON_AUDIENCE = os.getenv("CRON_AUDIENCE", "")                      # audience du jeton OIDC de Cloud Scheduler (adresse du service Cloud Run)
 CRON_SERVICE_ACCOUNT = os.getenv("CRON_SERVICE_ACCOUNT", "")        # compte de service autorisé à déclencher les tâches planifiées (alertes de pointage…)
 LEAVE_CALENDAR_ID = os.getenv("LEAVE_CALENDAR_ID", "")              # agenda Google des absences (« warnings ») ; vide : recherché par son nom parmi les agendas accessibles
+SCHEDULER_LOCATION = os.getenv("SCHEDULER_LOCATION", "europe-west1")      # région des déclencheurs Cloud Scheduler (état affiché au Super User)

@@ -668,6 +668,7 @@ function render(force) {
   if (key.startsWith('planifier/res_')) { drawResources(); loadResources().then(drawResources); }
   if (key === 'planifier/planning') { plDraw(); plLoad(); }
   if (key === 'others/users' && superUser) { drawViewAs(); loadViewAs(); }
+  if (superUser && (key === 'home/welcome' || key === 'consigner/team')) alertsBanner();
   if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
   if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
@@ -794,4 +795,17 @@ function renderTabbar(key) {
   bar.innerHTML = items.map(([k, l]) => `<a href="#/${k}" class="${k === key ? 'on' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICONS[k]}</svg><span>${esc(l)}</span></a>`).join('')
     + `<button type="button" id="tab-menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">${TAB_ICONS.menu}</svg><span>Menu</span></button>`;
   $('tab-menu').onclick = () => { const o = document.body.classList.toggle('nav-open'); $('menu-btn').setAttribute('aria-expanded', String(o)); };
+}
+
+
+// Bandeau d'information du Super User : les rappels de pointage (Cloud Scheduler) sont-ils en pause ? (état lu au plus toutes les 5 minutes ; rien n'est affiché s'il est illisible)
+async function alertsBanner() {
+  let st; try { const r = await fetch('/api/admin/alerts-status'); if (!r.ok) return; st = await r.json(); } catch { return; }
+  if (!['paused', 'mixed'].includes(st.state) || !document.getElementById('page') || document.getElementById('alerts-banner')) return;
+  const off = st.jobs.filter(j => j.state !== 'ENABLED'), cmds = off.map(j => `gcloud scheduler jobs resume ${j.name} --location=${st.location}`).join('\n');
+  const b = document.createElement('div'); b.id = 'alerts-banner'; b.className = 'infobar';
+  b.innerHTML = `<b>ℹ ${esc(t(st.state === 'paused' ? 'Rappels de pointage désactivés' : 'Rappels de pointage partiellement désactivés'))}</b> <span>${esc(t('Aucun e-mail de rappel n’est envoyé aux mécaniciens (17 h du lundi au jeudi, 15 h le vendredi) tant que le déclencheur est en pause dans Cloud Scheduler.'))}</span>
+    <details><summary>${esc(t('Comment les réactiver'))}</summary><pre>${esc(cmds)}</pre></details>`;
+  document.getElementById('page').prepend(b);
+  if (typeof i18nNode === 'function' && LANG === 'en') i18nNode(b);
 }

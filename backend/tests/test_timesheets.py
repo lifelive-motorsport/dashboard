@@ -453,3 +453,17 @@ def test_recent_jobs_and_cron_auth(api, monkeypatch):
     assert api.post("/api/cron/timesheet-alerts", headers={"Authorization": "Bearer t"}).status_code == 403
     monkeypatch.setattr(id_token, "verify_oauth2_token", lambda t, r, audience: {"email": "sched@p.iam.gserviceaccount.com", "email_verified": True})
     assert api.post("/api/cron/timesheet-alerts", headers={"Authorization": "Bearer t"}).status_code == 200
+
+
+def test_alerts_status_paused_active_and_unreadable(monkeypatch):
+    from app import scheduler, settings
+    monkeypatch.setattr(settings, "CRON_AUDIENCE", "https://x.run.app")
+    monkeypatch.setattr(settings, "PROVIDER", "odoo")
+    mk = lambda *states: [{"name": f"projects/p/locations/l/jobs/j{i}", "state": s, "schedule": "0 17 * * 1-4", "httpTarget": {"uri": "https://x.run.app/api/cron/timesheet-alerts"}} for i, s in enumerate(states)] + [{"name": "projects/p/locations/l/jobs/autre", "state": "PAUSED", "httpTarget": {"uri": "https://x/autre"}}]
+    for states, want in ((("PAUSED", "PAUSED"), "paused"), (("ENABLED", "ENABLED"), "active"), (("ENABLED", "PAUSED"), "mixed"), ((), "none")):
+        monkeypatch.setattr(scheduler, "_list_jobs", lambda s=states: mk(*s))
+        assert scheduler.alerts_status(force=True)["state"] == want                                     # les autres déclencheurs ne comptent pas
+    def boom(): raise RuntimeError("PERMISSION_DENIED")
+    monkeypatch.setattr(scheduler, "_list_jobs", boom)
+    r = scheduler.alerts_status(force=True)
+    assert r["state"] == "unknown" and "PERMISSION_DENIED" in r["error"]

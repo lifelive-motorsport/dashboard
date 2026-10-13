@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
-from . import speech, leaves
+from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
 from . import access, projection, users
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
@@ -156,6 +156,12 @@ def super_user(user: str = Depends(require_user)) -> str:
     if not users.is_super(user):
         raise HTTPException(403, "Réservé au Super User")
     return user
+
+
+@app.get("/api/admin/alerts-status")
+def alerts_status(_user: str = Depends(super_user)):
+    """Super User : état des déclencheurs des rappels de pointage (active, en pause…), pour le bandeau d'information."""
+    return scheduler.alerts_status()
 
 
 def _users_view(doc: dict) -> dict:

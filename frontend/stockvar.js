@@ -38,7 +38,7 @@ const viewData = d => applyStockVar(typeof adjOn !== 'undefined' && adjOn ? adju
 function stockToggleHtml() {
   const n = (sv.items || []).filter(a => a.enabled).length;
   return `<div class="adjbar stockbar ${stockOn ? 'on' : ''}"><div class="seg" role="group" aria-label="Variation de stock"><button type="button" data-stockon="0" class="${stockOn ? '' : 'sel'}">Sans variation de stock</button><button type="button" data-stockon="1" class="${stockOn ? 'sel' : ''}">Avec variation de stock</button></div>`
-    + `<span class="adjtxt">${stockOn ? `<b>Variations de stock incluses</b> dans la marge de XC (${n} élément${n > 1 ? 's' : ''} actif${n > 1 ? 's' : ''}).` : `Variations de stock non incluses${n ? ` — ${n} élément${n > 1 ? 's' : ''} disponible${n > 1 ? 's' : ''}` : ''}.`} <a href="#/xc/inventory">Voir et saisir les variations</a></span></div>`;
+    + `<span class="adjtxt">${stockOn ? `<b>Variations de stock incluses</b> dans la marge de XC (${n} élément${n > 1 ? 's' : ''} actif${n > 1 ? 's' : ''}).` : `Variations de stock non incluses${n ? ` — ${n} élément${n > 1 ? 's' : ''} disponible${n > 1 ? 's' : ''}` : ''}.`} <a href="#/xc/inventory">${sv.can_edit ? 'Voir et saisir les variations' : 'Voir les variations'}</a></span></div>`;
 }
 document.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t || t.dataset.stockon === undefined) return;

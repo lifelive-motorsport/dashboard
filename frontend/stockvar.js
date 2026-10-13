@@ -60,7 +60,7 @@ function drawStockVar() {
       <input class="lbl" type="text" maxlength="160" placeholder="Description (ex. Dépréciation du stock de pièces lentes, inventaire de fin d’année…)" data-sv="label" data-i="${i}" value="${esc(a.label)}"${dis}>
       ${edit ? `<button type="button" class="mini" data-svdel="${i}" title="Supprimer">✕</button>` : ''}</div>
     <div class="adjbody"><label>Effet sur la marge brute de XC (€ ; + = le stock augmente, − = il diminue)<input type="number" step="0.01" data-sv="amount" data-i="${i}" value="${a.amount}"${dis}></label>
-      <label>Date d’effet<input type="date" data-sv="date" data-i="${i}" value="${esc(a.date || '')}"${dis}></label></div>
+      <label>Date d’effet${dpField(`data-sv="date" data-i="${i}"`, a.date || '', dis)}</label></div>
     <input class="note" type="text" maxlength="300" placeholder="Note (justification, visible par tous)" data-sv="note" data-i="${i}" value="${esc(a.note || '')}"${dis}></div>`).join('');
   el.innerHTML = `<p class="na">Saisissez ici les variations de stock à prendre en compte (positives ou négatives). Elles modifient la marge brute et la marge nette de <b>XC</b> uniquement lorsque l’option « Avec variation de stock » est activée dans les pages de marge d’Vue d’ensemble et de Détail XC. Elles ne sont jamais écrites dans Odoo.</p>`
     + `<div class="kpis">${kpi('Variations actives en ' + year, (tot > 0 ? '+' : '') + eur(tot), tot < 0 ? 'neg' : tot > 0 ? 'pos' : '', 'effet cumulé sur la marge brute XC')}${kpi('Éléments', num(items.length), '', `${items.filter(a => a.enabled).length} actif${items.filter(a => a.enabled).length > 1 ? 's' : ''}`)}</div>`

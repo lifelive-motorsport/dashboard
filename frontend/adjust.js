@@ -114,7 +114,7 @@ function drawAdjEditor() {
     let body;
     if (a.kind === 'manual') {
       body = `<label>Effet sur la MB (€, + = la MB augmente)<input type="number" step="0.01" data-adj="amount" data-i="${i}" value="${a.amount}"${dis}></label>
-        <label>Date d’effet<input type="date" data-adj="date" data-i="${i}" value="${esc(a.date || '')}"${dis}></label>`;
+        <label>Date d’effet${dpField(`data-adj="date" data-i="${i}"`, a.date || '', dis)}</label>`;
     } else {
       const picked = new Set((a.sel || []).map(s => s.id));
       const cands = adjCandidates(a.kind), known = new Set(cands.map(c => c.id));

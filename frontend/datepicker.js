@@ -35,6 +35,16 @@ document.addEventListener('click', e => {
       const iso = day ? day.dataset.iso : dpIso(new Date()), inp = dpState.input; dpClose();
       inp.value = iso; inp.dispatchEvent(new Event('change', {bubbles: true}));
     }
-  } else if (!(t.closest && t.closest('.pe-cal, .lv-cal, .ts-cal'))) dpClose();
+  } else if (!(t.closest && t.closest('.pe-cal, .lv-cal, .ts-cal, .dp-cal'))) dpClose();
 }, true);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') dpClose(); });
+
+// Champ date générique : saisie jj/mm/aaaa + calendrier. `attrs` (ex. 'data-adj="date" data-i="2"') va sur le champ caché AAAA-MM-JJ, qui porte la valeur et reçoit « change ».
+const dpField = (attrs, iso, dis = '') => `<span class="datef"><input class="sdin dp-t" value="${iso ? fmtDate(iso) : ''}" placeholder="jj/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off"${dis}><button type="button" class="dp-cal" aria-label="Calendrier" title="Calendrier"${dis}><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3" width="12" height="11" rx="2"/><path d="M2 7h12M5 1.5v3M11 1.5v3"/></svg></button><input type="date" class="dp-h" ${attrs} value="${iso || ''}" tabindex="-1" aria-hidden="true"></span>`;
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('.dp-cal'); if (b && !b.disabled) dpOpen(b.parentElement.querySelector('.dp-h'), b); });
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.classList || !t.classList.contains('dp-t')) return;
+  const h = t.parentElement.querySelector('.dp-h'), iso = t.value.trim() ? peParse(t.value) : '';
+  if (iso === null) { t.setCustomValidity('jj/mm/aaaa'); t.reportValidity(); return; }
+  t.setCustomValidity(''); h.value = iso; h.dispatchEvent(new Event('change', {bubbles: true}));
+});

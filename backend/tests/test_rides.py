@@ -80,7 +80,7 @@ def test_validation_depth_and_photo(api):
 def test_car_bu_is_set_and_validated(api):
     c = car(api)["key"]
     assert car(api)["bu"] == ""
-    assert api.put(f"/api/rides/cars/{c}", json={"bu": "HISTORIC_RACING"}).json() == {"bu": "HISTORIC_RACING", "archived": False}
+    assert api.put(f"/api/rides/cars/{c}", json={"bu": "HISTORIC_RACING"}).json() == {"bu": "HISTORIC_RACING", "archived": False, "odoo": None}
     assert car(api)["bu"] == "HISTORIC_RACING"
     assert api.put(f"/api/rides/cars/{c}", json={"bu": "CARS"}).status_code == 422
     assert api.put("/api/rides/cars/inconnue", json={"bu": "XC"}).status_code == 404
@@ -95,7 +95,7 @@ def test_archive_then_delete_car_data(api):
     assert api.put(f"/api/rides/cars/{c}", json={"archived": True}).json()["archived"] is True
     assert car(api)["archived"] is True and car(api)["km_total"] == 50                        # données conservées
     assert api.put(f"/api/rides/cars/{c}", json={"archived": False}).json()["archived"] is False
-    assert api.put(f"/api/rides/cars/{c}", json={"bu": "XC"}).json() == {"bu": "XC", "archived": False}    # un champ absent ne change rien
+    assert api.put(f"/api/rides/cars/{c}", json={"bu": "XC"}).json() == {"bu": "XC", "archived": False, "odoo": None}    # un champ absent ne change rien
     api.put(f"/api/rides/cars/{c}", json={"archived": True})
     assert api.delete(f"/api/rides/cars/{c}").json() == {"parts": 1, "runs": 1}
     d = car(api)
@@ -114,3 +114,21 @@ def test_guess_missing_bus_only_fills_empty_cars(api):
     assert rides.guess_bu({"name": "Ford Escort RS1600", "category": "rally"}) == "HISTORIC_RALLY"
     assert rides.guess_bu({"name": "WRC W7 #29", "category": "rally"}) == "MODERN_RALLY"
     assert rides.guess_bu({"name": "Aston Martin GT3", "category": "circuit"}) == "HISTORIC_RACING"
+
+
+def test_odoo_link_suggestions_and_uniqueness(api, monkeypatch):
+    monkeypatch.setattr(rides, "_acc_cache", None)
+    o = api.get("/api/rides/odoo").json()
+    assert {a["name"] for a in o["accounts"]} >= {"BMW M3 E30 #44 (démo)", "Porsche 992 Rally GT #26 (démo)"}
+    sug = o["suggestions"]
+    m3, p992 = car(api)["key"], next(c["key"] for c in api.get("/api/rides/cars").json()["cars"] if "992" in c["name"])
+    assert sug[m3]["name"] == "BMW M3 E30 #44 (démo)" and sug[m3]["sure"] and sug[p992]["sure"]
+    done = api.post("/api/rides/link-odoo").json()["linked"]
+    assert {d["odoo"] for d in done} == {"BMW M3 E30 #44 (démo)", "Porsche 992 Rally GT #26 (démo)"}
+    assert car(api)["odoo"]["id"] == 2
+    assert api.post("/api/rides/link-odoo").json() == {"linked": []}
+    assert api.put(f"/api/rides/cars/{p992}", json={"odoo_id": 2}).status_code == 422          # déjà pris par la M3
+    assert api.put(f"/api/rides/cars/{m3}", json={"odoo_id": 999}).status_code == 404
+    assert api.put(f"/api/rides/cars/{m3}", json={"odoo_id": 0}).json()["odoo"] is None
+    assert api.put(f"/api/rides/cars/{p992}", json={"odoo_id": 2}).json()["odoo"]["id"] == 2   # libéré : peut être reprise
+    assert rides.name_score("Bmw 635 csi Würth (GDM)", "BMW 635 CSi Würth") > 0.85 and rides.name_score("Lotus Elan 26R", "Ferrari 250 SWB") < 0.5

@@ -6,7 +6,10 @@
 Données dans Firestore (ride_parts, ride_runs, ride_circuits, ride_cars, ride_catalog) ; photos dans le bucket des pointages (préfixe rides/)."""
 from __future__ import annotations
 
+import difflib
 import re
+import time
+import unicodedata
 import uuid
 from datetime import date, datetime, timezone
 from typing import Literal
@@ -203,9 +206,94 @@ def alerts(nodes: list[dict], path: str = "") -> list[dict]:
     return out
 
 
+# ---- Lien avec les comptes analytiques Odoo (axe CARS) -------------------------------------------------------------------------------------
+
+NOISE = {"gdm", "hrs", "cd", "tn", "jlb", "demo", "rented", "from", "mats", "original", "teile", "the", "de", "le", "la"}
+_acc_cache: tuple[float, list[dict]] | None = None
+
+
+def odoo_accounts(force: bool = False) -> list[dict]:
+    """Comptes analytiques de l'axe véhicules d'Odoo (mis en cache 10 minutes)."""
+    global _acc_cache
+    if not force and _acc_cache and time.time() - _acc_cache[0] < 600:
+        return _acc_cache[1]
+    from .main import provider
+    accts = provider().vehicle_accounts()
+    _acc_cache = (time.time(), accts)
+    return accts
+
+
+def _tokens(name: str) -> set[str]:
+    s = unicodedata.normalize("NFKD", name.lower())
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = re.sub(r"#\s*\d+|\([^)]*\)", " ", s)
+    return {t for t in re.split(r"[^a-z0-9]+", s) if t and t not in NOISE}
+
+
+def name_score(a: str, b: str) -> float:
+    ta, tb = _tokens(a), _tokens(b)
+    if not ta or not tb:
+        return 0.0
+    inter = len(ta & tb)
+    ratio = difflib.SequenceMatcher(None, " ".join(sorted(ta)), " ".join(sorted(tb))).ratio()
+    return round(max(ratio, (inter / min(len(ta), len(tb)) + inter / len(ta | tb)) / 2), 3)
+
+
+def suggestions(accts: list[dict] | None = None) -> dict[str, dict]:
+    """Pour chaque voiture non reliée : le compte Odoo le plus proche (>= 0,6) non encore pris par une autre voiture ; {clé: {id, name, score, sure}}."""
+    accts = odoo_accounts() if accts is None else accts
+    metas = {c["key"]: cars_coll().get(c["key"]) or {} for c in race_cars()}
+    taken = {m.get("odoo_id") for m in metas.values() if m.get("odoo_id")}
+    free = [a for a in accts if a["id"] not in taken]
+    out = {}
+    for c in race_cars():
+        if metas[c["key"]].get("odoo_id") or metas[c["key"]].get("archived"):
+            continue
+        scored = sorted(((name_score(c["name"], a["name"]) + (0.0 if a["active"] else -0.05), a) for a in free), key=lambda x: -x[0])
+        if scored and scored[0][0] >= 0.6:
+            best = scored[0]
+            sure = best[0] >= 0.85 and (len(scored) == 1 or scored[1][0] <= best[0] - 0.1)
+            out[c["key"]] = {"id": best[1]["id"], "name": best[1]["name"], "score": round(best[0], 3), "sure": sure}
+    return out
+
+
+def link_odoo(key: str, odoo_id: int) -> dict:
+    """Relie la voiture à un compte analytique Odoo (0 = délier) ; un compte ne sert qu'à une voiture."""
+    if not car_of(key):
+        raise LookupError("Voiture introuvable")
+    meta = cars_coll().get(key) or {"id": key}
+    if odoo_id == 0:
+        meta.pop("odoo_id", None); meta.pop("odoo_name", None)
+        cars_coll().put(key, meta)
+        return {"odoo": None}
+    acc = next((a for a in odoo_accounts() if a["id"] == odoo_id), None)
+    if not acc:
+        raise LookupError("Compte analytique Odoo introuvable")
+    for c in race_cars():
+        if c["key"] != key and (cars_coll().get(c["key"]) or {}).get("odoo_id") == odoo_id:
+            raise ValueError(f"Ce compte Odoo est déjà relié à « {c['name']} »")
+    meta["odoo_id"], meta["odoo_name"] = odoo_id, acc["name"]
+    cars_coll().put(key, meta)
+    return {"odoo": {"id": odoo_id, "name": acc["name"]}}
+
+
+def auto_link() -> list[dict]:
+    """Relie d'un coup les voitures dont la correspondance est sûre (score >= 0,85 et sans concurrent proche) ; renvoie ce qui a été fait."""
+    done = []
+    for key, s in suggestions().items():
+        if s["sure"]:
+            try:
+                link_odoo(key, s["id"])
+                done.append({"key": key, "name": (car_of(key) or {}).get("name", key), "odoo": s["name"], "score": s["score"]})
+            except (ValueError, LookupError):
+                continue
+    return done
+
+
 class CarIn(BaseModel):
     bu: str | None = None                                            # BU de la voiture : XC, MODERN_RALLY, HISTORIC_RALLY ou HISTORIC_RACING (vide = pas encore définie) ; None = inchangée
     archived: bool | None = None                                     # archivée : cachée du Garage (données conservées) ; None = inchangé
+    odoo_id: int | None = None                                       # compte analytique Odoo (axe CARS) ; 0 = délier ; None = inchangé
 
     @field_validator("bu")
     @classmethod
@@ -224,7 +312,10 @@ def set_car(key: str, data: CarIn) -> dict:
     if data.archived is not None:
         meta["archived"] = data.archived
     cars_coll().put(key, meta)
-    return {"bu": meta.get("bu", ""), "archived": bool(meta.get("archived"))}
+    if data.odoo_id is not None:
+        link_odoo(key, data.odoo_id)
+        meta = cars_coll().get(key) or meta
+    return {"bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None)}
 
 
 MODERN_RALLY_RE = re.compile(r"\b(wrc|rally[ -]?[1-5]|r5|fabia|yaris|i20|puma|ds ?3|c3 rally|focus rs|evo ?x|impreza|992|gr ?yaris)\b", re.I)
@@ -274,7 +365,7 @@ def car_overview(c: dict) -> dict:
     al = alerts(nodes)
     meta = cars_coll().get(c["key"]) or {}
     state = max([a["state"] for a in al] + ["ok" if nodes else "none"], key=lambda s: RANK[s])
-    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
+    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
             "km_total": round(sum(r.get("km") or 0 for r in runs), 1), "hours_total": round(sum(r.get("hours") or 0 for r in runs), 1),
             "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts_coll().all() if p["vehicle"] == c["key"] and not p.get("removed_at") and not p.get("group"))}
 

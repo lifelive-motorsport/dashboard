@@ -88,6 +88,10 @@ class DemoProvider:
                 "bus": ([{"bu": "XC", "share": 1.0}] if g == "XC" else [{"bu": "Historic Racing", "share": 0.7}, {"bu": "Modern Rally", "share": 0.3}] if g == "CARS" else [])} for i, (n, g, ca, dc, oc, cx) in enumerate(demo, 1)]
         return {"events": out, "plans": ["MEETING"], "bu_axis": "BU", "bu_unmapped": [], "bu_missing": 0}
 
+    def vehicle_accounts(self) -> list[dict]:
+        return [{"id": 1, "name": "Porsche 992 Rally GT #26 (démo)", "code": "", "client": "Client A", "active": True}, {"id": 2, "name": "BMW M3 E30 #44 (démo)", "code": "", "client": "Client B", "active": True},
+                {"id": 3, "name": "Aston Martin Vantage GT3 (démo)", "code": "", "client": "Client C", "active": True}, {"id": 4, "name": "Ancienne voiture (démo)", "code": "", "client": "", "active": False}]
+
     def vehicles(self, d_from: date, d_to: date) -> dict:
         s = _scale(d_from, d_to)
         demo = [("Porsche 992 Rally GT #26 (démo)", "Modern Rally", "Client A", "Modern Rally", 236_000, 190_000, 8_000, 0),

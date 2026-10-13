@@ -796,6 +796,27 @@ def rd_car(key: str, _user: str = Depends(granted("consigner/rides"))):
     return _rd(rides.car_detail, key)
 
 
+@app.get("/api/rides/odoo")
+def rd_odoo(_user: str = Depends(granted("consigner/rides"))):
+    """Comptes analytiques Odoo (axe CARS) et correspondances proposées pour les voitures non reliées."""
+    try:
+        accts = rides.odoo_accounts()
+        taken = {c["odoo"]["id"] for c in rides.cars() if c.get("odoo")}
+        return {"accounts": [a for a in accts if a["id"] not in taken], "suggestions": rides.suggestions(accts)}
+    except Exception as e:
+        log.exception("Comptes analytiques Odoo indisponibles")
+        return {"accounts": [], "suggestions": {}, "unavailable": f"Odoo momentanément indisponible : {e}"}
+
+
+@app.post("/api/rides/link-odoo")
+def rd_link_odoo(_user: str = Depends(granted("consigner/rides"))):
+    try:
+        return {"linked": rides.auto_link()}
+    except Exception as e:
+        log.exception("Liaison Odoo impossible")
+        raise HTTPException(503, f"Odoo momentanément indisponible : {e}")
+
+
 @app.post("/api/rides/guess-bu")
 def rd_guess_bu(_user: str = Depends(granted("consigner/rides"))):
     return {"set": rides.guess_missing_bus()}

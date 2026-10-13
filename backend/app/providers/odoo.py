@@ -1019,6 +1019,14 @@ class OdooProvider:
             e["reference"] = a.get("code") or ""
         return {**r, "vehicles": items}
 
+    def vehicle_accounts(self) -> list[dict]:
+        """Tous les comptes analytiques de l'axe véhicules (CARS), même sans écriture récente : [{id, name, code, client, active}]. Lecture seule."""
+        plans, _all = self._event_plans(settings.VEHICLE_PLAN, True, "Véhicules", "VEHICLE_PLAN")
+        accts = self._call("account.analytic.account", "search_read", domain=[("plan_id", "in", [p["id"] for p in plans])],
+                           fields=["name", "code", "partner_id", "active"], context={"active_test": False})
+        return [{"id": a["id"], "name": re.sub(r"^\s*\[[^\]]*\]\s*", "", a["name"]).strip(), "code": a.get("code") or "", "client": (a.get("partner_id") or [0, ""])[1], "active": bool(a.get("active", True))}
+                for a in accts]
+
     def _by_axis(self, d_from: date, d_to: date, setting: str | None = None, exact: bool = False, label: str = "Événements",
                  var: str = "EVENT_PLAN") -> dict:
         """Résultat par événement : lignes analytiques ventilées sur l'axe « Événements » (MEETING), classées par compte comptable.

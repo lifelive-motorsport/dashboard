@@ -776,8 +776,15 @@ def test_feedback_mail_to_super_users(monkeypatch):
     assert c.post("/api/feedback", json=ok).json() == {"sent": 2}
     m = mailer.OUTBOX[0]
     assert m["to"] == "md@lifelive-motorsport.com" and m["subject"] == "[Logbook] Bug — Planifier › Événements" and "planifier/events" in m["body"] and "Le bouton ne répond pas" in m["body"]
+    import base64
+    pdf = base64.b64encode(b"%PDF-1.4 x").decode()
+    assert c.post("/api/feedback", json={**ok, "attachments": [{"name": "capture ecran.png", "type": "application/pdf", "data": pdf}]}).json() == {"sent": 2}
+    assert mailer.OUTBOX[-1]["attachments"] == [("capture ecran.pdf", "application/pdf", 10)]
+    assert c.post("/api/feedback", json={**ok, "attachments": [{"name": "x.exe", "type": "application/x-msdownload", "data": pdf}]}).status_code == 422
+    assert c.post("/api/feedback", json={**ok, "attachments": [{"name": "x.pdf", "type": "application/pdf", "data": "%%%"}]}).status_code == 422
     assert c.post("/api/feedback", json={**ok, "kind": "x"}).status_code == 422
     assert c.post("/api/feedback", json={**ok, "message": "a"}).status_code == 422
+    feedback._sent.clear()
     for _ in range(feedback.MAX_PER_HOUR):
         c.post("/api/feedback", json=ok)
     assert c.post("/api/feedback", json=ok).status_code == 429

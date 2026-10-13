@@ -1271,6 +1271,8 @@ def post_feedback(body: feedback.FeedbackIn, user: str = Depends(real_user)):
         raise HTTPException(429, str(e))
     except LookupError as e:
         raise HTTPException(503, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
     except Exception as e:
         log.exception("Envoi du retour d'expérience impossible")
         raise HTTPException(503, str(e) if isinstance(e, RuntimeError) else "Envoi impossible pour le moment.")

@@ -3,6 +3,8 @@
 Ouvert à tous les utilisateurs connectés (même « Non classé ») ; la page d'où part le message et quelques éléments techniques sont joints d'office."""
 from __future__ import annotations
 
+import base64
+import re
 import time
 
 from pydantic import BaseModel, Field
@@ -14,6 +16,16 @@ MAX_PER_HOUR = 10
 _sent: dict[str, list[float]] = {}
 
 
+MAX_FILES, MAX_BYTES = 3, 4 * 1024 * 1024
+TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "application/pdf": "pdf"}
+
+
+class Attachment(BaseModel):
+    name: str = Field(default="piece-jointe", max_length=120)
+    type: str = Field(max_length=60)
+    data: str = Field(max_length=6_000_000)                    # base64
+
+
 class FeedbackIn(BaseModel):
     kind: str = Field(pattern="^(bug|idea)$")
     message: str = Field(min_length=3, max_length=4000)
@@ -23,6 +35,7 @@ class FeedbackIn(BaseModel):
     lang: str = Field(default="", max_length=5)
     agent: str = Field(default="", max_length=300)
     screen: str = Field(default="", max_length=30)
+    attachments: list[Attachment] = Field(default_factory=list, max_length=MAX_FILES)
 
 
 def send(user: str, body: FeedbackIn) -> int:
@@ -34,11 +47,23 @@ def send(user: str, body: FeedbackIn) -> int:
     to = users.supers()
     if not to:
         raise LookupError("Aucun destinataire configuré (SUPER_USERS).")
+    files = []
+    for a in body.attachments:
+        if a.type not in TYPES:
+            raise ValueError("Pièce jointe : image (JPEG, PNG, WebP, GIF) ou PDF seulement")
+        try:
+            raw = base64.b64decode(a.data, validate=True)
+        except Exception:
+            raise ValueError("Pièce jointe illisible")
+        if not raw or len(raw) > MAX_BYTES:
+            raise ValueError("Pièce jointe vide ou trop volumineuse (4 Mo maximum)")
+        stem = re.sub(r"[^\w .()\-]", "_", a.name.rsplit(".", 1)[0])[:60] or "piece-jointe"
+        files.append((f"{stem}.{TYPES[a.type]}", a.type, raw))
     where = body.title or body.page or "(page inconnue)"
     subject = f"[Logbook] {KINDS[body.kind]} — {where}"
     text = (f"{KINDS[body.kind]} envoyé par {user}\n\nPage : {where}" + (f" ({body.page})" if body.page and body.title else "") + (f"\nAdresse : {body.url}" if body.url else "")
-            + f"\n\n{body.message.strip()}\n\n—\nLangue : {body.lang or '?'} · Écran : {body.screen or '?'}\nNavigateur : {body.agent or '?'}\n")
+            + f"\n\n{body.message.strip()}\n\n" + (f"Pièces jointes : {', '.join(n for n, _, _ in files)}\n\n" if files else "") + f"—\nLangue : {body.lang or '?'} · Écran : {body.screen or '?'}\nNavigateur : {body.agent or '?'}\n")
     for t in to:
-        mailer.send(t, subject, text, reply_to=user)
+        mailer.send(t, subject, text, reply_to=user, attachments=files)
     _sent[user.lower()] = recent + [now]
     return len(to)

@@ -382,6 +382,14 @@ Object.assign(EN, {
   "Absents": "Absent",
   "🚚 Immobilisation véhicules": "🚚 Vehicle immobilisation",
   "Immobilisation des véhicules": "Vehicle immobilisation",
+  "Garage": "Garage",
+  "BU à définir": "BU to be set",
+  "Aucune voiture dans cette BU : la BU d’une voiture se choisit dans sa fiche.": "No car in this BU: a car’s BU is chosen in its sheet.",
+  "🗄 Archiver": "🗄 Archive",
+  "↩ Désarchiver": "↩ Unarchive",
+  "🗑 Supprimer définitivement": "🗑 Delete permanently",
+  "Archivée": "Archived",
+  "Voiture archivée : cachée du Garage, ses données sont conservées. « Supprimer définitivement » efface ses pièces, ses runs et sa photo.": "Archived car: hidden from the Garage, its data is kept. “Delete permanently” erases its parts, runs and photo.",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",
@@ -1495,3 +1503,4 @@ Object.assign(EN_T, {
   "{} km": "{} km",
   "Modifier la pièce": "Edit the part",
 });
+Object.assign(EN_T, {"afficher les voitures archivées ({})": "show archived cars ({})"});

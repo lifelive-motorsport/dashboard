@@ -796,6 +796,16 @@ def rd_car(key: str, _user: str = Depends(granted("consigner/rides"))):
     return _rd(rides.car_detail, key)
 
 
+@app.put("/api/rides/cars/{key}")
+def rd_set_car(key: str, body: rides.CarIn, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.set_car, key, body)
+
+
+@app.delete("/api/rides/cars/{key}")
+def rd_delete_car(key: str, _user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.delete_car, key)
+
+
 @app.get("/api/rides/cars/{key}/photo")
 def rd_photo(key: str, _user: str = Depends(granted("consigner/rides"))):
     got = rides.get_photo(key)

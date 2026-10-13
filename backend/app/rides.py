@@ -203,13 +203,54 @@ def alerts(nodes: list[dict], path: str = "") -> list[dict]:
     return out
 
 
+class CarIn(BaseModel):
+    bu: str | None = None                                            # BU de la voiture : XC, MODERN_RALLY, HISTORIC_RALLY ou HISTORIC_RACING (vide = pas encore définie) ; None = inchangée
+    archived: bool | None = None                                     # archivée : cachée du Garage (données conservées) ; None = inchangé
+
+    @field_validator("bu")
+    @classmethod
+    def _bu(cls, v):
+        if v and v not in ("XC", "MODERN_RALLY", "HISTORIC_RALLY", "HISTORIC_RACING"):
+            raise ValueError("BU inconnue")
+        return v
+
+
+def set_car(key: str, data: CarIn) -> dict:
+    if not car_of(key):
+        raise LookupError("Voiture introuvable")
+    meta = cars_coll().get(key) or {"id": key}
+    if data.bu is not None:
+        meta["bu"] = data.bu
+    if data.archived is not None:
+        meta["archived"] = data.archived
+    cars_coll().put(key, meta)
+    return {"bu": meta.get("bu", ""), "archived": bool(meta.get("archived"))}
+
+
+def delete_car(key: str) -> dict:
+    """Suppression définitive des données de roulage d'une voiture (pièces, runs, photo, BU) ; la voiture doit d'abord être archivée.
+    Le véhicule lui-même reste une ressource de Planifier › Ressources : sans données, il réapparaîtrait vide tant qu'il y figure (le laisser archivé)."""
+    meta = cars_coll().get(key) or {}
+    if not meta.get("archived"):
+        raise ValueError("Archivez d'abord la voiture avant de supprimer ses données")
+    n = {"parts": 0, "runs": 0}
+    for p in [p for p in parts_coll().all() if p["vehicle"] == key]:
+        parts_coll().delete(p["id"]); n["parts"] += 1
+    for r in [r for r in runs_coll().all() if r["vehicle"] == key]:
+        runs_coll().delete(r["id"]); n["runs"] += 1
+    if meta.get("photo"):
+        timesheets.blobs().delete(meta["photo"]["key"])
+    cars_coll().delete(key)
+    return n
+
+
 def car_overview(c: dict) -> dict:
     runs = _runs_of(c["key"])
     nodes = tree(c["key"], runs)
     al = alerts(nodes)
     meta = cars_coll().get(c["key"]) or {}
     state = max([a["state"] for a in al] + ["ok" if nodes else "none"], key=lambda s: RANK[s])
-    return {**c, "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
+    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
             "km_total": round(sum(r.get("km") or 0 for r in runs), 1), "hours_total": round(sum(r.get("hours") or 0 for r in runs), 1),
             "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts_coll().all() if p["vehicle"] == c["key"] and not p.get("removed_at") and not p.get("group"))}
 

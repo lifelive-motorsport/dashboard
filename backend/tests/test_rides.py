@@ -75,3 +75,29 @@ def test_validation_depth_and_photo(api):
     assert api.post(f"/api/rides/cars/{c}/photo", content=b"\xff\xd8\xff", headers={"Content-Type": "image/jpeg"}).status_code == 200
     assert api.get(f"/api/rides/cars/{c}/photo").content == b"\xff\xd8\xff"
     assert car(api)["photo"] is True
+
+
+def test_car_bu_is_set_and_validated(api):
+    c = car(api)["key"]
+    assert car(api)["bu"] == ""
+    assert api.put(f"/api/rides/cars/{c}", json={"bu": "HISTORIC_RACING"}).json() == {"bu": "HISTORIC_RACING", "archived": False}
+    assert car(api)["bu"] == "HISTORIC_RACING"
+    assert api.put(f"/api/rides/cars/{c}", json={"bu": "CARS"}).status_code == 422
+    assert api.put("/api/rides/cars/inconnue", json={"bu": "XC"}).status_code == 404
+
+
+def test_archive_then_delete_car_data(api):
+    c = car(api)["key"]
+    api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "limit_km": 100})
+    api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "T", "km": 50})
+    api.post(f"/api/rides/cars/{c}/photo", content=b"\xff\xd8\xff", headers={"Content-Type": "image/jpeg"})
+    assert api.delete(f"/api/rides/cars/{c}").status_code == 422                              # pas sans archivage
+    assert api.put(f"/api/rides/cars/{c}", json={"archived": True}).json()["archived"] is True
+    assert car(api)["archived"] is True and car(api)["km_total"] == 50                        # données conservées
+    assert api.put(f"/api/rides/cars/{c}", json={"archived": False}).json()["archived"] is False
+    assert api.put(f"/api/rides/cars/{c}", json={"bu": "XC"}).json() == {"bu": "XC", "archived": False}    # un champ absent ne change rien
+    api.put(f"/api/rides/cars/{c}", json={"archived": True})
+    assert api.delete(f"/api/rides/cars/{c}").json() == {"parts": 1, "runs": 1}
+    d = car(api)
+    assert d["km_total"] == 0 and d["parts"] == 0 and d["photo"] is False and d["archived"] is False and d["bu"] == ""   # la voiture revient vide (elle est toujours une ressource)
+    assert api.get(f"/api/rides/cars/{c}/photo").status_code == 404

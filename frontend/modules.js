@@ -11,7 +11,7 @@ const CHAPTERS = [
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team']},
     {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
-    {id: 'rides', label: 'Roulages', source: 'Logbook', pages: ['consigner/rides']},
+    {id: 'rides', label: 'Roulages', source: 'Logbook', sub: true, pages: ['consigner/rides']},
     {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
   {id: 'administrer', n: '04', label: 'Administrer', modules: [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},

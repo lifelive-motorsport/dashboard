@@ -461,3 +461,17 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .home-alerts .al{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
 
 .rd-grid{margin-top:18px}.sdbar .rd-rm{margin:0}.rd-grid+*{margin-top:14px}
+
+.rd-docbar{margin:10px 0 4px}.rd-docbar .sdin{flex:1 1 280px;max-width:420px}
+.rd-doc[hidden]{display:none}
+.rd-files{gap:12px;align-items:stretch}.rd-fcard{width:170px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card);display:flex;flex-direction:column}
+.rd-fthumb{display:block;position:relative;width:100%;height:210px;padding:0;border:0;border-bottom:1px solid var(--line);background:#fff;cursor:zoom-in;overflow:hidden}
+.rd-fthumb img{width:100%;height:100%;object-fit:cover;display:block}.rd-fthumb iframe{width:100%;height:100%;border:0;pointer-events:none;background:#fff}
+.rd-fcap{display:flex;flex-direction:column;gap:2px;padding:6px 8px}.rd-fname{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rd-fact{display:flex;gap:6px;margin-top:2px}
+.rd-fadd{width:120px;min-height:150px;border:1px dashed var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;color:var(--mut)}.rd-fadd span{font-size:26px;line-height:1}.rd-fadd:hover{border-color:var(--fg);color:var(--fg)}
+.rd-lb{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.78);display:flex;flex-direction:column;padding:14px;gap:10px}
+.rd-lb-bar{display:flex;align-items:center;gap:10px;color:#fff}.rd-lb-bar a,.rd-lb-bar button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer;text-decoration:none}
+.rd-lb iframe{flex:1;border:0;border-radius:8px;background:#fff}.rd-lb-img{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}.rd-lb-img img{max-width:100%;max-height:100%;border-radius:8px}
+.rd-fnone{display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:15px;background:#f1f1ef}
+.rd-no{display:inline-block;min-width:28px;text-align:center;padding:0 6px;border-radius:6px;background:var(--fg);color:var(--bg);font-size:12px;font-weight:700;margin-right:4px}
+.rd-ident{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}

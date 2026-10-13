@@ -4,6 +4,7 @@ Une alerte apparaît sur la fiche de la voiture et sur l'accueil (Super User et 
 par élément) ; un e-mail leur est envoyé la veille de l'expiration (`send_expiry_mails`, appelé chaque jour par Cloud Scheduler).
 Données : dans le document de la voiture (`ride_cars`, champ `docs`) ; fichiers dans le bucket des pointages, préfixe `rides/docs/`."""
 import re
+import unicodedata
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
@@ -27,6 +28,7 @@ ITEMS = [
     ("fuel_tank", "Certificat réservoir essence", "all"),
     ("extinguisher", "Validité extincteur", "all"),
     ("harness", "Validité harnais", "all"),
+    ("roll_cage", "Certificat arceau", "all"),
     ("seat", "Validité siège", "all"),
     ("other_safety", "Validité autres éléments de sécurité", "all"),
     ("transponder", "Transpondeur", "circuit"),
@@ -87,7 +89,7 @@ def view(key: str, now: date | None = None) -> list[dict]:
     now = now or today()
     docs = (rides.cars_coll().get(key) or {}).get("docs", {})
     out = []
-    for it in ITEMS:
+    for it in sorted(ITEMS, key=lambda i: unicodedata.normalize("NFD", i[1]).encode("ascii", "ignore").decode().lower()):      # ordre alphabétique (sans tenir compte des accents)
         if not applies(it, c["category"]):
             continue
         d = docs.get(it[0], {})
@@ -167,9 +169,44 @@ def get_file(key: str, item: str, fid: str) -> tuple[bytes, str, str]:
     return got[0], f["ctype"], f["name"]
 
 
+def thumb(key: str, item: str, fid: str) -> bytes:
+    """Première page d'un PDF en JPEG (pdftoppm, paquet poppler-utils), gardée dans le bucket à côté du fichier ; LookupError si impossible."""
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+    _, _, f = _file(key, item, fid)
+    if f["ctype"] != "application/pdf":
+        raise LookupError("Pas d'aperçu pour ce fichier")
+    tk = f["key"].rsplit(".", 1)[0] + ".thumb.jpg"
+    got = timesheets.blobs().get(tk)
+    if got:
+        return got[0]
+    src = timesheets.blobs().get(f["key"])
+    exe = shutil.which("pdftoppm")
+    if not src or not exe:
+        raise LookupError("Aperçu indisponible")
+    with tempfile.TemporaryDirectory() as d:
+        pdf = os.path.join(d, "in.pdf")
+        with open(pdf, "wb") as fh:
+            fh.write(src[0])
+        try:
+            subprocess.run([exe, "-jpeg", "-f", "1", "-l", "1", "-scale-to", "520", "-singlefile", pdf, os.path.join(d, "out")], capture_output=True, timeout=30, check=True)
+            data = open(os.path.join(d, "out.jpg"), "rb").read()
+        except (subprocess.SubprocessError, OSError):
+            raise LookupError("Aperçu indisponible")
+    timesheets.blobs().put(tk, data, "image/jpeg")
+    return data
+
+
+def _drop_blobs(f: dict) -> None:
+    timesheets.blobs().delete(f["key"])
+    timesheets.blobs().delete(f["key"].rsplit(".", 1)[0] + ".thumb.jpg")
+
+
 def delete_file(key: str, item: str, fid: str) -> list[dict]:
     meta, d, f = _file(key, item, fid)
-    timesheets.blobs().delete(f["key"])
+    _drop_blobs(f)
     d["files"] = [x for x in d["files"] if x["id"] != fid]
     rides.cars_coll().put(key, meta)
     return view(key)
@@ -179,7 +216,7 @@ def purge(key: str) -> None:
     """Suppression définitive d'une voiture : ses fichiers partent aussi."""
     for d in ((rides.cars_coll().get(key) or {}).get("docs") or {}).values():
         for f in d.get("files", []):
-            timesheets.blobs().delete(f["key"])
+            _drop_blobs(f)
 
 
 # ---- Alertes (accueil, e-mail) ----------------------------------------------------------------------------------------------------------

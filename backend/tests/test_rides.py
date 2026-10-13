@@ -193,6 +193,8 @@ def test_vehicle_documents_alerts_files_and_mail(api, monkeypatch):
     cs = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}
     circ, rally = cs["BMW M3 E30"], cs["Porsche 992 Rally"]
     keys = lambda k: {d["item"] for d in api.get(f"/api/rides/cars/{k}/docs").json()}
+    labels = [d["label"] for d in api.get(f"/api/rides/cars/{circ}/docs").json()]
+    assert labels == sorted(labels, key=lambda s: __import__("unicodedata").normalize("NFD", s).encode("ascii", "ignore").decode().lower()) and "Certificat arceau" in labels      # ordre alphabétique
     assert "transponder" in keys(circ) and "insurance" not in keys(circ)                      # circuit : pas d'immatriculation
     assert "insurance" in keys(rally) and "transponder" not in keys(rally) and "fia" in keys(rally)
     assert api.put(f"/api/rides/cars/{circ}/docs/insurance", json={"expires": "2026-12-01"}).status_code == 404
@@ -214,6 +216,8 @@ def test_vehicle_documents_alerts_files_and_mail(api, monkeypatch):
     assert r.status_code == 200
     fid = next(x for x in r.json() if x["item"] == "seat")["files"][0]["id"]
     assert api.get(f"/api/rides/cars/{circ}/docs/seat/files/{fid}").content.startswith(b"%PDF")
+    th = api.get(f"/api/rides/cars/{circ}/docs/seat/files/{fid}/thumb")                         # aperçu : 404 propre si le PDF est illisible ou si poppler est absent
+    assert th.status_code in (200, 404) and (th.status_code == 404 or th.content[:2] == b"\xff\xd8")
     assert api.post(f"/api/rides/cars/{circ}/docs/seat/files", content=b"x", headers={"Content-Type": "text/html"}).status_code == 422
     assert api.delete(f"/api/rides/cars/{circ}/docs/seat/files/{fid}").status_code == 200
     # accueil : visible du Super User
@@ -234,3 +238,14 @@ def test_workshop_manager_sees_only_his_bu_alerts():
     assert vdocs.visible(xc, "XC") and not vdocs.visible(xc, "MODERN_RALLY") and not vdocs.visible(xc, "")
     assert vdocs.visible(cars, "HISTORIC_RACING") and vdocs.visible(cars, "") and not vdocs.visible(cars, "XC")
     assert vdocs.status("2026-10-20", 3, __import__("datetime").date(2026, 10, 13)) == "warn"
+
+
+def test_car_identity_fields(api):
+    c = car(api)["key"]
+    r = api.put(f"/api/rides/cars/{c}", json={"chassis": " WBA123 ", "engine_no": "S14-77", "gearbox_no": "G-9", "livery": "Bleu / blanc", "race_number": "12"})
+    assert r.status_code == 200
+    d = api.get(f"/api/rides/cars/{c}").json()
+    assert (d["chassis"], d["engine_no"], d["gearbox_no"], d["livery"], d["race_number"]) == ("WBA123", "S14-77", "G-9", "Bleu / blanc", "12")
+    api.put(f"/api/rides/cars/{c}", json={"livery": ""})                                           # vide = effacé ; les autres champs ne bougent pas
+    d = api.get(f"/api/rides/cars/{c}").json()
+    assert d["livery"] == "" and d["chassis"] == "WBA123"

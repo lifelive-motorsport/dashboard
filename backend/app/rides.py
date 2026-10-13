@@ -409,10 +409,18 @@ def auto_link() -> list[dict]:
     return done
 
 
+IDENTITY = ("chassis", "engine_no", "gearbox_no", "livery", "race_number")
+
+
 class CarIn(BaseModel):
     bu: str | None = None                                            # BU de la voiture : XC, MODERN_RALLY, HISTORIC_RALLY ou HISTORIC_RACING (vide = pas encore définie) ; None = inchangée
     archived: bool | None = None                                     # archivée : cachée du Garage (données conservées) ; None = inchangé
     odoo_id: int | None = None                                       # compte analytique Odoo (axe CARS) ; 0 = délier ; None = inchangé
+    chassis: str | None = None                                       # identité permanente : n° de châssis, de moteur, de boîte, livrée, n° de course habituel ; None = inchangé, vide = effacé
+    engine_no: str | None = None
+    gearbox_no: str | None = None
+    livery: str | None = None
+    race_number: str | None = None
 
     @field_validator("bu")
     @classmethod
@@ -430,6 +438,10 @@ def set_car(key: str, data: CarIn) -> dict:
         meta["bu"] = data.bu
     if data.archived is not None:
         meta["archived"] = data.archived
+    for f in IDENTITY:
+        v = getattr(data, f)
+        if v is not None:
+            meta[f] = v.strip()[:80]
     cars_coll().put(key, meta)
     if data.odoo_id is not None:
         link_odoo(key, data.odoo_id)
@@ -488,7 +500,7 @@ def car_overview(c: dict) -> dict:
     al = alerts(nodes)
     meta = cars_coll().get(c["key"]) or {}
     state = max([a["state"] for a in al] + ["ok" if nodes else "none"], key=lambda s: RANK[s])
-    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "template": ({"id": meta["template_id"], "name": meta.get("template_name", "")} if meta.get("template_id") else None), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
+    return {**c, **{f: meta.get(f, "") for f in IDENTITY}, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "template": ({"id": meta["template_id"], "name": meta.get("template_name", "")} if meta.get("template_id") else None), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
             "doc_alerts": len(dal), "doc_over": sum(1 for a in dal if a["state"] == "over"),
             "km_total": round(sum(r.get("km") or 0 for r in runs), 1), "hours_total": round(sum(r.get("hours") or 0 for r in runs), 1),
             "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts_coll().all() if p["vehicle"] == c["key"] and not p.get("removed_at") and not p.get("group"))}

@@ -70,8 +70,9 @@ async def legacy_host_redirect(request, call_next):
 @app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
+    framed = request.url.path.startswith("/api/rides/cars/") and "/docs/" in request.url.path and "/files/" in request.url.path        # aperçu des documents de voiture dans la fiche
     resp.headers.update({"X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin",
-                         "X-Frame-Options": "DENY"})
+                         "X-Frame-Options": "SAMEORIGIN" if framed else "DENY"})
     if request.url.path.startswith("/api/"):
         resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -872,6 +873,11 @@ async def rd_add_doc_file(key: str, item: str, request: Request, name: str = "do
 def rd_get_doc_file(key: str, item: str, fid: str, _user: str = Depends(granted("consigner/rides"))):
     data, ctype, name = _rd(vdocs.get_file, key, item, fid)
     return RawResponse(data, media_type=ctype, headers={"Content-Disposition": f'inline; filename="{name}"', "Cache-Control": "private, max-age=300"})
+
+
+@app.get("/api/rides/cars/{key}/docs/{item}/files/{fid}/thumb")
+def rd_doc_thumb(key: str, item: str, fid: str, _user: str = Depends(granted("consigner/rides"))):
+    return RawResponse(_rd(vdocs.thumb, key, item, fid), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.delete("/api/rides/cars/{key}/docs/{item}/files/{fid}")

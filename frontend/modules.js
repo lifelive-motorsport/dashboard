@@ -9,6 +9,7 @@ const CHAPTERS = [
     {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', sub: true, pages: ['planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']}]},
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team']},
+    {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
     {id: 'rides', label: 'Roulages', source: 'Logbook', pages: ['consigner/rides']},
     {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
   {id: 'administrer', n: '04', label: 'Administrer', modules: [

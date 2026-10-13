@@ -110,11 +110,18 @@ function sdPersonPanel(p) {
   let body = base + `<div id="sd-kpi">${sdCalcCards(p)}</div>`;
   if (emp) body += sdPayslips(p);
   else body += sdIndependentCompanies(p);
+  if (emp) body += sdLeaveAlloc(p);
   body += sdExtras(p);
   if (sd.canEdit) body += `<p><button type="button" class="danger" data-sd-del-person data-pid="${p.id}">Supprimer ${emp ? 'ce salarié' : 'cet indépendant'}</button></p>`;
   return `<div class="adjcard">${body}</div>`;
 }
 
+// Soldes de congés alloués (saisie initiale : Odoo Payroll n'est pas encore utilisé) ; les congés pris se déduisent dans Consigner › Congés
+function sdLeaveAlloc(p) {
+  const y0 = new Date().getFullYear(), la = p.leave_alloc || {}, types = LV_TYPES.filter(t => t.balance);
+  const rows = [y0, y0 + 1].map(y => `<tr><td><b>${y}</b></td>${types.map(t => `<td>${sdIn(`leave:${y}:${t.id}`, (la[y] || {})[t.id], {pid: p.id, sub: 'leave', step: '0.5'})}</td>`).join('')}</tr>`).join('');
+  return `<h4 class="sub">Soldes de congés alloués (jours)</h4><div class="tblwrap"><table class="sdtable"><thead><tr><th>Année</th>${types.map(t => `<th>${esc(t.label)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div><p class="na">Les congés pris et en attente se déduisent automatiquement (Consigner › Congés).</p>`;
+}
 function sdIndependentCompanies(p) {
   const chips = (p.partners || []).map(x => `<span class="tagchip">${esc(x.name)} ${sd.canEdit ? `<button type="button" class="mini" data-sd-del-partner data-pid="${p.id}" data-id="${x.id}">✕</button>` : ''}</span>`).join(' ');
   const res = sd.results ? (sd.results.length ? sd.results.map(r => `<div class="sdres"><span>${esc(r.name)} <small class="na">${esc([r.vat, r.city].filter(Boolean).join(' · '))}</small></span> <button type="button" data-sd-add-partner data-pid="${p.id}" data-id="${r.id}" data-name="${esc(r.name)}">Ajouter</button></div>`).join('') : '<small class="na">Aucune société trouvée.</small>') : '';
@@ -280,7 +287,8 @@ document.addEventListener('change', e => {
   if (sub === 'params') sd.doc.params[f] = v == null ? sd.doc.params[f] : v;
   else {
     const p = sdPerson(pid); if (!p) return;
-    if (sub === 'alloc') { const k = f.split(':')[1]; if (v == null || v === 0) delete p.alloc[k]; else p.alloc[k] = v; }
+    if (sub === 'leave') { const [, y, t] = f.split(':'); p.leave_alloc = p.leave_alloc || {}; p.leave_alloc[y] = p.leave_alloc[y] || {}; if (v == null || v === 0) delete p.leave_alloc[y][t]; else p.leave_alloc[y][t] = Math.max(0, v); if (!Object.keys(p.leave_alloc[y]).length) delete p.leave_alloc[y]; }
+    else if (sub === 'alloc') { const k = f.split(':')[1]; if (v == null || v === 0) delete p.alloc[k]; else p.alloc[k] = v; }
     else if (sub === 'split') { const k = f.split(':')[1]; p.common_split = p.common_split || {}; if (v == null || v === 0) delete p.common_split[k]; else p.common_split[k] = Math.min(100, Math.max(0, v)); }
     else if (sub === 'extra') p.extras[i][f] = (f === 'monthly') ? (v || 0) : v;
     else if (sub === 'slip') p.payslips[i][f] = (f === 'brut' || f === 'other') ? (v || 0) : v;

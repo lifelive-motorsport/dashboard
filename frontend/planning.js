@@ -60,9 +60,10 @@ function plRowsHtml() {
       for (const e of evs) { const own = e.people.find(p => p.rid === r.id) || e.vehicles.find(p => p.rid === r.id); if (!own) continue;
         const veh = r.kind === 'vehicle', s = veh ? e.immo_start : e.start, en = veh ? e.immo_end : e.end; if (en < d0 || s > dN) continue;
         items.push({e, a: Math.max(0, plIdx(d0, s)), b: Math.min(n - 1, plIdx(d0, en)), cutL: s < d0, cutR: en > dN, veh, st: own.status}); }
-      if (pl.hideEmpty && !items.length) continue;
+      const lv = r.kind === 'staff' ? (pl.data.leaves || []).filter(l => l.rid === r.id && l.end >= d0 && l.start <= dN) : [];
+      if (pl.hideEmpty && !items.length && !lv.length) continue;
       const lanes = plLanes(items); shown++;
-      body += `<div class="pl-line"><div class="pl-lab" title="${esc(r.name)}">${esc(r.name)}${r.company ? ` <small>${esc(r.company)}</small>` : r.type ? ` <small>${esc(r.type)}</small>` : ''}</div><div class="pl-track" style="grid-template-rows:repeat(${lanes},24px)">${plBg(days)}${items.map(it => plBar(it.e, it.a, it.b, it.lane, it)).join('')}</div></div>`;
+      body += `<div class="pl-line"><div class="pl-lab" title="${esc(r.name)}">${esc(r.name)}${r.company ? ` <small>${esc(r.company)}</small>` : r.type ? ` <small>${esc(r.type)}</small>` : ''}</div><div class="pl-track" style="grid-template-rows:repeat(${lanes},24px)">${plBg(days)}${lv.map(l => `<div class="pl-leave" style="grid-column:${Math.max(0, plIdx(d0, l.start)) + 1} / ${Math.min(n - 1, plIdx(d0, l.end)) + 2};grid-row:1 / -1" title="${esc(t('Congé'))}">${l.half ? '½ ' : ''}${esc(t('Congé'))}</div>`).join('')}${items.map(it => plBar(it.e, it.a, it.b, it.lane, it)).join('')}</div></div>`;
     }
     if (body) h += `<div class="pl-grp">${esc(glabel)}</div>` + body;
   }

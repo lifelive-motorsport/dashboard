@@ -290,6 +290,12 @@ def create(e: EventIn, lbid: str | None = None) -> dict:
     return {"id": lbid, "route": route}
 
 
+def event_bu(lbid: str) -> str | None:
+    """BU (clé de l'application) d'un événement existant, d'après son agenda ; None s'il est introuvable."""
+    main, _veh, _cal = _find(lbid)
+    return None if main is None else ((main.get("extendedProperties") or {}).get("shared", {}).get("bu") or None)
+
+
 def update(lbid: str, e: EventIn) -> dict:
     main, veh, cal_main = _find(lbid)
     if main is None:

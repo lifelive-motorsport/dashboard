@@ -26,7 +26,8 @@ PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
     "others/tags": (("/api/tags",), set()),
     # modules à venir : droits prêts à être donnés dès maintenant (aucune donnée à ce stade)
     "planifier/planning": (("/api/planning",), set()),      # lecture seule, ouverte à tous les rôles (aucune donnée de paie ni adresse e-mail)
-    # « planifier/events » et « planifier/res_* » (Ressources) : réservées au Super User (comme « others/users »), donc jamais attribuables à une catégorie
+    # Événements et Ressources : cochables par catégorie (jamais par le rôle « Administrateur ») ; la modification des fiches du staff (rôle Atelier, compte Google) reste au Super User
+    "planifier/events": (("/api/events", "/api/places"), set()), "planifier/res_staff": (("/api/resources",), set()), "planifier/res_ext": (("/api/resources",), set()), "planifier/res_veh": (("/api/resources",), set()),
     "consigner/timesheets": (("/api/timesheets",), set()), "consigner/leaves": (("/api/leaves", "/api/leaves-proofs"), set()), "consigner/team": (("/api/timesheets",), set()), "consigner/rides": ((), set()), "consigner/consumables": ((), set()),
 }
 XC_PAGES = ["xc/webshop_xc", "xc/webshop_gs", "xc/events", "xc/inventory", "xc/margins", "xc/tn11"]       # catégorie « XC » proposée par défaut

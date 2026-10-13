@@ -164,6 +164,26 @@ def alerts_status(_user: str = Depends(super_user)):
     return scheduler.alerts_status()
 
 
+def granted(*pages: str):
+    """Super User, ou membre d'une catégorie à laquelle l'une de ces pages est cochée (le rôle « Administrateur » n'y donne pas accès)."""
+    def dep(user: str = Depends(require_user)) -> str:
+        if users.is_super(user):
+            return user
+        p = users.pages_of(user)
+        if p is not None and any(x in p for x in pages):
+            return user
+        raise HTTPException(403, "Page réservée au Super User ou aux catégories autorisées")
+    return dep
+
+
+def _bu_ok(user: str, bu: str | None) -> bool:
+    """Un utilisateur limité à une BU ne gère que les événements de cette BU (XC, ou toutes les BU CARS)."""
+    if users.is_super(user):
+        return True
+    lock = access.bu_lock(users.pages_of(user))
+    return lock is None or bu is None or (lock == "XC") == (bu == "XC")
+
+
 def _users_view(doc: dict) -> dict:
     fixed = [{"email": e, "role": "super", "source": "SUPER_USERS"} for e in users.supers()]
     fixed += [{"email": e, "role": "admin", "source": "ADMIN_EMAILS"} for e in settings.ADMIN_EMAILS if e not in users.supers()]
@@ -665,7 +685,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 
 
 @app.get("/api/resources")
-def get_resources(user: str = Depends(super_user)):
+def get_resources(user: str = Depends(granted("planifier/res_staff", "planifier/res_ext", "planifier/res_veh"))):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
         people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", ""), "work_days": p.get("work_days", [0, 1, 2, 3, 4])}
@@ -695,7 +715,7 @@ def get_resources(user: str = Depends(super_user)):
 
 
 @app.put("/api/resources/externals")
-def put_resource_externals(body: resources.SaveBody, user: str = Depends(super_user)):
+def put_resource_externals(body: resources.SaveBody, user: str = Depends(granted("planifier/res_ext"))):
     try:
         doc = resources.store().put(body.data.model_dump(), user, body.base)
     except Exception:
@@ -1229,16 +1249,16 @@ def lv_get_proof(pid: str, user: str = Depends(require_user)):
 
 
 @app.get("/api/events/config")
-def events_config(_user: str = Depends(super_user)):
+def events_config(_user: str = Depends(granted("planifier/events"))):
     cals = planning.calendars_by_bu()
-    return {"bus": [{"id": k, "label": v[0], "calendar": k in cals} for k, v in planning.BUS.items()], "travel_days": settings.EVENT_TRAVEL_DAYS,
+    return {"bus": [{"id": k, "label": v[0], "calendar": k in cals} for k, v in planning.BUS.items() if _bu_ok(_user, k)], "travel_days": settings.EVENT_TRAVEL_DAYS,
             "maps": maps.configured(), "origin": settings.LIFELIVE_ORIGIN, "calendar": gcal.configured() or settings.PROVIDER == "demo", "delegation": gauth.configured() or settings.PROVIDER == "demo"}
 
 
 @app.get("/api/events")
-def list_planned_events(date_from: date = Query(..., alias="from"), date_to: date = Query(..., alias="to"), _user: str = Depends(super_user)):
+def list_planned_events(date_from: date = Query(..., alias="from"), date_to: date = Query(..., alias="to"), _user: str = Depends(granted("planifier/events"))):
     try:
-        return {"events": planning.listing(date_from, date_to)}
+        return {"events": [e for e in planning.listing(date_from, date_to) if _bu_ok(_user, e["bu"])]}
     except Exception as e:
         log.exception("Lecture des événements impossible")
         return {"events": [], "unavailable": f"Agendas Google momentanément indisponibles : {e}"}
@@ -1254,7 +1274,9 @@ def _plan_error(e: Exception):
 
 
 @app.post("/api/events")
-def create_planned_event(body: planning.EventIn, _user: str = Depends(super_user)):
+def create_planned_event(body: planning.EventIn, _user: str = Depends(granted("planifier/events"))):
+    if not _bu_ok(_user, body.bu):
+        raise HTTPException(403, "Vous ne gérez pas les événements de cette BU")
     try:
         return planning.create(body)
     except Exception as e:
@@ -1262,25 +1284,33 @@ def create_planned_event(body: planning.EventIn, _user: str = Depends(super_user
 
 
 @app.put("/api/events/{lbid}")
-def update_planned_event(lbid: str, body: planning.EventIn, _user: str = Depends(super_user)):
+def update_planned_event(lbid: str, body: planning.EventIn, _user: str = Depends(granted("planifier/events"))):
     try:
+        if not (_bu_ok(_user, body.bu) and _bu_ok(_user, planning.event_bu(lbid))):
+            raise HTTPException(403, "Vous ne gérez pas les événements de cette BU")
         return planning.update(lbid, body)
+    except HTTPException:
+        raise
     except Exception as e:
         _plan_error(e)
 
 
 @app.delete("/api/events/{lbid}")
-def delete_planned_event(lbid: str, _user: str = Depends(super_user)):
+def delete_planned_event(lbid: str, _user: str = Depends(granted("planifier/events"))):
     try:
+        if not _bu_ok(_user, planning.event_bu(lbid)):
+            raise HTTPException(403, "Vous ne gérez pas les événements de cette BU")
         if not planning.remove(lbid):
             raise KeyError(lbid)
         return {"deleted": lbid}
+    except HTTPException:
+        raise
     except Exception as e:
         _plan_error(e)
 
 
 @app.post("/api/events/busy")
-def events_busy(body: planning.BusyBody, _user: str = Depends(super_user)):
+def events_busy(body: planning.BusyBody, _user: str = Depends(granted("planifier/events"))):
     """Réservations existantes des ressources sur la période : {adresse: [{start, end}]}"""
     try:
         return {"busy": planning.busy(body.emails, body.start, body.end)}
@@ -1290,7 +1320,7 @@ def events_busy(body: planning.BusyBody, _user: str = Depends(super_user)):
 
 
 @app.get("/api/places/autocomplete")
-def places_autocomplete(q: str = Query(..., min_length=3, max_length=100), _user: str = Depends(super_user)):
+def places_autocomplete(q: str = Query(..., min_length=3, max_length=100), _user: str = Depends(granted("planifier/events"))):
     if not maps.configured():
         raise HTTPException(503, "La recherche de lieux n’est pas configurée (clé GOOGLE_MAPS_API_KEY).")
     try:
@@ -1301,7 +1331,7 @@ def places_autocomplete(q: str = Query(..., min_length=3, max_length=100), _user
 
 
 @app.get("/api/places/{place_id}")
-def place_details(place_id: str, origin: str | None = Query(None, max_length=300), route: bool = True, _user: str = Depends(super_user)):
+def place_details(place_id: str, origin: str | None = Query(None, max_length=300), route: bool = True, _user: str = Depends(granted("planifier/events"))):
     """Lieu choisi + trajet (distance, durée, alertes Suisse / Royaume-Uni) depuis `origin` (identifiant de lieu Google) ou, par défaut, depuis Lifelive. `route=false` : le lieu seul."""
     try:
         place = maps.details(place_id)
@@ -1324,7 +1354,7 @@ def place_details(place_id: str, origin: str | None = Query(None, max_length=300
 
 
 @app.get("/api/resources/contacts")
-def resource_contacts(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(super_user)):
+def resource_contacts(q: str = Query(..., min_length=2, max_length=60), _user: str = Depends(granted("planifier/res_ext"))):
     try:
         return {"contacts": provider().contacts(q)}
     except Exception as e:

@@ -704,8 +704,8 @@ def test_planning_view_is_open_to_all_users_and_hides_emails():
 def test_planning_page_is_allowed_for_categories_that_tick_it():
     from app import access
     assert access.path_ok("/api/planning", {"planifier/planning"}) and not access.path_ok("/api/planning", {"overview/ca"})
-    assert not access.path_ok("/api/resources", {"planifier/planning"}) and not access.path_ok("/api/events", {"planifier/planning"})
-    assert "planifier/planning" in access.PAGES and "planifier/events" not in access.PAGES
+    assert not access.path_ok("/api/resources", {"planifier/planning"}) and not access.path_ok("/api/events", {"planifier/planning"}) and access.path_ok("/api/events", {"planifier/events"})
+    assert "planifier/planning" in access.PAGES and "planifier/events" in access.PAGES
 
 def test_unregistered_domain_user_is_unclassified_and_sees_no_data(monkeypatch):
     import app.users as u

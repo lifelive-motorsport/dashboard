@@ -49,7 +49,13 @@ async function loadResources() {
 }
 
 const RS_WS = [['', '— Hors atelier —'], ['mechanic', 'Mécanicien'], ['chef_cars', 'Chef d’atelier CARS'], ['chef_xc', 'Chef d’atelier XC'], ['chef_all', 'Chef d’atelier CARS + XC']];
-function drawResources() { rsDrawStaff(); rsDrawExt(); rsDrawVeh(); }
+function drawResources() {
+  rsDrawStaff(); rsDrawExt(); rsDrawVeh();
+  if (!superUser) {                                                      // fiches du staff : lecture seule (le rôle Atelier et le compte Google se règlent par le Super User)
+    const a = document.getElementById('rs-staff');
+    if (a) { a.querySelectorAll('input,select,button').forEach(el => { el.disabled = true; }); const d = a.querySelector('#rs-dir'); if (d) d.remove(); }
+  }
+}
 function rsDrawStaff() {
   const a = document.getElementById('rs-staff'); if (!a) return;
   if (!rs.loaded) { a.innerHTML = '<p class="na">Chargement…</p>'; return; }

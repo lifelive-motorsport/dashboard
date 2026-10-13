@@ -16,8 +16,10 @@ const CHAPTERS = [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},
     {id: 'connections', label: 'Connexions', source: 'Odoo · Google', pages: ['others/tags']}]},
 ];
-// Pages réservées au Super User : jamais attribuables à une catégorie d'utilisateurs
-const SUPER_ONLY = new Set(['others/users', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
+// Pages réservées au Super User : jamais attribuables à une catégorie d'utilisateurs (Événements et Ressources sont cochables ; la modification des fiches du staff reste au Super User)
+const SUPER_ONLY = new Set(['others/users']);
+// Pages que seul le Super User ou une catégorie qui les a cochées ouvre (ni « Administrateur » ni les autres)
+const GRANT_ONLY = new Set(['planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
 // Toutes les pages d'un module, dans l'ordre : [clé, libellé]
 function modulePages(mod) {
   const out = [];

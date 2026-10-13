@@ -10,7 +10,7 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
 let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
-const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!pagesList || pagesList.has(k)));
+const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!GRANT_ONLY.has(k) || superUser || (pagesList && pagesList.has(k))) && (!pagesList || pagesList.has(k) || (superUser && !pagesList)));
 const homePage = () => 'home/welcome';
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
 const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };

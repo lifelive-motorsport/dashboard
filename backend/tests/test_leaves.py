@@ -151,3 +151,41 @@ def test_bu_locked_user_does_not_see_other_bu_events_or_race_cars():
     cars = planning.restrict_to_bu(view, "CARS")
     assert [e["id"] for e in cars["events"]] == ["2"] and len(cars["resources"]) == 4
     assert planning.restrict_to_bu(view, None) is view
+
+
+def test_events_and_resources_pages_are_grantable_with_bu_scope(monkeypatch):
+    from app import settings, users as u
+    from app.auth import require_user as ru
+    cat = {"id": "xcm", "name": "XC", "pages": ["xc/events", "planifier/events", "planifier/res_staff", "planifier/res_ext", "planifier/planning"]}
+    monkeypatch.setattr(u, "categories", lambda cats=None: [cat])
+    reg = {"xcuser@lifelive-motorsport.com": "cat:xcm", "boss@lifelive-motorsport.com": "admin"}
+    monkeypatch.setattr(u, "registry", lambda: reg)
+    monkeypatch.setattr(u, "supers", lambda: [MD])
+    monkeypatch.setattr(u, "is_super", lambda e: e == MD)
+    monkeypatch.setattr(settings, "AUTH_ENABLED", True)
+    who = {"u": "xcuser@lifelive-motorsport.com"}
+    app.dependency_overrides[ru] = lambda: who["u"]
+    cl = TestClient(app)
+    ev = lambda bu: {"title": "Test", "bu": bu, "confirmed": True, "start": "2027-05-01", "end": "2027-05-02", "immo_start": "2027-05-01", "immo_end": "2027-05-02",
+                     "place": {"id": "demo-spa", "name": "Circuit", "address": "Stavelot", "country": "BE"}, "notes": "", "staff": [], "externals": [], "vehicles": []}
+    try:
+        assert cl.get("/api/events/config").status_code == 200                                              # page cochée : accès
+        ok = cl.post("/api/events", json=ev("XC"))
+        assert ok.status_code == 200
+        assert cl.post("/api/events", json=ev("HISTORIC_RACING")).status_code == 403                         # limité à la BU XC (page xc/events)
+        listed = cl.get("/api/events", params={"from": "2027-05-01", "to": "2027-05-03"}).json()["events"]
+        assert [e["id"] for e in listed] == [ok.json()["id"]]
+        who["u"] = MD
+        other = cl.post("/api/events", json=ev("HISTORIC_RACING")).json()["id"]
+        who["u"] = "xcuser@lifelive-motorsport.com"
+        assert cl.delete(f"/api/events/{other}").status_code == 403                                          # événement d'une autre BU
+        assert cl.delete(f"/api/events/{ok.json()['id']}").status_code == 200
+        assert cl.get("/api/resources").status_code == 200
+        assert cl.put("/api/resources/staff/m1", json={"workshop": "chef_all"}).status_code == 403           # le rôle Atelier reste au Super User
+        who["u"] = "boss@lifelive-motorsport.com"
+        assert cl.get("/api/events/config").status_code == 403 and cl.get("/api/resources").status_code == 403   # « Administrateur » : pas d'accès
+        who["u"] = MD
+        assert cl.get("/api/events/config").status_code == 200
+        cl.delete(f"/api/events/{other}")
+    finally:
+        app.dependency_overrides.pop(ru, None)

@@ -322,7 +322,7 @@ def test_toyota_starter_template_applies_to_a_car(api):
     gb = next(n for n in next(x for x in d["tree"] if x["name"] == "Transmission")["children"] if n["name"] == "Gearbox")
     assert len(gb["children"]) == 15 and next(m for m in gb["meters"] if m["type"] == "revision")["limit_km"] == 500
     fuel = next(n for n in next(x for x in d["tree"] if x["name"] == "Carburant")["children"] if n["name"] == "Fuel tank")
-    assert next(m for m in fuel["meters"] if m["type"] == "replace")["limit_months"] == 60
+    assert "Certificat réservoir" in next(m for m in fuel["meters"] if m["type"] == "replace")["note"]            # la validité du réservoir se suit dans « Documents et validités »
 
 
 def test_ensembles_follow_the_list_order(api):

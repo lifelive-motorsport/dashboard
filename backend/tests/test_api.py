@@ -103,7 +103,7 @@ def test_config_exposes_odoo_analytic_link_only_with_odoo_source(monkeypatch):
     monkeypatch.setattr(m.settings, "ODOO_PUBLIC_URL", "https://lifelive.odoo.com/")
     assert c.get("/api/config").json()["analytic_link"] == "https://lifelive.odoo.com/odoo/account.analytic.account/{id}/action-183"
     assert c.get("/api/config").json()["partner_link"] == "https://lifelive.odoo.com/odoo/contacts/{id}/action-1439"
-    assert c.get("/api/config").json()["client_link"] == "https://lifelive.odoo.com/odoo/contacts/{id}"            # un client n'a pas de factures fournisseurs : on ouvre sa fiche
+    assert c.get("/api/config").json()["client_link"] == "https://lifelive.odoo.com/odoo/contacts/{id}/invoicing"            # un client n'a pas de factures fournisseurs : on ouvre l'onglet Facturation de sa fiche
 
 
 def test_hit_parade_rows_carry_partner_id():

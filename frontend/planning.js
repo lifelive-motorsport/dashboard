@@ -31,9 +31,10 @@ const plRes = () => Object.fromEntries(pl.data.resources.map(r => [r.id, r]));
 const plGroup = r => r.kind === 'vehicle' ? (r.category || 'other') : r.kind;
 const plBuOk = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => (r.bus || []).includes(k));
 const plEvents = () => pl.data.events.filter(e => buSel === 'all' || buMatchesFilter(PE_BU_SYM[e.bu] || 'lifelive', buSel));
+const PL_RACE = ['rally', 'circuit'];                                   // voitures de course : ressources de la BU CARS, masquées quand XC est sélectionné
 function plGroups() {
   const cats = (pl.data.categories || []), order = [['staff', 'Staff interne'], ['external', 'Staff externe']].concat(cats.map(c => [c.id, c.label]));
-  return order.filter(([id]) => pl.data.resources.some(r => plGroup(r) === id));
+  return order.filter(([id]) => !(buSel === 'xc' && PL_RACE.includes(id)) && pl.data.resources.some(r => plGroup(r) === id));
 }
 
 // Voies : place les barres qui se chevauchent sur des lignes différentes. items = [{a, b, ...}] (indices de colonnes inclusifs)

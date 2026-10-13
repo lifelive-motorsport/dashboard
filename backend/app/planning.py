@@ -370,6 +370,19 @@ def busy(emails: list[str], d_from: date, d_to: date) -> dict[str, list[dict]]:
 BU_KEYS = tuple(BUS)
 
 
+RACE_CATEGORIES = {"rally", "circuit"}      # voitures de course : ressources de la BU CARS
+
+
+def restrict_to_bu(view: dict, lock: str | None) -> dict:
+    """Utilisateur dont les droits se limitent à une BU : il ne voit ni les événements des autres BU, ni (pour XC) les voitures de course Rally / Circuit."""
+    if not lock:
+        return view
+    ev = [e for e in view["events"] if (e["bu"] == "XC") == (lock == "XC")]
+    res = [r for r in view["resources"] if not (lock == "XC" and r["kind"] == "vehicle" and r.get("category") in RACE_CATEGORIES)]
+    cats = [c for c in view.get("categories", []) if not (lock == "XC" and c["id"] in RACE_CATEGORIES)]
+    return {**view, "events": ev, "resources": res, "categories": cats}
+
+
 def planning_view(d_from: date, d_to: date) -> dict:
     """Événements de la période et ressources, sans adresses e-mail ni données de paie : les invités sont désignés par un identifiant de ressource
     (`s:` staff interne, `x:` staff externe, `v:` véhicule) ; {resources, events, categories}."""

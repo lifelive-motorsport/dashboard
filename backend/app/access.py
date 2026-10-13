@@ -32,6 +32,22 @@ PAGES: dict[str, tuple[tuple[str, ...], set[str]]] = {
 XC_PAGES = ["xc/webshop_xc", "xc/webshop_gs", "xc/events", "xc/inventory", "xc/margins", "xc/tn11"]       # catégorie « XC » proposée par défaut
 
 
+def bu_lock(pages: set[str] | None) -> str | None:
+    """BU imposée par les droits : « XC » ou « CARS » si toutes les pages de données de la catégorie concernent cette seule BU (même règle que buLock côté écran) ; None = pas de restriction."""
+    if pages is None:
+        return None
+    xc = cars = both = False
+    for k in pages:
+        g = k.split("/")[0]
+        if g == "xc" or k == "staff/xc":
+            xc = True
+        elif g == "cars" or k == "staff/cars":
+            cars = True
+        elif g in ("overview", "staff", "expenses", "vehicles", "marketing"):
+            both = True
+    return None if both or (xc and cars) else "XC" if xc else "CARS" if cars else None
+
+
 def allowed_prefixes(pages: set[str]) -> tuple[str, ...]:
     out = list(ALWAYS)
     for p in pages:

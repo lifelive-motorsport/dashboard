@@ -137,3 +137,17 @@ def test_leave_feeds_planning_presence_and_edit_rules(api):
     d = date.fromisoformat(r["start"])
     assert leaves.absences({MEC}, d, d)[MEC][d] == "Congé"
     assert presence.excused({MEC}, d, d).get(MEC, {}).get(d) == "Congé"
+
+
+def test_bu_locked_user_does_not_see_other_bu_events_or_race_cars():
+    from app import access, planning
+    assert access.bu_lock({"xc/events", "planifier/planning"}) == "XC" and access.bu_lock({"cars/bu", "xc/events"}) is None
+    assert access.bu_lock({"overview/ca", "xc/events"}) is None and access.bu_lock(None) is None and access.bu_lock({"planifier/planning"}) is None
+    view = {"events": [{"id": "1", "bu": "XC"}, {"id": "2", "bu": "HISTORIC_RACING"}],
+            "resources": [{"id": "v:0", "kind": "vehicle", "category": "circuit"}, {"id": "v:1", "kind": "vehicle", "category": "rally"}, {"id": "v:2", "kind": "vehicle", "category": "sv"}, {"id": "s:1", "kind": "staff"}],
+            "categories": [{"id": "sv"}, {"id": "rally"}, {"id": "circuit"}]}
+    xc = planning.restrict_to_bu(view, "XC")
+    assert [e["id"] for e in xc["events"]] == ["1"] and {r["id"] for r in xc["resources"]} == {"v:2", "s:1"} and [c["id"] for c in xc["categories"]] == ["sv"]
+    cars = planning.restrict_to_bu(view, "CARS")
+    assert [e["id"] for e in cars["events"]] == ["2"] and len(cars["resources"]) == 4
+    assert planning.restrict_to_bu(view, None) is view

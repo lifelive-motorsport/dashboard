@@ -756,7 +756,7 @@ def planning_page(date_from: date = Query(..., alias="from"), date_to: date = Qu
     if date_to < date_from or (date_to - date_from).days > 130:
         raise HTTPException(422, "Période invalide (130 jours au maximum)")
     try:
-        return planning.planning_view(date_from, date_to)
+        return planning.restrict_to_bu(planning.planning_view(date_from, date_to), access.bu_lock(users.pages_of(_user)))
     except Exception as e:
         log.exception("Planning indisponible")
         raise HTTPException(503, f"Planning momentanément indisponible : {e}")

@@ -791,7 +791,7 @@ def _rd(fn, *a):
 def rd_cars(refresh: bool = False, _user: str = Depends(granted("consigner/rides"))):
     if refresh:
         resources.vehicles(True)                                     # relit les ressources Google (nom corrigé, voiture ajoutée…)
-    return {"cars": rides.cars(), "catalog": rides.get_catalog(), "circuits": rides.list_circuits()}
+    return {"cars": rides.cars(), "catalog": rides.get_catalog(), "circuits": rides.list_circuits(), "ensembles": rides.ENSEMBLES}
 
 
 @app.get("/api/rides/cars/{key}")
@@ -937,7 +937,7 @@ def rd_delete_maint(mid: str, _user: str = Depends(granted("consigner/rides"))):
 
 @app.get("/api/rides/templates")
 def rd_templates(_user: str = Depends(granted("consigner/rides", "consigner/parts"))):
-    return {"templates": rides.list_templates()}
+    return {"templates": rides.list_templates(), "ensembles": rides.ENSEMBLES}
 
 
 @app.post("/api/rides/templates")

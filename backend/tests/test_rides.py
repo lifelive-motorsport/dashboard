@@ -30,7 +30,7 @@ def test_cars_come_from_race_vehicles_without_the_rpm_number_or_prefix(api):
 
 def test_km_are_computed_from_runs_and_mounting_dates(api):
     c = car(api)["key"]
-    g = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Motorisation", "group": True}).json()
+    g = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "group": True}).json()
     eng = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "parent_id": g["id"], "limit_km": 1000, "km_start": 100}).json()
     turbo = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Turbo", "parent_id": g["id"], "limit_km": 200, "warn_pct": 50}).json()
     assert api.post(f"/api/rides/circuits", json={"name": "Dijon", "length_km": 3.8}).json()["id"] == "dijon"
@@ -46,16 +46,18 @@ def test_km_are_computed_from_runs_and_mounting_dates(api):
 
 def test_alert_thresholds_replace_and_run_edit(api):
     c = car(api)["key"]
-    p = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Boîte", "limit_km": 100, "limit_hours": 2}).json()
+    g = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Transmission", "group": True}).json()
+    p = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Boîte", "parent_id": g["id"], "limit_km": 100, "limit_hours": 2}).json()
     run = api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "T", "km": 80, "hours": 1}).json()
-    node = api.get(f"/api/rides/cars/{c}").json()["tree"][0]
+    node = api.get(f"/api/rides/cars/{c}").json()["tree"][0]["children"][0]
     assert node["state"] == "warn" and node["ratio"] == 0.8                                  # 80 % de la limite km, seuil 75 %
     api.put(f"/api/rides/runs/{run['id']}", json={"date": "2026-06-01", "name": "T", "km": 120, "hours": 1})
-    assert api.get(f"/api/rides/cars/{c}").json()["tree"][0]["state"] == "over"             # corrigé sans rien recalculer à la main
+    assert api.get(f"/api/rides/cars/{c}").json()["tree"][0]["children"][0]["state"] == "over"             # corrigé sans rien recalculer à la main
     new = api.post(f"/api/rides/parts/{p['id']}/replace", json={"on": "2026-06-02", "serial": "N2"}).json()
     d = api.get(f"/api/rides/cars/{c}").json()
-    olds = [n for n in d["tree"] if n.get("removed_at")]
-    news = [n for n in d["tree"] if not n.get("removed_at")]
+    kids = d["tree"][0]["children"]
+    olds = [n for n in kids if n.get("removed_at")]
+    news = [n for n in kids if not n.get("removed_at")]
     assert olds[0]["km"] == 120 and news[0]["km"] == 0 and news[0]["state"] == "ok" and news[0]["id"] == new["id"]
     assert d["alerts"] == 0                                                                  # une pièce démontée ne déclenche plus d'alerte
     api.delete(f"/api/rides/runs/{run['id']}")
@@ -64,7 +66,7 @@ def test_alert_thresholds_replace_and_run_edit(api):
 
 def test_validation_depth_and_photo(api):
     c = car(api)["key"]
-    a = api.post(f"/api/rides/cars/{c}/parts", json={"name": "A", "group": True}).json()
+    a = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Freins", "group": True}).json()
     b = api.post(f"/api/rides/cars/{c}/parts", json={"name": "B", "parent_id": a["id"], "group": True}).json()
     cc = api.post(f"/api/rides/cars/{c}/parts", json={"name": "C", "parent_id": b["id"], "limit_km": 10}).json()
     assert api.post(f"/api/rides/cars/{c}/parts", json={"name": "D", "parent_id": cc["id"]}).status_code == 422       # 4e niveau refusé
@@ -88,7 +90,8 @@ def test_car_bu_is_set_and_validated(api):
 
 def test_archive_then_delete_car_data(api):
     c = car(api)["key"]
-    api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "limit_km": 100})
+    g = api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "group": True}).json()
+    api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "parent_id": g["id"], "limit_km": 100})
     api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "T", "km": 50})
     api.post(f"/api/rides/cars/{c}/photo", content=b"\xff\xd8\xff", headers={"Content-Type": "image/jpeg"})
     assert api.delete(f"/api/rides/cars/{c}").status_code == 422                              # pas sans archivage
@@ -97,7 +100,7 @@ def test_archive_then_delete_car_data(api):
     assert api.put(f"/api/rides/cars/{c}", json={"archived": False}).json()["archived"] is False
     assert api.put(f"/api/rides/cars/{c}", json={"bu": "XC"}).json() == {"bu": "XC", "archived": False, "odoo": None}    # un champ absent ne change rien
     api.put(f"/api/rides/cars/{c}", json={"archived": True})
-    assert api.delete(f"/api/rides/cars/{c}").json() == {"parts": 1, "runs": 1}
+    assert api.delete(f"/api/rides/cars/{c}").json() == {"parts": 2, "runs": 1}
     d = car(api)
     assert d["km_total"] == 0 and d["parts"] == 0 and d["photo"] is False and d["archived"] is False and d["bu"] == ""   # la voiture revient vide (elle est toujours une ressource)
     assert api.get(f"/api/rides/cars/{c}/photo").status_code == 404
@@ -146,7 +149,7 @@ def test_refresh_rereads_google_resources(api, monkeypatch):
 
 def _tpl():
     return {"name": "Voiture circuit turbo 2RM", "description": "", "nodes": [
-        {"id": "g1", "name": "Motorisation", "group": True},
+        {"id": "g1", "name": "Moteur", "group": True},
         {"id": "n1", "parent_id": "g1", "name": "Moteur", "types": ["replace", "revision", "fluids"], "replace": {"limit_km": 5000}, "revision": {"limit_km": 1500, "warn_pct": 80}, "fluids": {"limit_km": 500, "limit_hours": 5}},
         {"id": "n2", "parent_id": "g1", "name": "Turbo", "types": ["replace"], "replace": {"limit_km": 2000, "warn_pct": 50}}]}
 
@@ -182,7 +185,10 @@ def test_template_assign_and_maintenance_meters(api):
     assert api.post(f"/api/rides/parts/{turbo['id']}/maint", json={"type": "revision", "date": "2026-06-02"}).status_code == 422    # type non suivi
     assert api.put(f"/api/rides/templates/{t['id']}", json={**_tpl(), "description": "maj"}).json()["description"] == "maj"
     assert api.delete(f"/api/rides/templates/{t['id']}").status_code == 200
-    assert api.get("/api/rides/templates").json() == {"templates": []}
+    left = api.get("/api/rides/templates").json()["templates"]
+    assert [x["name"] for x in left] == ["Toyota GR Yaris Rally2"]                               # modèle de départ, créé une seule fois
+    assert api.delete(f"/api/rides/templates/{left[0]['id']}").status_code == 200
+    assert api.get("/api/rides/templates").json()["templates"] == []                           # supprimé : il ne revient pas
 
 
 def test_vehicle_documents_alerts_files_and_mail(api, monkeypatch):
@@ -249,3 +255,78 @@ def test_car_identity_fields(api):
     api.put(f"/api/rides/cars/{c}", json={"livery": ""})                                           # vide = effacé ; les autres champs ne bougent pas
     d = api.get(f"/api/rides/cars/{c}").json()
     assert d["livery"] == "" and d["chassis"] == "WBA123"
+
+
+def test_first_level_is_a_locked_list_of_ensembles(api):
+    c = car(api)["key"]
+    assert api.get("/api/rides/cars").json()["ensembles"][:3] == ["Moteur", "Refroidissement", "Embrayage"]
+    assert api.post(f"/api/rides/cars/{c}/parts", json={"name": "Truc libre", "group": True}).status_code == 422        # hors liste
+    assert api.post(f"/api/rides/cars/{c}/parts", json={"name": "Moteur", "limit_km": 10}).status_code == 422             # un ensemble est un groupe
+    g = api.post(f"/api/rides/cars/{c}/parts", json={"name": "electrique et capteurs", "group": True}).json()
+    assert g["name"] == "Électrique et capteurs"                                                                           # nom normalisé (casse, accents)
+    assert api.post(f"/api/rides/cars/{c}/parts", json={"name": "Électrique et capteurs", "group": True}).status_code == 422    # une seule fois par voiture
+    assert api.put(f"/api/rides/parts/{g['id']}", json={"name": "Autre chose", "group": True}).status_code == 422
+    bad = _tpl(); bad["nodes"][0]["name"] = "Motorisation"
+    assert api.post("/api/rides/templates", json={**bad, "name": "x"}).status_code == 422
+    bad = _tpl(); bad["nodes"].append({"id": "r", "name": "Moteur", "group": False})
+    assert api.post("/api/rides/templates", json={**bad, "name": "y"}).status_code == 422
+
+
+def test_new_maintenance_types_time_events_condition_and_reference(api):
+    from datetime import date
+    c = car(api)["key"]
+    t = {"name": "Rally2 test", "description": "", "nodes": [
+        {"id": "g", "name": "Carburant", "group": True},
+        {"id": "tank", "parent_id": "g", "name": "Fuel Tank", "reference": "DYXRQ186021", "types": ["replace", "inspection"], "replace": {"limit_months": 60, "note": "ou si abîmé"}, "inspection": {"limit_events": 1}},
+        {"id": "gb", "parent_id": "g", "name": "Gearbox", "types": ["revision", "revision2", "inspection"], "revision": {"limit_km": 500}, "revision2": {"limit_km": 3000}, "inspection": {"limit_km": 650}},
+        {"id": "pl", "parent_id": "g", "name": "Clutch plates", "types": ["replace"], "replace": {"note": "sous l'épaisseur minimale"}}]}
+    tid = api.post("/api/rides/templates", json=t).json()["id"]
+    api.post(f"/api/rides/cars/{c}/template", json={"template_id": tid})
+    d = api.get(f"/api/rides/cars/{c}").json()
+    kids = {n["name"]: n for n in d["tree"][0]["children"]}
+    assert kids["Fuel Tank"]["reference"] == "DYXRQ186021" and kids["Fuel Tank"]["limit_months"] == 60
+    assert {m["type"] for m in kids["Gearbox"]["meters"]} == {"revision", "revision2", "inspection"}
+    cp = kids["Clutch plates"]["meters"][0]
+    assert cp["type"] == "replace" and cp["note"] == "sous l'épaisseur minimale" and cp["state"] == "none"                 # « sur condition » : visible, sans alerte
+    # temps : réservoir monté il y a 5 ans -> dépassé ; sans date de montage, pas de compteur de temps
+    api.put(f"/api/rides/parts/{kids['Fuel Tank']['id']}", json={"name": "Fuel Tank", "types": ["replace", "inspection"], "limit_months": 60, "maint": {"inspection": {"limit_events": 1}}, "mounted_from": "2021-01-01"})
+    api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "A", "km": 700})
+    d = api.get(f"/api/rides/cars/{c}").json()
+    kids = {n["name"]: n for n in d["tree"][0]["children"]}
+    m = {x["type"]: x for x in kids["Fuel Tank"]["meters"]}
+    assert m["replace"]["state"] == "over" and m["replace"]["months"] > 60
+    assert m["inspection"]["events"] == 1 and m["inspection"]["state"] == "warn"                                           # contrôle dû : avertissement, jamais « dépassé »
+    gm = {x["type"]: x for x in kids["Gearbox"]["meters"]}
+    assert gm["revision"]["state"] == "over" and gm["revision2"]["state"] == "ok" and gm["inspection"]["state"] == "over".replace("over", "warn")
+    # alertes : les contrôles sont regroupés en une seule
+    al = d["alerts_list"]
+    assert sum(1 for a in al if a["type"] == "inspection") == 1 and next(a for a in al if a["type"] == "inspection")["count"] == 2
+    # Révision 2 et contrôle s'enregistrent comme la révision
+    gid = kids["Gearbox"]["id"]
+    assert api.post(f"/api/rides/parts/{gid}/maint", json={"type": "revision2", "date": "2026-06-02"}).status_code == 200
+    assert api.post(f"/api/rides/parts/{gid}/maint", json={"type": "inspection", "date": "2026-06-02"}).status_code == 200
+    assert api.post(f"/api/rides/parts/{kids['Clutch plates']['id']}/maint", json={"type": "revision", "date": "2026-06-02"}).status_code == 422
+
+
+def test_toyota_starter_template_applies_to_a_car(api):
+    t = api.get("/api/rides/templates").json()["templates"][0]
+    assert t["name"] == "Toyota GR Yaris Rally2" and sum(1 for n in t["nodes"] if not n["parent_id"]) == 9
+    assert all(rides.canon_ensemble(n["name"]) for n in t["nodes"] if not n["parent_id"])
+    c = car(api)["key"]
+    r = api.post(f"/api/rides/cars/{c}/template", json={"template_id": t["id"]}).json()
+    assert r["created"] == len(t["nodes"]) and r["kept"] == 0
+    d = api.get(f"/api/rides/cars/{c}").json()
+    eng = next(n for n in d["tree"] if n["name"] == "Moteur")
+    engine = next(n for n in eng["children"] if n["name"] == "Engine")
+    assert {m["type"] for m in engine["meters"]} == {"revision", "revision2", "inspection"} and engine["reference"] == "DYXRQ202040"
+    gb = next(n for n in next(x for x in d["tree"] if x["name"] == "Transmission")["children"] if n["name"] == "Gearbox")
+    assert len(gb["children"]) == 15 and next(m for m in gb["meters"] if m["type"] == "revision")["limit_km"] == 500
+    fuel = next(n for n in next(x for x in d["tree"] if x["name"] == "Carburant")["children"] if n["name"] == "Fuel tank")
+    assert next(m for m in fuel["meters"] if m["type"] == "replace")["limit_months"] == 60
+
+
+def test_ensembles_follow_the_list_order(api):
+    c = car(api)["key"]
+    for n in ("Freins", "Moteur", "Carburant"):
+        api.post(f"/api/rides/cars/{c}/parts", json={"name": n, "group": True})
+    assert [n["name"] for n in api.get(f"/api/rides/cars/{c}").json()["tree"]] == ["Moteur", "Freins", "Carburant"]

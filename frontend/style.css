@@ -475,3 +475,5 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .rd-fnone{display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:15px;background:#f1f1ef}
 .rd-no{display:inline-block;min-width:28px;text-align:center;padding:0 6px;border-radius:6px;background:var(--fg);color:var(--bg);font-size:12px;font-weight:700;margin-right:4px}
 .rd-ident{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.ps-ref{max-width:200px}.rd-lim{flex-wrap:wrap}
+.rd-fold{border:0;background:none;color:inherit;cursor:pointer;padding:0 6px 0 0;font-size:14px}

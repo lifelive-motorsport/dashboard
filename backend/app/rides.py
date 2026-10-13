@@ -76,14 +76,30 @@ def catalog_coll() -> Coll:
 
 # ---- Modèles ----------------------------------------------------------------------------------------------------------------------------
 
-MAINT_TYPES = ("replace", "revision", "fluids")
-MAINT_LABEL = {"replace": "Remplacement", "revision": "Révision", "fluids": "Vidange et nouveaux fluides"}
+MAINT_TYPES = ("replace", "revision", "revision2", "fluids", "inspection")
+MAINT_LABEL = {"replace": "Remplacement", "revision": "Révision 1", "revision2": "Révision 2", "fluids": "Vidange et nouveaux fluides", "inspection": "Contrôle"}
+LOGGED = ("revision", "revision2", "fluids", "inspection")          # maintenances qui s'enregistrent avec 🛠 (le remplacement se fait par « Remplacer »)
+
+# Premier niveau de l'arborescence : liste verrouillée (Super User : à modifier dans ce fichier), pour que les états et coûts soient comparables d'une voiture à l'autre.
+ENSEMBLES = ["Moteur", "Refroidissement", "Embrayage", "Transmission", "Freins", "Suspension et amortisseurs", "Direction", "Carburant", "Électrique et capteurs", "Châssis et carrosserie", "Sécurité"]
+
+
+def _fold(s: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFD", s or "").encode("ascii", "ignore").decode().lower().strip()
+
+
+def canon_ensemble(name: str) -> str | None:
+    return next((e for e in ENSEMBLES if _fold(e) == _fold(name)), None)
 
 
 class MaintLimit(BaseModel):
     limit_km: float | None = Field(default=None, gt=0, le=1e7)
     limit_hours: float | None = Field(default=None, gt=0, le=1e6)
+    limit_months: float | None = Field(default=None, gt=0, le=1200)   # limite en temps (ex. réservoir : 60 mois)
+    limit_events: int | None = Field(default=None, gt=0, le=1000)     # tous les N roulages (ex. contrôle après chaque rallye : 1)
     warn_pct: float = Field(default=75.0, gt=0, le=100)
+    note: str = Field(default="", max_length=160)                     # critère « sur condition » (ex. « quand abîmé ») ou précision
 
 
 def _clean_types(v):
@@ -96,13 +112,16 @@ class PartIn(BaseModel):
     group: bool = False                                              # simple regroupement (ex. Motorisation) : pas de compteur propre, l'état est celui du pire de ses pièces
     limit_km: float | None = Field(default=None, gt=0, le=1e7)
     limit_hours: float | None = Field(default=None, gt=0, le=1e6)
+    limit_months: float | None = Field(default=None, gt=0, le=1200)
+    limit_note: str = Field(default="", max_length=160)
+    reference: str = Field(default="", max_length=60)                # référence constructeur
     warn_pct: float = Field(default=75.0, gt=0, le=100)
     km_start: float = Field(default=0.0, ge=0, le=1e7)               # kilomètres déjà parcourus au montage (pièce d'occasion, reprise de RPM)
     hours_start: float = Field(default=0.0, ge=0, le=1e6)
     mounted_from: date | None = None                                 # vide = depuis toujours : tous les runs de la voiture comptent
     serial: str = Field(default="", max_length=60)
     notes: str = Field(default="", max_length=500)
-    types: list[str] = Field(default_factory=list, max_length=3)      # maintenances suivies : replace (limites ci-dessus), revision, fluids (limites dans `maint`)
+    types: list[str] = Field(default_factory=list, max_length=5)      # maintenances suivies : replace (limites ci-dessus), revision, fluids (limites dans `maint`)
     maint: dict[str, MaintLimit] = Field(default_factory=dict)        # intervalles de la révision et de la vidange : {"revision": {...}, "fluids": {...}}
 
     @field_validator("types")
@@ -113,19 +132,19 @@ class PartIn(BaseModel):
     @field_validator("maint")
     @classmethod
     def _maint(cls, v):
-        return {k: m for k, m in v.items() if k in ("revision", "fluids")}
+        return {k: m for k, m in v.items() if k in LOGGED}
 
     @model_validator(mode="after")
     def _chk(self):
         if self.group:
-            self.limit_km = self.limit_hours = None
+            self.limit_km = self.limit_hours = self.limit_months = None
             self.km_start = self.hours_start = 0.0
             self.types, self.maint = [], {}
         return self
 
 
 class MaintIn(BaseModel):
-    type: Literal["replace", "revision", "fluids"]
+    type: Literal["replace", "revision", "revision2", "fluids", "inspection"]
     date: date
     notes: str = Field(default="", max_length=300)
 
@@ -135,10 +154,13 @@ class TNode(BaseModel):
     parent_id: str | None = None
     name: str = Field(min_length=1, max_length=80)
     group: bool = False                                              # Ensemble (ex. Motorisation) ; sinon sous-ensemble (Moteur, Turbo…)
-    types: list[str] = Field(default_factory=list, max_length=3)
+    types: list[str] = Field(default_factory=list, max_length=5)
+    reference: str = Field(default="", max_length=60)                # référence constructeur
     replace: MaintLimit = Field(default_factory=MaintLimit)
     revision: MaintLimit = Field(default_factory=MaintLimit)
+    revision2: MaintLimit = Field(default_factory=MaintLimit)
     fluids: MaintLimit = Field(default_factory=MaintLimit)
+    inspection: MaintLimit = Field(default_factory=MaintLimit)
 
     @field_validator("types")
     @classmethod
@@ -158,6 +180,11 @@ class TemplateIn(BaseModel):
             raise ValueError("identifiants en double")
         by = {n.id: n for n in self.nodes}
         for n in self.nodes:
+            if not n.parent_id:                                       # premier niveau : un ensemble de la liste verrouillée
+                e = canon_ensemble(n.name)
+                if not n.group or not e:
+                    raise ValueError("Le premier niveau est un ensemble de la liste : " + ", ".join(ENSEMBLES))
+                n.name = e
             depth, p = 1, n.parent_id
             while p:
                 if p not in by:
@@ -244,23 +271,37 @@ def _runs_of(vehicle: str) -> list[dict]:
 
 def types_of(p: dict) -> list[str]:
     """Maintenances suivies d'une pièce : le choix explicite ; à défaut (anciennes fiches) le remplacement si une limite est définie."""
-    return list(p.get("types") or (["replace"] if p.get("limit_km") or p.get("limit_hours") else []))
+    return list(p.get("types") or (["replace"] if p.get("limit_km") or p.get("limit_hours") or p.get("limit_months") else []))
 
 
-def _meter(km: float, hours: float, lim: dict) -> tuple[float | None, str]:
+def _meter(km: float, hours: float, months: float | None, events: int, lim: dict) -> tuple[float | None, str]:
     ratios = []
     if lim.get("limit_km"):
         ratios.append(km / lim["limit_km"])
     if lim.get("limit_hours"):
         ratios.append(hours / lim["limit_hours"])
+    if lim.get("limit_months") and months is not None:
+        ratios.append(months / lim["limit_months"])
+    if lim.get("limit_events"):
+        ratios.append(events / lim["limit_events"])
     ratio = max(ratios) if ratios else None
     warn = (lim.get("warn_pct") or 75.0) / 100
     return ratio, ("none" if ratio is None else "over" if ratio >= 1 else "warn" if ratio >= warn else "ok")
 
 
-def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None) -> dict:
-    """Compteurs d'une pièce : total depuis le montage + un compteur par maintenance suivie (remplacement : depuis le montage ; révision / vidange : depuis la dernière
-    maintenance enregistrée, à défaut depuis le montage). Les runs du jour d'une maintenance comptent après elle."""
+def _months_between(since: str | None, today: date) -> float | None:
+    if not since:
+        return None
+    return max(0.0, (today - date.fromisoformat(since)).days / 30.4375)
+
+
+def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None, today: date | None = None) -> dict:
+    """Compteurs d'une pièce : total depuis le montage + un compteur par maintenance suivie (remplacement : depuis le montage ; révisions, vidange, contrôle : depuis la dernière
+    maintenance enregistrée, à défaut depuis le montage). Chaque compteur suit les km, les heures, le temps (mois) et / ou le nombre de roulages selon les limites définies.
+    Les runs du jour d'une maintenance comptent après elle. Un contrôle en retard reste un avertissement (jamais « dépassé »)."""
+    if today is None:
+        from . import presence
+        today = presence.local_now().date()
     a, b = p.get("mounted_from") or "", p.get("removed_at") or "9999"
     mine = [r for r in runs if a <= r["date"] < b]
     km = p.get("km_start", 0.0) + sum(r.get("km") or 0.0 for r in mine)
@@ -268,18 +309,23 @@ def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None) -> 
     meters = []
     for t in types_of(p):
         if t == "replace":
-            lim, mk, mh, last = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "warn_pct": p.get("warn_pct")}, km, hours, None
+            lim = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "limit_months": p.get("limit_months"), "warn_pct": p.get("warn_pct"), "note": p.get("limit_note", "")}
+            mk, mh, ev, last, ref = km, hours, len(mine), None, a or None
         else:
             lim = (p.get("maint") or {}).get(t) or {}
             done = sorted(l["date"] for l in (logs or []) if l["part_id"] == p["id"] and l["type"] == t)
             last = done[-1] if done else None
             since = max(last or "", a)
             seg = [r for r in runs if since <= r["date"] < b]
-            mk, mh = sum(r.get("km") or 0.0 for r in seg), sum(r.get("hours") or 0.0 for r in seg)
-        ratio, state = _meter(mk, mh, lim)
-        if ratio is not None or t != "replace":
-            meters.append({"type": t, "label": MAINT_LABEL[t], "km": round(mk, 1), "hours": round(mh, 2), "limit_km": lim.get("limit_km"), "limit_hours": lim.get("limit_hours"),
-                           "warn_pct": lim.get("warn_pct") or 75.0, "ratio": None if ratio is None else round(ratio, 4), "state": state, "last": last})
+            mk, mh, ev, ref = sum(r.get("km") or 0.0 for r in seg), sum(r.get("hours") or 0.0 for r in seg), len(seg), (since or None)
+        mo = _months_between(ref, today) if not p.get("removed_at") else None
+        ratio, state = _meter(mk, mh, mo, ev, lim)
+        if t == "inspection" and state == "over":
+            state = "warn"
+        if ratio is not None or t != "replace" or lim.get("note") or lim.get("limit_months"):         # une limite en temps sans date de montage reste visible (compteur à compléter)
+            meters.append({"type": t, "label": MAINT_LABEL[t], "km": round(mk, 1), "hours": round(mh, 2), "months": None if mo is None else round(mo, 1), "events": ev,
+                           "limit_km": lim.get("limit_km"), "limit_hours": lim.get("limit_hours"), "limit_months": lim.get("limit_months"), "limit_events": lim.get("limit_events"),
+                           "note": lim.get("note") or "", "warn_pct": lim.get("warn_pct") or 75.0, "ratio": None if ratio is None else round(ratio, 4), "state": state, "last": last})
     ratios = [m["ratio"] for m in meters if m["ratio"] is not None]
     state = max((m["state"] for m in meters), key=lambda s: RANK[s], default="none")
     return {"km": round(km, 1), "hours": round(hours, 2), "ratio": max(ratios) if ratios else None, "state": state, "runs": len(mine), "meters": meters}
@@ -310,18 +356,31 @@ def tree(vehicle: str, runs: list[dict]) -> list[dict]:
             node["state"] = max([node["state"]] + [c["state"] for c in live], key=lambda s: RANK[s])
         return node
 
-    return [build(p) for p in sorted(by_parent.get(None, []), key=lambda x: x["name"].lower())]
+    order = {_fold(e): i for i, e in enumerate(ENSEMBLES)}
+    return [build(p) for p in sorted(by_parent.get(None, []), key=lambda x: (order.get(_fold(x["name"]), 99), x["name"].lower()))]       # ensembles dans l'ordre de la liste
 
 
-def alerts(nodes: list[dict], path: str = "") -> list[dict]:
-    out = []
+def _alerts_rec(nodes: list[dict], path: str, out: list[dict], checks: list[str]) -> None:
     for n in nodes:
         here = f"{path} › {n['name']}" if path else n["name"]
         if not n.get("removed_at") and not n.get("group"):
             for m in n.get("meters", []):
                 if m["state"] in ("warn", "over") and m["ratio"] is not None:
-                    out.append({"id": n["id"], "path": here, "type": m["type"], "label": m["label"], "state": m["state"], "ratio": m["ratio"], "km": m["km"], "hours": m["hours"], "limit_km": m["limit_km"], "limit_hours": m["limit_hours"]})
-        out += alerts(n["children"], here)
+                    if m["type"] == "inspection":
+                        checks.append(here)                                # les contrôles se regroupent : une seule alerte par voiture
+                        continue
+                    out.append({"id": n["id"], "path": here, "type": m["type"], "label": m["label"], "state": m["state"], "ratio": m["ratio"], "km": m["km"], "hours": m["hours"], "limit_km": m["limit_km"], "limit_hours": m["limit_hours"],
+                                "months": m.get("months"), "limit_months": m.get("limit_months")})
+        _alerts_rec(n["children"], here, out, checks)
+
+
+def alerts(nodes: list[dict], path: str = "") -> list[dict]:
+    out: list[dict] = []
+    checks: list[str] = []
+    _alerts_rec(nodes, path, out, checks)
+    if checks:
+        out.append({"id": None, "path": "Contrôles", "type": "inspection", "label": f"{len(checks)} élément{'s' if len(checks) > 1 else ''} à contrôler", "state": "warn", "ratio": 1.0, "km": 0, "hours": 0,
+                    "limit_km": None, "limit_hours": None, "count": len(checks), "items": checks[:40]})
     return out
 
 
@@ -541,9 +600,17 @@ def add_part(vehicle: str, data: PartIn, user: str) -> dict:
         if not par or par["vehicle"] != vehicle:
             raise LookupError("Élément parent introuvable")
     if _depth(data.parent_id) > MAX_DEPTH:
-        raise ValueError("Trois niveaux au maximum sous la voiture (groupe, pièce, sous-pièce)")
+        raise ValueError("Trois niveaux au maximum sous la voiture (ensemble, sous-ensemble, composant)")
+    dump = data.model_dump(mode="json")
+    if not data.parent_id:                                           # premier niveau : un ensemble de la liste verrouillée, une seule fois par voiture
+        e = canon_ensemble(data.name)
+        if not data.group or not e:
+            raise ValueError("Le premier niveau est un ensemble de la liste : " + ", ".join(ENSEMBLES))
+        if any(p["vehicle"] == vehicle and not p.get("parent_id") and not p.get("removed_at") and p["name"] == e for p in parts_coll().all()):
+            raise ValueError(f"L'ensemble « {e} » existe déjà sur cette voiture")
+        dump["name"] = e
     pid = "p-" + uuid.uuid4().hex[:10]
-    doc = {"id": pid, "vehicle": vehicle, **data.model_dump(mode="json"), "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
+    doc = {"id": pid, "vehicle": vehicle, **dump, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
     parts_coll().put(pid, doc)
     return doc
 
@@ -555,6 +622,11 @@ def update_part(pid: str, data: PartIn) -> dict:
     new = {**cur, **data.model_dump(mode="json"), "id": pid, "vehicle": cur["vehicle"], "parent_id": cur.get("parent_id"), "removed_at": cur.get("removed_at")}
     if cur.get("group") != new["group"]:
         raise ValueError("Un groupe ne devient pas une pièce (ni l'inverse) : créez-en un nouveau")
+    if not cur.get("parent_id") and new["name"] != cur["name"]:
+        e = canon_ensemble(new["name"])
+        if not e:
+            raise ValueError("Le premier niveau est un ensemble de la liste : " + ", ".join(ENSEMBLES))
+        new["name"] = e
     parts_coll().put(pid, new)
     return new
 
@@ -594,7 +666,7 @@ def log_maint(pid: str, data: MaintIn, user: str) -> dict:
         raise LookupError("Pièce introuvable ou démontée")
     if data.type == "replace":
         raise ValueError("Un remplacement s'enregistre avec « Remplacer » : la pièce démontée garde son historique")
-    if data.type not in types_of(p):
+    if data.type not in LOGGED or data.type not in types_of(p):
         raise ValueError("Cette maintenance n'est pas suivie sur cette pièce")
     mid = "m-" + uuid.uuid4().hex[:10]
     doc = {"id": mid, "part_id": pid, "vehicle": p["vehicle"], "type": data.type, "date": data.date.isoformat(), "notes": data.notes.strip(), "by": user.lower(), "created_at": now().isoformat()}
@@ -610,15 +682,28 @@ def delete_maint(mid: str) -> None:
 
 # ---- Magasin de pièces : modèles d'architecture (Ensemble › Sous-ensemble) ---------------------------------------------------------------------
 
+def _seed_templates(user: str = "logbook") -> None:
+    """Crée chaque modèle de départ une seule fois (marqueur « _seed:nom ») : ensuite il se modifie ou se supprime, il ne revient pas."""
+    from .rides_seed import SEED_TEMPLATES
+    for t in SEED_TEMPLATES:
+        key = "_seed:" + t["name"]
+        if templates_coll().get(key):
+            continue
+        templates_coll().put(key, {"id": key})
+        if not any(x.get("name", "").lower() == t["name"].lower() for x in templates_coll().all()):
+            save_template(None, TemplateIn(**t), user)
+
+
 def list_templates() -> list[dict]:
-    return sorted(templates_coll().all(), key=lambda t: t["name"].lower())
+    _seed_templates()
+    return sorted((t for t in templates_coll().all() if not t.get("id", "").startswith("_seed")), key=lambda t: t["name"].lower())
 
 
 def save_template(tid: str | None, data: TemplateIn, user: str) -> dict:
     cur = templates_coll().get(tid) if tid else None
     if tid and not cur:
         raise LookupError("Modèle introuvable")
-    if any(t["id"] != tid and t["name"].lower() == data.name.strip().lower() for t in templates_coll().all()):
+    if any(t["id"] != tid and t.get("name", "").lower() == data.name.strip().lower() for t in templates_coll().all()):
         raise ValueError("Un modèle porte déjà ce nom")
     tid = tid or "t-" + uuid.uuid4().hex[:8]
     doc = {"id": tid, **data.model_dump(mode="json"), "name": data.name.strip(), "created_by": (cur or {}).get("created_by", user.lower()), "created_at": (cur or {}).get("created_at", now().isoformat()),
@@ -636,12 +721,12 @@ def delete_template(tid: str) -> None:
 def _node_part(n: dict, vehicle: str, parent: str | None, user: str) -> dict:
     types = [t for t in MAINT_TYPES if t in n.get("types", [])]
     rep = n.get("replace") or {}
-    doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
-           "limit_km": None, "limit_hours": None, "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
+    doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "reference": n.get("reference", ""), "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
+           "limit_km": None, "limit_hours": None, "limit_months": None, "limit_note": "", "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
     if not n.get("group"):
         if "replace" in types:
-            doc.update(limit_km=rep.get("limit_km"), limit_hours=rep.get("limit_hours"), warn_pct=rep.get("warn_pct") or 75.0)
-        doc["maint"] = {t: {k: (n.get(t) or {}).get(k) for k in ("limit_km", "limit_hours", "warn_pct")} for t in ("revision", "fluids") if t in types}
+            doc.update(limit_km=rep.get("limit_km"), limit_hours=rep.get("limit_hours"), limit_months=rep.get("limit_months"), limit_note=rep.get("note") or "", warn_pct=rep.get("warn_pct") or 75.0)
+        doc["maint"] = {t: {k: (n.get(t) or {}).get(k) for k in ("limit_km", "limit_hours", "limit_months", "limit_events", "warn_pct", "note")} for t in LOGGED if t in types}
     return doc
 
 

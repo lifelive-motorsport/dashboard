@@ -105,13 +105,15 @@ footer{color:var(--mut);font-size:12px;margin-top:28px}.na{color:var(--mut);font
 h4.sub{margin:14px 0 4px;font-size:14px}
 #print-head{display:none}
 #pdf{font-size:13px;white-space:nowrap}
+#fb-open{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;padding:0 8px}#fb-open[hidden]{display:none}
+.fb-back{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1100}.fb-box{position:fixed;z-index:1101;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;background:var(--card,#2b2b2b);color:var(--fg,inherit);border:1px solid var(--line,#444);border-radius:14px;padding:18px;box-shadow:0 12px 40px rgba(0,0,0,.5)}.fb-box h3{margin:0 0 12px;font-size:17px}.fb-box textarea{width:100%;box-sizing:border-box;font:inherit}
 
 /* Impression / export PDF : tout en clair, sans menu ni boutons */
 @media print{
   :root{--bg:#fff;--card:#fff;--fg:#111;--mut:#555;--line:#ddd;--nav:#fff;--grn:#1f8a4c;--neg:#c62f34;--accent:#2B2B2B;--accent-ink:#fff;--series:#2B2B2B}
   @page{size:A4;margin:14mm}
   body{background:#fff;color:#111;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  header,#nav,#backdrop,#status,#login,#menu-btn,.per-wrap select,.tabs button:not(.on),#refresh,#pdf{display:none!important}
+  header,#nav,#backdrop,#status,#login,#menu-btn,.per-wrap select,.tabs button:not(.on),#refresh,#pdf,#fb-open,#fb-modal{display:none!important}
   #app{display:block!important}
   main{max-width:none;padding:0}
   #print-head{display:flex;align-items:center;gap:18px;border-bottom:2px solid #2B2B2B;padding-bottom:8px;margin-bottom:10px}

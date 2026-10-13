@@ -763,3 +763,21 @@ def test_transport_time_range():
     got = c.get("/api/events", params={"from": "2027-04-01", "to": "2027-04-30"}).json()["events"][0]
     assert got["start_time"] == ""
     c.delete(f"/api/events/{got['id']}")
+
+
+def test_feedback_mail_to_super_users(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import feedback, mailer, users
+    monkeypatch.setattr(users, "supers", lambda: ["md@lifelive-motorsport.com", "bis@lifelive-motorsport.com"])
+    feedback._sent.clear(); mailer.OUTBOX.clear()
+    c = TestClient(app)
+    ok = {"kind": "bug", "message": "Le bouton ne répond pas", "page": "planifier/events", "title": "Planifier › Événements", "url": "https://x/#/planifier/events", "lang": "fr", "agent": "UA", "screen": "1300×900"}
+    assert c.post("/api/feedback", json=ok).json() == {"sent": 2}
+    m = mailer.OUTBOX[0]
+    assert m["to"] == "md@lifelive-motorsport.com" and m["subject"] == "[Logbook] Bug — Planifier › Événements" and "planifier/events" in m["body"] and "Le bouton ne répond pas" in m["body"]
+    assert c.post("/api/feedback", json={**ok, "kind": "x"}).status_code == 422
+    assert c.post("/api/feedback", json={**ok, "message": "a"}).status_code == 422
+    for _ in range(feedback.MAX_PER_HOUR):
+        c.post("/api/feedback", json=ok)
+    assert c.post("/api/feedback", json=ok).status_code == 429

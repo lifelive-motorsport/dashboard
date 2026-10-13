@@ -17,15 +17,17 @@ def enabled() -> bool:
     return gauth.configured() and settings.PROVIDER != "demo"
 
 
-def send(to: str, subject: str, body: str) -> None:
+def send(to: str, subject: str, body: str, reply_to: str = "") -> None:
     if not enabled():
-        OUTBOX.append({"to": to, "subject": subject, "body": body})
+        OUTBOX.append({"to": to, "subject": subject, "body": body, "reply_to": reply_to})
         log.info("E-mail non envoyé (envoi désactivé) : %s — %s", to, subject)
         return
     msg = EmailMessage()
     msg["To"] = to
     msg["From"] = settings.GOOGLE_DELEGATED_USER
     msg["Subject"] = subject
+    if reply_to:
+        msg["Reply-To"] = reply_to
     msg.set_content(body)
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     r = gauth.session((gauth.SCOPE_GMAIL_SEND,)).post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", json={"raw": raw}, timeout=30)

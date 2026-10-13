@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, projection, users
+from . import access, feedback, projection, users
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -1250,6 +1250,20 @@ def lv_get_proof(pid: str, user: str = Depends(require_user)):
     if not got:
         raise HTTPException(404, "Fichier introuvable")
     return RawResponse(got[0], media_type=d["ctype"], headers={"Cache-Control": "private, max-age=600"})
+
+
+@app.post("/api/feedback")
+def post_feedback(body: feedback.FeedbackIn, user: str = Depends(real_user)):
+    """Suggestion ou bug : e-mail aux Super Users (page d'origine jointe)."""
+    try:
+        return {"sent": feedback.send(user, body)}
+    except PermissionError as e:
+        raise HTTPException(429, str(e))
+    except LookupError as e:
+        raise HTTPException(503, str(e))
+    except Exception as e:
+        log.exception("Envoi du retour d'expérience impossible")
+        raise HTTPException(503, str(e) if isinstance(e, RuntimeError) else "Envoi impossible pour le moment.")
 
 
 @app.get("/api/events/config")

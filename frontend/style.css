@@ -489,3 +489,5 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .rn-list{display:grid;gap:12px;margin-top:10px}.rn-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card)}
 .rn-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:8px}
 .pt-box{width:min(720px,calc(100vw - 32px))}.pt-box h3{margin:0 0 10px}
+table.prodtable.nmtable th:nth-child(2),table.prodtable.nmtable td:nth-child(2){text-align:right;white-space:nowrap;min-width:0}                /* marge nette : la 2e colonne est une BU comme les autres, pas un libellé de produit */
+table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,table.nmtable td:first-child{width:30%;white-space:normal}      /* colonnes de BU de largeur égale */

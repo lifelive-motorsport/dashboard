@@ -1,7 +1,7 @@
 // Consigner › Pointages : « Mes pointages » (chaque mécanicien : saisie en durée sur un job, photos, mémo vocal, récapitulatif de la semaine) et « Équipe »
 // (chef d'atelier : heures de chaque mécanicien, taux d'occupation et taux facturable, validation, jobs et propositions d'après le planning).
 // Données : /api/timesheets (backend/app/timesheets.py). S'appuie sur les outils de dates de planning.js et sur rsCall (resources.js).
-let ts = {me: null, jobs: [], start: '', week: null, team: null, form: null, pend: {photos: [], audio: null}, rec: null, open: new Set(), err: null, msg: null, loading: false, jobsAll: [], sugg: null, veh: null, evs: null, tpls: [], tplForm: null, openJobs: new Set(), jobForm: null, busy: false};
+let ts = {me: null, jobs: [], start: '', week: null, team: null, form: null, pend: {photos: [], audio: null}, rec: null, open: new Set(), err: null, msg: null, loading: false, jobsAll: [], sugg: null, veh: null, evs: null, recent: [], cockpit: null, tpls: [], tplForm: null, openJobs: new Set(), jobForm: null, busy: false};
 const TS_BU = {CARS: 'CARS (toutes)', MODERN_RALLY: 'CARS · Modern Rally', HISTORIC_RALLY: 'CARS · Historic Rally', HISTORIC_RACING: 'CARS · Historic Racing', XC: 'XC', ALL: 'Toutes'};
 const tsBuOpts = me => ['XC', 'CARS', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING'].filter(b => me.super || me.bus.includes(b === 'XC' ? 'XC' : 'CARS')).concat(['ALL']);
 const TS_KIND = {atelier: 'Job atelier', event: 'Job événement', background: 'Tâche de fond'};
@@ -23,9 +23,9 @@ async function tsLoad(page) {
   try {
     if (!ts.me) ts.me = await rsCall('/api/timesheets/me');
     if (ts.me.role) {
-      ts.jobs = (await rsCall('/api/timesheets/jobs')).jobs;
+      const jr = await rsCall('/api/timesheets/jobs'); ts.jobs = jr.jobs; ts.recent = jr.recent || [];
       if (page === 'team') {
-        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; ts.tpls = (await rsCall('/api/timesheets/templates')).templates; }
+        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; ts.tpls = (await rsCall('/api/timesheets/templates')).templates; ts.cockpit = await rsCall('/api/timesheets/cockpit'); }
       } else {
         ts.week = await rsCall(`/api/timesheets/week?start=${ts.start}`);
         const dr = !ts.form && tsDraft();
@@ -70,10 +70,18 @@ function tsChecklistHtml(job, f) {
     return `<label class="ts-line${other ? ' done' : ''}"><input type="checkbox" data-ts-line="${l.id}"${other ? ' checked disabled' : mine.has(l.id) ? ' checked' : ''}> <span>${esc(l.text)}${l.note ? ` <small>(${esc(l.note)})</small>` : ''}${other ? ` <small class="ok">✓ ${esc(l.done_by || '')} · ${esc(tsStamp(l.done_at))}</small>` : ''}</span></label>`; }).join('')}</details>`).join('');
   return `<div class="sdfield"><span>Liste de contrôle — ${esc(cl.template_name)} (cochez ce qui a été fait)</span>${body}</div>`;
 }
-function tsJobSelect(sel) {
+const tsNorm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function tsJobOptions(sel, q) {
+  const ok = j => j.id === sel || !q || tsNorm(j.title).includes(tsNorm(q));
+  const rec = ts.recent.map(id => ts.jobs.find(j => j.id === id)).filter(j => j && ok(j)), recIds = new Set(rec.map(j => j.id));
+  const opt = j => `<option value="${j.id}"${j.id === sel ? ' selected' : ''}>${esc(j.title)}</option>`;
   const groups = [['atelier', 'Jobs atelier'], ['event', 'Jobs événement'], ['background', 'Tâches de fond']];
-  return `<select class="sdin" data-f="job_id"><option value="">— Choisir un job —</option>${groups.map(([k, l]) => { const js = ts.jobs.filter(j => j.kind === k); return js.length ? `<optgroup label="${esc(l)}">${js.map(j => `<option value="${j.id}"${j.id === sel ? ' selected' : ''}>${esc(j.title)}</option>`).join('')}</optgroup>` : ''; }).join('')}</select>`;
+  return `<option value="">— Choisir un job —</option>${rec.length ? `<optgroup label="${esc(t('Récents'))}">${rec.map(opt).join('')}</optgroup>` : ''}${groups.map(([k, l]) => { const js = ts.jobs.filter(j => j.kind === k && !recIds.has(j.id) && ok(j)); return js.length ? `<optgroup label="${esc(t(l))}">${js.map(opt).join('')}</optgroup>` : ''; }).join('')}`;
 }
+function tsJobSelect(sel) {
+  return `<input class="sdin ts-jq" data-jq type="search" placeholder="${esc(t('Rechercher un job…'))}" autocomplete="off"><select class="sdin" data-f="job_id">${tsJobOptions(sel, '')}</select>`;
+}
+document.addEventListener('input', e => { const q = e.target.closest && e.target.closest('[data-jq]'); if (!q) return; const sel = q.parentElement.querySelector('[data-f="job_id"]'); if (sel) sel.innerHTML = tsJobOptions(sel.value, q.value); });
 function tsFormHtml() {
   const f = ts.form; if (!f) return '';
   const chips = [30, 60, 120, 240, 480].map(m => `<button type="button" class="ts-chip${f.minutes === m ? ' sel' : ''}" data-ts="dur" data-m="${m}">${tsDur(m)}</button>`).join('');
@@ -100,8 +108,8 @@ function tsMineHtml() {
   const w = ts.week; if (!w) return '';
   const days = Array.from({length: 7}, (_, i) => plAdd(ts.start, i)), t = plToday();
   const byDay = Object.fromEntries(days.map(d => [d, w.entries.filter(e => e.date === d)]));
-  const back = w.entries.filter(e => e.status === 'returned').length;
-  return `${tsNav()}${back ? `<div class="ts-msg">↩ <span>Pointages à corriger</span> <b>${back}</b></div>` : ''}${tsKpis(w.summary)}${ts.form ? tsFormHtml() : '<div class="sdbar ts-add"><button type="button" class="primary" data-ts="new">+ Nouveau pointage</button></div>'}
+  const back = w.entries.filter(e => e.status === 'returned').length, miss = (w.missing || []);
+  return `${tsNav()}${back ? `<div class="ts-msg">↩ <span>Pointages à corriger</span> <b>${back}</b></div>` : ''}${miss.length && !ts.form ? `<div class="ts-miss"><span>⚠ Pointages manquants :</span>${miss.map(d => `<button type="button" data-ts="fill" data-d="${d}">${esc(plFmt(d, {weekday: 'short', day: 'numeric', month: 'short'}))}</button>`).join('')}</div>` : ''}${tsKpis(w.summary)}${ts.form ? tsFormHtml() : '<div class="sdbar ts-add"><button type="button" class="primary" data-ts="new">+ Nouveau pointage</button></div>'}
     ${days.map(d => { const es = byDay[d], tot = w.summary.by_day[d] || 0;
       return `<div class="ts-day${d === t ? ' today' : ''}"><div class="ts-dh"><b>${esc(plFmt(d, {weekday: 'long', day: 'numeric', month: 'short'}))}</b><span>${tot ? tsDur(tot) : ''}</span></div>${es.map(e => tsEntryHtml(e, true)).join('') || ''}</div>`; }).join('')}`;
 }
@@ -114,7 +122,7 @@ function tsTeamHtml() {
   const rows = tm.rows.filter(r => inBu(r) || r.summary.count > 0).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
       + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" class="okbtn" data-ts="valall" data-u="${esc(r.user)}"${tsCoarse() ? ' data-hold' : ''}>${tsCoarse() ? 'Maintenir pour valider la semaine' : 'Valider toute la semaine'}</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
-  return `${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
+  return `${tsCockpitHtml()}${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
 }
 
 const tsGrp = bu => bu === 'XC' ? 'XC' : bu === 'ALL' ? 'ALL' : 'CARS';
@@ -155,6 +163,13 @@ function tsPreview(f) {
 }
 function tsReadonlyList(j) {
   return `<div class="ts-detail">${j.checklist.sections.map(sec => `<div><b>${esc(sec.title)}</b>${sec.lines.map(l => `<div class="ts-line${l.done ? ' done' : ''}">${l.done ? '☑' : '☐'} ${esc(l.text)}${l.done ? ` <small class="ok">✓ ${esc(l.done_by || '')} · ${esc(tsStamp(l.done_at))}</small>` : ''}</div>`).join('')}</div>`).join('')}</div>`;
+}
+const TS_STATE = {done: '✓ Pointé', waiting: '⏳ Pas encore', late: '⚠ En retard', absent: '🌴 Absent', off: 'Jour non travaillé'};
+function tsCockpitHtml() {
+  const c = ts.cockpit; if (!c) return '';
+  const inBu = r => buSel === 'all' || r.all_bus || (BU_KEYS[buSel] || []).some(k => ((r.alloc || {})[k] || 0) > 0);
+  const rows = c.rows.filter(inBu).map(r => `<tr><td><b>${esc(r.name)}</b></td><td><span class="ts-st ${r.state}">${esc(t(TS_STATE[r.state]))}</span>${r.reason ? ` <small class="na">${esc(r.reason)}</small>` : ''}${r.minutes ? ` <b>${tsDur(r.minutes)}</b>` : ''}</td><td>${r.missing.map(d => `<span class="ts-st late">${esc(plFmt(d, {weekday: 'short', day: 'numeric', month: 'short'}))}</span>`).join(' ') || '<span class="ts-st done">✓</span>'}</td></tr>`).join('');
+  return `<div class="block-head"><h3>Aujourd’hui à l’atelier</h3><small class="na">${esc(plFmt(c.date, {weekday: 'long', day: 'numeric', month: 'long'}))} · ${esc(t('pointages attendus après'))} ${esc(c.cutoff)}</small></div><div class="tblwrap"><table class="sdtable ts-cp"><thead><tr><th>Personne</th><th>Aujourd’hui</th><th>Pointages manquants (14 jours)</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="na">Aucun membre de l’atelier pour cette BU.</td></tr>'}</tbody></table></div><div class="block-head"><h3>Semaine</h3></div>`;
 }
 function tsJobsHtml() {
   const f = ts.jobForm, bus = tsBuOpts(ts.me);
@@ -285,6 +300,7 @@ document.addEventListener('click', async ev => {
   const a = b.dataset.ts, page = tsPage();
   if (a === 'prev' || a === 'next' || a === 'today') { ts.start = a === 'today' ? plMonday(plToday()) : plAdd(ts.start, a === 'next' ? 7 : -7); return tsLoad(page); }
   if (a === 'open') { const u = b.dataset.u; ts.open.has(u) ? ts.open.delete(u) : ts.open.add(u); return tsDraw(); }
+  if (a === 'fill') { ts.form = {...tsBlank(), date: b.dataset.d}; ts.pend = {photos: [], audio: null}; return tsDraw(); }
   if (a === 'new') { ts.form = tsBlank(); ts.pend = {photos: [], audio: null}; tsDraw(); return; }
   if (a === 'edit') { const e = tsAllEntries().find(x => x.id === b.dataset.id); if (e) { ts.form = {id: e.id, job_id: e.job_id, date: e.date, minutes: e.minutes, system: e.system, text: e.text, lines: e.line_ids || [], job_done: !!e.job_done, atts: e.attachments || []}; ts.pend = {photos: [], audio: null}; tsDraw(); document.getElementById('ts-view').scrollIntoView(); } return; }
   if (a === 'cancel') { if (ts.rec) ts.rec.stop(); ts.form = null; ts.msg = null; tsDraft(null); return tsDraw(); }

@@ -56,10 +56,10 @@ function rsDrawStaff() {
   if (rs.error) { a.innerHTML = `<p class="neg">${esc(rs.error)}</p>`; return; }
   const vis = rsVisible();
   const row = p => `<tr><td class="prod">${esc(p.name)}${p.active ? '' : ' <small class="na">inactif</small>'}</td><td>${p.kind === 'salarie' ? 'Salarié' : 'Indépendant'}</td><td>${esc(p.function || '')}</td>`
-    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td><td><select class="sdin rs-ws" data-pid="${esc(p.id)}">${RS_WS.map(([v, l]) => `<option value="${v}"${(p.workshop || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td><td><label class="chk" title="Proposée pour toutes les BU, quelle que soit son imputation"><input type="checkbox" class="rs-allbu" data-pid="${esc(p.id)}" ${p.all_bus ? 'checked' : ''}> <small class="na">toutes</small></label></td></tr>`;
+    + `<td><input class="sdin rs-mail" data-pid="${esc(p.id)}" value="${esc(p.email || rs.sugg[p.id] || '')}" placeholder="prenom.nom@lifelive-motorsport.com" style="min-width:240px"> <span class="na" id="rs-st-${esc(p.id)}">${p.email ? '' : rs.sugg[p.id] ? '<small>suggéré : à accepter</small>' : '<small class="neg">à renseigner</small>'}</span></td><td><select class="sdin rs-ws" data-pid="${esc(p.id)}">${RS_WS.map(([v, l]) => `<option value="${v}"${(p.workshop || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></td><td class="rs-days">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((l, i) => `<button type="button" class="rs-wd${(p.work_days || [0, 1, 2, 3, 4]).includes(i) ? ' on' : ''}" data-pid="${esc(p.id)}" data-d="${i}" title="${['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'][i]}">${l}</button>`).join('')}</td><td><label class="chk" title="Proposée pour toutes les BU, quelle que soit son imputation"><input type="checkbox" class="rs-allbu" data-pid="${esc(p.id)}" ${p.all_bus ? 'checked' : ''}> <small class="na">toutes</small></label></td></tr>`;
   const nSugg = Object.keys(rs.sugg).length;
   a.innerHTML = '<p class="na">Les personnes du staff (telles qu’enregistrées dans Coûts du personnel) peuvent être invitées aux événements une fois leur compte Google renseigné : l’événement apparaît alors dans leur Google Agenda. L’adresse est enregistrée dans leur fiche. Seules les personnes actives sont listées ; le filtre BU suit l’imputation du personnel.</p>'
-    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google', 'Atelier', 'Toutes les BU'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
+    + (vis.length ? `<div class="sdbar"><button type="button" id="rs-dir">${rs.suggBusy ? 'Lecture de l’annuaire…' : 'Proposer depuis l’annuaire Google'}</button>${nSugg ? `<button type="button" class="primary" id="rs-acc">Accepter les ${nSugg} suggestions</button>` : ''}<span class="na">${esc(rs.suggMsg || '')}</span></div>` : '') + (vis.length ? table(['Personne', 'Type', 'Fonction', 'Compte Google', 'Atelier', 'Jours de présence', 'Toutes les BU'], vis.map(row), 'prodtable') : (rs.staff.length ? '<p class="na">Aucune personne active imputée à cette BU.</p>' : '<p class="na">Aucune personne : créez d’abord le staff dans « Coûts du personnel › Données source ».</p>'));
 }
 function rsDrawExt() {
   const b = document.getElementById('rs-ext'); if (!b) return;
@@ -149,3 +149,12 @@ document.addEventListener('click', async e => {
   }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'rs-q') { e.preventDefault(); document.getElementById('rs-find').click(); } });
+
+// Jours de présence habituels (alertes d'oubli de pointage) : un clic sur la lettre du jour l'ajoute ou le retire
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('.rs-wd'); if (!b) return;
+  const p = rs.staff.find(x => x.id === b.dataset.pid); if (!p) return;
+  const d = +b.dataset.d, cur = p.work_days || [0, 1, 2, 3, 4], next = cur.includes(d) ? cur.filter(x => x !== d) : cur.concat(d).sort();
+  try { const j = await rsCall('/api/resources/staff/' + encodeURIComponent(p.id), {method: 'PUT', body: JSON.stringify({work_days: next})}); p.work_days = j.work_days; } catch (err) { alert(err.message); }
+  drawResources();
+});

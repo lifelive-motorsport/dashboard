@@ -396,3 +396,5 @@ textarea.sdin{width:100%;font:inherit;resize:vertical}
   .ts-add{position:sticky;bottom:calc(env(safe-area-inset-bottom) + 70px);z-index:35;margin:8px 0}.ts-add button{width:100%;min-height:54px;font-size:17px;box-shadow:0 4px 14px #0005;border-radius:14px}
 }
 @media print{#tabbar{display:none!important}}
+.rs-days{white-space:nowrap}.rs-wd{width:26px;height:26px;border-radius:6px;border:1px solid var(--line);background:none;color:var(--mut);font:inherit;font-size:12px;cursor:pointer;padding:0;margin-right:2px}.rs-wd.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ts-miss{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 12px;padding:8px 12px;border:1px solid var(--neg);border-radius:8px}.ts-miss button{background:none;border:1px solid var(--neg);color:var(--neg);border-radius:14px;padding:4px 10px;font:inherit;cursor:pointer}.ts-cp td{vertical-align:middle}.ts-st{display:inline-block;border-radius:12px;padding:2px 10px;font-size:12px;border:1px solid var(--line)}.ts-st.done{color:var(--grn);border-color:var(--grn)}.ts-st.late{color:var(--neg);border-color:var(--neg)}.ts-st.absent{color:var(--mut)}

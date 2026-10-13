@@ -616,7 +616,7 @@ def staff_partners(q: str = Query(..., min_length=2, max_length=60), _user: str 
 def get_resources(user: str = Depends(super_user)):
     """Ressources mobilisables sur un événement (Super User) : staff et leur compte Google, prestataires externes, véhicules de service."""
     try:
-        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", "")}
+        people = [{"id": p["id"], "name": p["name"], "kind": p["kind"], "function": p.get("function", ""), "active": p.get("active", True), "email": p.get("google_email", ""), "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus", False)), "workshop": p.get("workshop", ""), "work_days": p.get("work_days", [0, 1, 2, 3, 4])}
                   for p in staff.store().get()["data"]["people"]]
         res = copy.deepcopy(resources.store().get())
     except Exception:
@@ -658,6 +658,7 @@ class StaffEmailBody(BaseModel):
     email: str | None = Field(default=None, max_length=120)         # seuls les champs fournis sont modifiés
     all_bus: bool | None = None
     workshop: str | None = None
+    work_days: list[int] | None = None
 
 
 @app.put("/api/resources/staff/{pid}")
@@ -675,6 +676,8 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
             person["all_bus"] = body.all_bus
         if body.workshop is not None:
             person["workshop"] = body.workshop
+        if body.work_days is not None:
+            person["work_days"] = body.work_days
         data = staff.StaffDoc.model_validate(data).model_dump()
         doc = staff.store().put(data, user, cur["updated_at"])
     except HTTPException:
@@ -687,7 +690,7 @@ def put_resource_staff(pid: str, body: StaffEmailBody, user: str = Depends(super
     if doc is None:
         raise HTTPException(409, "Quelqu'un a enregistré entre-temps : rechargez la page avant de modifier.")
     saved = next(p for p in doc["data"]["people"] if p["id"] == pid)
-    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"], "workshop": saved.get("workshop", "")}
+    return {"id": pid, "email": saved["google_email"], "all_bus": saved["all_bus"], "workshop": saved.get("workshop", ""), "work_days": saved.get("work_days", [0, 1, 2, 3, 4])}
 
 
 @app.get("/api/resources/directory-users")
@@ -899,7 +902,7 @@ def _ts_week(user_email: str, start: date, viewer: str, r: dict) -> dict:
     jm = {j["id"]: j for j in timesheets.jobs().all()}
     ents = timesheets.week_entries(user_email, start)
     person = timesheets.person_of(user_email)
-    return {"start": start.isoformat(), "user": user_email, "name": (person or {}).get("name", user_email), "missing": timesheets.missing_for(person, user_email) if user_email == viewer.lower() else [],
+    return {"start": start.isoformat(), "user": user_email, "name": (person or {}).get("name", user_email), "missing": timesheets.missing_for(person, user_email) if user_email == viewer.lower() and (person or {}).get("workshop") == "mechanic" else [],
             "entries": [timesheets.entry_view(timesheets.public_attachments(e), viewer, r, jm) for e in ents], "summary": timesheets.summary(ents, person, jm)}
 
 

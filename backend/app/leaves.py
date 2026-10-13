@@ -23,6 +23,7 @@ TYPES = [("paid", "Congés payés", True, False), ("comp", "Jours de compensatio
          ("recup", "Récupération de jour férié", True, False), ("sick", "Congé maladie", False, True), ("other", "Autre congé (sans solde)", False, False)]
 T = {t[0]: t for t in TYPES}
 PROOF_MAX = 8 * 1024 * 1024
+PROOF_DAYS = 90                                                        # conservation d'un justificatif après son dépôt (règle de cycle de vie du bucket : 91 jours, préfixe leaves/)
 PROOF_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}
 
 
@@ -208,9 +209,14 @@ def planning_leaves(d_from: date, d_to: date) -> list[dict]:
 
 # ---- Demandes ----------------------------------------------------------------------------------------------------------------------------
 
+def proof_expired(d: dict | None) -> bool:
+    return bool(d) and now() - datetime.fromisoformat(d["created_at"]) > timedelta(days=PROOF_DAYS)
+
+
 def view(r: dict, viewer: str, with_proofs: bool = True) -> dict:
     p = person_of(r["user"])
-    return {**{k: v for k, v in r.items() if k != "proof_keys"}, "name": (p or {}).get("name", r["user"]), "days": days_of(p, r), "type_label": T[r["type"]][1],
+    files = [{"id": i, "expired": proof_expired(proofs().get(i))} for i in r.get("proofs", [])]
+    return {**{k: v for k, v in r.items() if k != "proof_keys"}, "proof_files": files, "name": (p or {}).get("name", r["user"]), "days": days_of(p, r), "type_label": T[r["type"]][1],
             "can_decide": r["status"] == "pending" and can_decide(viewer, r), "mine": r["user"] == viewer.lower()}
 
 

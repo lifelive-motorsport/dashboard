@@ -256,6 +256,7 @@ Object.assign(EN, {
   "Ouvrir dans Odoo": "Open in Odoo",
   "Transport": "Transport",
   "(mission logistique, pas un événement : « [transport] » est ajouté au début du titre et aucun job n’est proposé dans les pointages)": "(logistics mission, not an event: “[transport]” is added at the start of the title and no job is suggested in timesheets)",
+  "📎 Justificatif supprimé": "📎 Proof deleted",
   "Ouvrir la page": "Open the page",
   "Événements XC": "XC events",
   "Événement": "Event",

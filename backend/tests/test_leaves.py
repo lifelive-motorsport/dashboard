@@ -117,6 +117,12 @@ def test_sick_leave_needs_proof_over_one_day_and_proof_access(api):
     assert api.get(f"/api/leaves-proofs/{up.json()['id']}").status_code == 403                            # collègue : non
     as_(api, CHEF)
     assert api.get(f"/api/leaves-proofs/{up.json()['id']}").status_code == 200                            # validateur : oui
+    pid = up.json()["id"]
+    d = leaves.proofs().get(pid)
+    d["created_at"] = (leaves.now() - leaves.timedelta(days=91)).isoformat()
+    leaves.proofs().put(pid, d)
+    assert api.get(f"/api/leaves-proofs/{pid}").status_code == 410                                         # 90 jours passés : supprimé
+    assert leaves.view(leaves.requests().get(r.json()["id"]), CHEF)["proof_files"] == [{"id": pid, "expired": True}]
     as_(api, CHEF)
     a = api.post(f"/api/leaves/{r.json()['id']}/approve").json()
     ev = list(planning.backend().events[leaves.calendar_id()].values())[-1]

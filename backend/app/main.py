@@ -1244,6 +1244,8 @@ def lv_get_proof(pid: str, user: str = Depends(require_user)):
     req = next((r for r in leaves.requests().all() if pid in r.get("proofs", [])), None)
     if d["user"] != user.lower() and not users.is_super(user) and not (req and leaves.can_decide(user, req)):
         raise HTTPException(403, "Accès refusé")
+    if leaves.proof_expired(d):
+        raise HTTPException(410, "Justificatif supprimé (conservé 90 jours)")
     got = timesheets.blobs().get(d["key"])
     if not got:
         raise HTTPException(404, "Fichier introuvable")

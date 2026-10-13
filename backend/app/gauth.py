@@ -15,6 +15,7 @@ _sessions: dict[tuple, object] = {}
 SCOPE_DIRECTORY = "https://www.googleapis.com/auth/admin.directory.resource.calendar.readonly"
 SCOPE_USERS = "https://www.googleapis.com/auth/admin.directory.user.readonly"
 SCOPE_CALENDAR = "https://www.googleapis.com/auth/calendar"
+SCOPE_GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send"
 
 
 def configured() -> bool:

@@ -16,6 +16,9 @@ def api(monkeypatch):
     monkeypatch.setattr(timesheets, "_entries", None)
     monkeypatch.setattr(timesheets, "_blobs", None)
     monkeypatch.setattr(timesheets, "_templates", None)
+    monkeypatch.setattr(timesheets, "_alert_coll", None)
+    from app import mailer
+    mailer.OUTBOX.clear()
     monkeypatch.setattr(users, "is_super", lambda e: False)
     cur = staff.store().get()
     people = [{"id": "m1", "name": "Nolan Collinet", "kind": "salarie", "function": "Mechanic", "workshop": "mechanic", "google_email": MEC, "hours_week": 38, "fte": 100},
@@ -387,3 +390,66 @@ def test_reject_with_reason_correction_trace_and_job_done(api):
     assert e2["job_done"] is True
     assert next(j for j in timesheets.jobs().all() if j["id"] == jid)["open"] is False                               # « terminé » : le job est clôturé
     assert api.post("/api/timesheets/entries", json=entry(jid)).status_code == 422
+
+
+def _at(y, m, d, hh, mm=0):
+    from app import presence
+    return datetime(y, m, d, hh, mm, tzinfo=presence.TZ)
+
+
+def test_belgian_holidays_and_cutoffs():
+    from app import presence
+    h = presence.holidays_be(2026)
+    assert date(2026, 4, 6) in h and date(2026, 5, 14) in h and date(2026, 5, 25) in h and date(2026, 7, 21) in h and date(2026, 11, 11) in h
+    assert presence.cutoff(date(2026, 10, 12)).hour == 17 and presence.cutoff(date(2026, 10, 16)).hour == 15            # lundi 17 h, vendredi 15 h
+    assert not presence.is_workday(date(2026, 11, 11), None) and not presence.is_workday(date(2026, 10, 17), None)    # férié, samedi
+    assert presence.is_workday(date(2026, 10, 14), {"work_days": [0, 1, 2, 3, 4]}) and not presence.is_workday(date(2026, 10, 14), {"work_days": [0, 1]})
+
+
+def test_missing_days_cockpit_and_alert_mail(api, monkeypatch):
+    from app import mailer, presence
+    jid = mkjob(api, kind="background", title="Rangement 3", bu="ALL").json()["id"]
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {})
+    as_(api, MEC)
+    api.post("/api/timesheets/entries", json=entry(jid, date="2026-10-12"))                                           # lundi pointé, mardi non
+    mon, tue_5pm, tue_noon = date(2026, 10, 12), _at(2026, 10, 13, 17, 5), _at(2026, 10, 13, 12)
+    person = timesheets.person_of(MEC)
+    assert timesheets.missing_for(person, MEC, lookback=1, now=tue_5pm) == ["2026-10-13"]                                           # mardi 17 h passées : dû
+    assert timesheets.missing_for(person, MEC, lookback=1, now=tue_noon) == []                                                       # mardi midi : pas encore dû
+    c = {r["user"]: r for r in timesheets.cockpit(tue_5pm)["rows"]}[MEC]
+    assert c["state"] == "late" and c["missing"][-1] == "2026-10-13" and "2026-10-12" not in c["missing"]
+    assert {r["user"]: r for r in timesheets.cockpit(tue_noon)["rows"]}[MEC]["state"] == "waiting"
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {MEC: {date(2026, 10, 13): "Spa Classic"}})
+    c = {r["user"]: r for r in timesheets.cockpit(tue_5pm)["rows"]}[MEC]
+    assert c["state"] == "absent" and c["reason"] == "Spa Classic" and "2026-10-13" not in c["missing"]                              # sur événement : excusé
+    monkeypatch.setattr(presence, "event_absences", lambda emails, a, b: {})
+    r = timesheets.send_alerts(tue_5pm)
+    assert MEC in r["sent"] and mailer.OUTBOX[-1]["to"] == MEC and "13/10/2026" in mailer.OUTBOX[-1]["body"]
+    n = len(mailer.OUTBOX)
+    assert MEC not in timesheets.send_alerts(tue_5pm)["sent"] and len(mailer.OUTBOX) == n                               # une seule fois par jour
+    assert timesheets.send_alerts(_at(2026, 10, 17, 17))["sent"] == []                                                  # samedi : rien
+    as_(api, CHEF)
+    assert api.get("/api/timesheets/cockpit").status_code == 200
+    as_(api, MEC)
+    assert api.get("/api/timesheets/cockpit").status_code == 403
+    assert "missing" in api.get("/api/timesheets/week", params={"start": "2026-10-12"}).json()
+
+
+def test_recent_jobs_and_cron_auth(api, monkeypatch):
+    a = mkjob(api, kind="background", title="Aa", bu="ALL").json()["id"]
+    b = mkjob(api, kind="background", title="Bb", bu="ALL").json()["id"]
+    as_(api, MEC)
+    api.post("/api/timesheets/entries", json=entry(a))
+    api.post("/api/timesheets/entries", json=entry(b))
+    api.post("/api/timesheets/entries", json=entry(a))
+    assert api.get("/api/timesheets/jobs").json()["recent"] == [a, b]                                                   # le plus récent d'abord
+    assert api.post("/api/cron/timesheet-alerts").status_code == 503                                                    # non configuré
+    from app import settings
+    monkeypatch.setattr(settings, "CRON_AUDIENCE", "https://x.run.app")
+    monkeypatch.setattr(settings, "CRON_SERVICE_ACCOUNT", "sched@p.iam.gserviceaccount.com")
+    assert api.post("/api/cron/timesheet-alerts").status_code == 401
+    from google.oauth2 import id_token
+    monkeypatch.setattr(id_token, "verify_oauth2_token", lambda t, r, audience: {"email": "other@x.com", "email_verified": True})
+    assert api.post("/api/cron/timesheet-alerts", headers={"Authorization": "Bearer t"}).status_code == 403
+    monkeypatch.setattr(id_token, "verify_oauth2_token", lambda t, r, audience: {"email": "sched@p.iam.gserviceaccount.com", "email_verified": True})
+    assert api.post("/api/cron/timesheet-alerts", headers={"Authorization": "Bearer t"}).status_code == 200

@@ -745,7 +745,7 @@ def ts_me(user: str = Depends(require_user)):
 @app.get("/api/timesheets/jobs")
 def ts_jobs(all: bool = False, user: str = Depends(require_user)):
     r = _ts_ctx(user)
-    return {"jobs": timesheets.list_jobs(open_only=not (all and r["role"] == "chef"))}
+    return {"jobs": timesheets.list_jobs(open_only=not (all and r["role"] == "chef")), "recent": timesheets.recent_job_ids(user)}
 
 
 @app.post("/api/timesheets/jobs")
@@ -899,7 +899,7 @@ def _ts_week(user_email: str, start: date, viewer: str, r: dict) -> dict:
     jm = {j["id"]: j for j in timesheets.jobs().all()}
     ents = timesheets.week_entries(user_email, start)
     person = timesheets.person_of(user_email)
-    return {"start": start.isoformat(), "user": user_email, "name": (person or {}).get("name", user_email),
+    return {"start": start.isoformat(), "user": user_email, "name": (person or {}).get("name", user_email), "missing": timesheets.missing_for(person, user_email) if user_email == viewer.lower() else [],
             "entries": [timesheets.entry_view(timesheets.public_attachments(e), viewer, r, jm) for e in ents], "summary": timesheets.summary(ents, person, jm)}
 
 
@@ -907,6 +907,40 @@ def _ts_week(user_email: str, start: date, viewer: str, r: dict) -> dict:
 def ts_week(start: date, user: str = Depends(require_user)):
     r = _ts_ctx(user)
     return _ts_week(user.lower(), timesheets.monday(start), user, r)
+
+
+@app.get("/api/timesheets/cockpit")
+def ts_cockpit(user: str = Depends(require_user)):
+    """Chef d'atelier : l'atelier aujourd'hui (absents, pointés, en retard) et les jours manquants de chacun."""
+    _ts_chef(user)
+    return timesheets.cockpit()
+
+
+@app.post("/api/cron/timesheet-alerts")
+def cron_timesheet_alerts(request: Request):
+    """Appelé par Cloud Scheduler (jeton OIDC du compte CRON_SERVICE_ACCOUNT) à 17 h du lundi au jeudi et 15 h le vendredi : rappelle aux mécaniciens leurs pointages manquants."""
+    _cron_auth(request)
+    try:
+        return timesheets.send_alerts()
+    except Exception as e:
+        log.exception("Alertes de pointage impossibles")
+        raise HTTPException(503, f"Alertes impossibles : {e}")
+
+
+def _cron_auth(request: Request) -> None:
+    if not settings.CRON_AUDIENCE or not settings.CRON_SERVICE_ACCOUNT:
+        raise HTTPException(503, "Tâches planifiées non configurées (CRON_AUDIENCE, CRON_SERVICE_ACCOUNT)")
+    h = request.headers.get("authorization", "")
+    if not h.lower().startswith("bearer "):
+        raise HTTPException(401, "Authentification requise")
+    from google.auth.transport import requests as g_requests
+    from google.oauth2 import id_token
+    try:
+        info = id_token.verify_oauth2_token(h[7:], g_requests.Request(), settings.CRON_AUDIENCE)
+    except ValueError:
+        raise HTTPException(401, "Jeton invalide")
+    if (info.get("email") or "").lower() != settings.CRON_SERVICE_ACCOUNT.lower() or not info.get("email_verified"):
+        raise HTTPException(403, "Compte non autorisé")
 
 
 @app.get("/api/timesheets/team")

@@ -655,3 +655,105 @@ def remove_attachment(eid: str, aid: str, user: str, r: dict) -> None:
     e["attachments"] = [a for a in e["attachments"] if a["id"] != aid]
     e["updated_at"] = now().isoformat()
     entries().put(eid, e)
+
+
+# ---- Récents, pointages manquants, cockpit du jour et alertes -------------------------------------------------------------------------------
+
+def recent_job_ids(user: str, days: int = 60, limit: int = 8) -> list[str]:
+    """Jobs sur lesquels l'utilisateur a pointé récemment, le plus récent d'abord (proposés en tête du choix de job)."""
+    a = (date.today() - timedelta(days=days)).isoformat()
+    last: dict[str, str] = {}
+    for e in entries().between("date", a, "9999"):
+        if e["user"] == user.lower():
+            last[e["job_id"]] = max(last.get(e["job_id"], ""), e["created_at"])
+    return [j for j, _ in sorted(last.items(), key=lambda kv: kv[1], reverse=True)][:limit]
+
+
+def workshop_people() -> list[dict]:
+    from . import staff
+    return [p for p in staff.store().get()["data"]["people"] if p.get("google_email") and p.get("active", True) and p.get("workshop")]
+
+
+def entry_days(d_from: date, d_to: date) -> dict[str, set[str]]:
+    out: dict[str, set[str]] = {}
+    for e in entries().between("date", d_from.isoformat(), d_to.isoformat()):
+        out.setdefault(e["user"], set()).add(e["date"])
+    return out
+
+
+def missing_for(person: dict | None, email: str, lookback: int = 14, now: datetime | None = None) -> list[str]:
+    from . import presence
+    now = now or presence.local_now()
+    a = now.date() - timedelta(days=lookback)
+    m = presence.missing([person or {"google_email": email}], entry_days(a, now.date()), a, now.date(), now)
+    return [d.isoformat() for d in m.get(email.lower(), [])]
+
+
+def cockpit(now: datetime | None = None) -> dict:
+    """État du jour de chaque membre de l'atelier : absent (congé, événement), pointé, pas encore (avant l'heure limite) ou en retard ; et ses jours manquants des 14 derniers jours."""
+    from . import presence
+    now = now or presence.local_now()
+    today = now.date()
+    people = workshop_people()
+    a = today - timedelta(days=14)
+    days = entry_days(a, today)
+    emails = {p["google_email"].lower() for p in people}
+    exc = presence.excused(emails, a, today) if emails else {}
+    miss = presence.missing(people, days, a, today, now)
+    mins: dict[str, int] = {}
+    for e in entries().between("date", today.isoformat(), today.isoformat()):
+        mins[e["user"]] = mins.get(e["user"], 0) + e["minutes"]
+    rows = []
+    for p in sorted(people, key=lambda p: p["name"].lower()):
+        em = p["google_email"].lower()
+        reason = exc.get(em, {}).get(today)
+        hol = presence.holidays_be(today.year).get(today)
+        if reason:
+            state = "absent"
+        elif not presence.is_workday(today, p):
+            state = "off"
+            reason = hol or ""
+        elif mins.get(em):
+            state = "done"
+        elif now.time() >= presence.cutoff(today):
+            state = "late"
+        else:
+            state = "waiting"
+        rows.append({"name": p["name"], "user": em, "alloc": p.get("alloc", {}), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "state": state, "reason": reason or "",
+                     "minutes": mins.get(em, 0), "missing": [d.isoformat() for d in miss.get(em, [])]})
+    return {"date": today.isoformat(), "cutoff": presence.cutoff(today).strftime("%H:%M"), "rows": rows}
+
+
+def _alerts() -> Coll:
+    return Coll("timesheet_alerts")
+
+
+_alert_coll = None
+
+
+def send_alerts(now: datetime | None = None) -> dict:
+    """Envoie à chaque mécanicien qui n'a rien pointé aujourd'hui (et n'est ni absent ni en congé) un e-mail de rappel ; une seule fois par personne et par jour."""
+    global _alert_coll
+    from . import mailer, presence
+    _alert_coll = _alert_coll or _alerts()
+    now = now or presence.local_now()
+    today = now.date()
+    sent, skipped = [], []
+    people = [p for p in workshop_people() if p["workshop"] == "mechanic"]              # les chefs d'atelier voient les manques dans le cockpit, ils ne reçoivent pas d'e-mail
+    if not presence.is_workday(today, {"work_days": presence.DEFAULT_DAYS}):
+        return {"date": today.isoformat(), "sent": [], "skipped": [], "note": "jour non ouvré"}
+    miss = presence.missing(people, entry_days(today - timedelta(days=7), today), today - timedelta(days=7), today, now)
+    for p in people:
+        em = p["google_email"].lower()
+        days = miss.get(em, [])
+        key = f"{today.isoformat()}:{em}"
+        if today not in days or _alert_coll.get(key):
+            skipped.append(em)
+            continue
+        first = p["name"].split()[0]
+        lst = "\n".join(f"  - {d.strftime('%d/%m/%Y')}" for d in days)
+        link = f"\n\nPointer maintenant : {settings.PUBLIC_URL}/#/consigner/timesheets" if settings.PUBLIC_URL else ""
+        mailer.send(em, "Logbook — il manque vos pointages", f"Bonjour {first},\n\nIl manque vos pointages pour :\n{lst}\n\nSi vous étiez absent, ignorez ce message ; sinon encodez vos heures dès que possible.{link}\n\nLogbook — Lifelive Motorsport")
+        _alert_coll.put(key, {"id": key, "at": now.isoformat()})
+        sent.append(em)
+    return {"date": today.isoformat(), "sent": sent, "skipped": skipped}

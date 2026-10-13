@@ -82,7 +82,15 @@ class Person(BaseModel):
     note: str = Field(default="", max_length=500)
     google_email: str = Field(default="", max_length=120)               # compte Google de la personne : invitée aux événements créés dans Google Agenda
     workshop: str = ""                                                  # rôle à l'atelier (Pointages) : "", mechanic, chef_cars, chef_xc, chef_all ; choisi dans Planifier › Ressources, indépendant du libellé de la fonction
+    work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4], max_length=7)       # jours de présence habituels (0 = lundi … 6 = dimanche) : alertes d'oubli de pointage
     all_bus: bool = False                                               # proposée pour toutes les BU (filtres de Ressources et d'Événements), quelle que soit son imputation
+
+    @field_validator("work_days")
+    @classmethod
+    def _work_days(cls, v):
+        if any(d not in range(7) for d in v):
+            raise ValueError("jour de présence invalide")
+        return sorted(set(v))
 
     @field_validator("workshop")
     @classmethod

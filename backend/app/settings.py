@@ -109,3 +109,6 @@ SPEECH_LOCATION = os.getenv("SPEECH_LOCATION", "europe-west4")        # région 
 SPEECH_LANGUAGE = os.getenv("SPEECH_LANGUAGE", "fr-FR")
 SPEECH_PROJECT = os.getenv("SPEECH_PROJECT", "")                      # vide : projet de l'environnement Cloud Run
 TRANSCRIBE = os.getenv("TRANSCRIBE", "on").lower() != "off"          # « off » masque la transcription des mémos
+PUBLIC_URL = os.getenv("PUBLIC_URL", "")                            # adresse de l'application, reprise dans les e-mails (ex. https://logbook.lifelive-motorsport.com)
+CRON_AUDIENCE = os.getenv("CRON_AUDIENCE", "")                      # audience du jeton OIDC de Cloud Scheduler (adresse du service Cloud Run)
+CRON_SERVICE_ACCOUNT = os.getenv("CRON_SERVICE_ACCOUNT", "")        # compte de service autorisé à déclencher les tâches planifiées (alertes de pointage…)

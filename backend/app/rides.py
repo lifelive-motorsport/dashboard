@@ -29,7 +29,7 @@ def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_cars = _parts = _runs = _circuits = _catalog = None
+_cars = _parts = _runs = _circuits = _catalog = _maint = _templates = None
 
 
 def cars_coll() -> Coll:
@@ -56,6 +56,18 @@ def circuits_coll() -> Coll:
     return _circuits
 
 
+def maint_coll() -> Coll:
+    global _maint
+    _maint = _maint or Coll("ride_maint")
+    return _maint
+
+
+def templates_coll() -> Coll:
+    global _templates
+    _templates = _templates or Coll("ride_templates")
+    return _templates
+
+
 def catalog_coll() -> Coll:
     global _catalog
     _catalog = _catalog or Coll("ride_catalog")
@@ -63,6 +75,20 @@ def catalog_coll() -> Coll:
 
 
 # ---- Modèles ----------------------------------------------------------------------------------------------------------------------------
+
+MAINT_TYPES = ("replace", "revision", "fluids")
+MAINT_LABEL = {"replace": "Remplacement", "revision": "Révision", "fluids": "Vidange et nouveaux fluides"}
+
+
+class MaintLimit(BaseModel):
+    limit_km: float | None = Field(default=None, gt=0, le=1e7)
+    limit_hours: float | None = Field(default=None, gt=0, le=1e6)
+    warn_pct: float = Field(default=75.0, gt=0, le=100)
+
+
+def _clean_types(v):
+    return [t for t in MAINT_TYPES if t in (v or [])]
+
 
 class PartIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -76,12 +102,74 @@ class PartIn(BaseModel):
     mounted_from: date | None = None                                 # vide = depuis toujours : tous les runs de la voiture comptent
     serial: str = Field(default="", max_length=60)
     notes: str = Field(default="", max_length=500)
+    types: list[str] = Field(default_factory=list, max_length=3)      # maintenances suivies : replace (limites ci-dessus), revision, fluids (limites dans `maint`)
+    maint: dict[str, MaintLimit] = Field(default_factory=dict)        # intervalles de la révision et de la vidange : {"revision": {...}, "fluids": {...}}
+
+    @field_validator("types")
+    @classmethod
+    def _types(cls, v):
+        return _clean_types(v)
+
+    @field_validator("maint")
+    @classmethod
+    def _maint(cls, v):
+        return {k: m for k, m in v.items() if k in ("revision", "fluids")}
 
     @model_validator(mode="after")
     def _chk(self):
         if self.group:
             self.limit_km = self.limit_hours = None
             self.km_start = self.hours_start = 0.0
+            self.types, self.maint = [], {}
+        return self
+
+
+class MaintIn(BaseModel):
+    type: Literal["replace", "revision", "fluids"]
+    date: date
+    notes: str = Field(default="", max_length=300)
+
+
+class TNode(BaseModel):
+    id: str = Field(min_length=1, max_length=24)
+    parent_id: str | None = None
+    name: str = Field(min_length=1, max_length=80)
+    group: bool = False                                              # Ensemble (ex. Motorisation) ; sinon sous-ensemble (Moteur, Turbo…)
+    types: list[str] = Field(default_factory=list, max_length=3)
+    replace: MaintLimit = Field(default_factory=MaintLimit)
+    revision: MaintLimit = Field(default_factory=MaintLimit)
+    fluids: MaintLimit = Field(default_factory=MaintLimit)
+
+    @field_validator("types")
+    @classmethod
+    def _types(cls, v):
+        return _clean_types(v)
+
+
+class TemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=300)
+    nodes: list[TNode] = Field(default_factory=list, max_length=200)
+
+    @model_validator(mode="after")
+    def _tree(self):
+        ids = [n.id for n in self.nodes]
+        if len(set(ids)) != len(ids):
+            raise ValueError("identifiants en double")
+        by = {n.id: n for n in self.nodes}
+        for n in self.nodes:
+            depth, p = 1, n.parent_id
+            while p:
+                if p not in by:
+                    raise ValueError("ensemble parent introuvable")
+                depth += 1
+                p = by[p].parent_id
+                if depth > MAX_DEPTH + 1:
+                    raise ValueError("arborescence trop profonde ou circulaire")
+            if depth > MAX_DEPTH:
+                raise ValueError("Trois niveaux au maximum (ensemble, sous-ensemble, composant)")
+            if n.group:
+                n.types = []
         return self
 
 
@@ -154,20 +242,47 @@ def _runs_of(vehicle: str) -> list[dict]:
     return sorted([r for r in runs_coll().all() if r["vehicle"] == vehicle], key=lambda r: (r["date"], r["id"]))
 
 
-def part_counters(p: dict, runs: list[dict]) -> dict:
+def types_of(p: dict) -> list[str]:
+    """Maintenances suivies d'une pièce : le choix explicite ; à défaut (anciennes fiches) le remplacement si une limite est définie."""
+    return list(p.get("types") or (["replace"] if p.get("limit_km") or p.get("limit_hours") else []))
+
+
+def _meter(km: float, hours: float, lim: dict) -> tuple[float | None, str]:
+    ratios = []
+    if lim.get("limit_km"):
+        ratios.append(km / lim["limit_km"])
+    if lim.get("limit_hours"):
+        ratios.append(hours / lim["limit_hours"])
+    ratio = max(ratios) if ratios else None
+    warn = (lim.get("warn_pct") or 75.0) / 100
+    return ratio, ("none" if ratio is None else "over" if ratio >= 1 else "warn" if ratio >= warn else "ok")
+
+
+def part_counters(p: dict, runs: list[dict], logs: list[dict] | None = None) -> dict:
+    """Compteurs d'une pièce : total depuis le montage + un compteur par maintenance suivie (remplacement : depuis le montage ; révision / vidange : depuis la dernière
+    maintenance enregistrée, à défaut depuis le montage). Les runs du jour d'une maintenance comptent après elle."""
     a, b = p.get("mounted_from") or "", p.get("removed_at") or "9999"
     mine = [r for r in runs if a <= r["date"] < b]
     km = p.get("km_start", 0.0) + sum(r.get("km") or 0.0 for r in mine)
     hours = p.get("hours_start", 0.0) + sum(r.get("hours") or 0.0 for r in mine)
-    ratios = []
-    if p.get("limit_km"):
-        ratios.append(km / p["limit_km"])
-    if p.get("limit_hours"):
-        ratios.append(hours / p["limit_hours"])
-    ratio = max(ratios) if ratios else None
-    warn = (p.get("warn_pct") or 75.0) / 100
-    state = "none" if ratio is None else "over" if ratio >= 1 else "warn" if ratio >= warn else "ok"
-    return {"km": round(km, 1), "hours": round(hours, 2), "ratio": None if ratio is None else round(ratio, 4), "state": state, "runs": len(mine)}
+    meters = []
+    for t in types_of(p):
+        if t == "replace":
+            lim, mk, mh, last = {"limit_km": p.get("limit_km"), "limit_hours": p.get("limit_hours"), "warn_pct": p.get("warn_pct")}, km, hours, None
+        else:
+            lim = (p.get("maint") or {}).get(t) or {}
+            done = sorted(l["date"] for l in (logs or []) if l["part_id"] == p["id"] and l["type"] == t)
+            last = done[-1] if done else None
+            since = max(last or "", a)
+            seg = [r for r in runs if since <= r["date"] < b]
+            mk, mh = sum(r.get("km") or 0.0 for r in seg), sum(r.get("hours") or 0.0 for r in seg)
+        ratio, state = _meter(mk, mh, lim)
+        if ratio is not None or t != "replace":
+            meters.append({"type": t, "label": MAINT_LABEL[t], "km": round(mk, 1), "hours": round(mh, 2), "limit_km": lim.get("limit_km"), "limit_hours": lim.get("limit_hours"),
+                           "warn_pct": lim.get("warn_pct") or 75.0, "ratio": None if ratio is None else round(ratio, 4), "state": state, "last": last})
+    ratios = [m["ratio"] for m in meters if m["ratio"] is not None]
+    state = max((m["state"] for m in meters), key=lambda s: RANK[s], default="none")
+    return {"km": round(km, 1), "hours": round(hours, 2), "ratio": max(ratios) if ratios else None, "state": state, "runs": len(mine), "meters": meters}
 
 
 RANK = {"none": 0, "ok": 1, "warn": 2, "over": 3}
@@ -175,6 +290,7 @@ RANK = {"none": 0, "ok": 1, "warn": 2, "over": 3}
 
 def tree(vehicle: str, runs: list[dict]) -> list[dict]:
     parts = [p for p in parts_coll().all() if p["vehicle"] == vehicle]
+    logs = [l for l in maint_coll().all() if l["vehicle"] == vehicle]
     by_parent: dict[str | None, list[dict]] = {}
     for p in parts:
         by_parent.setdefault(p.get("parent_id"), []).append(p)
@@ -188,7 +304,8 @@ def tree(vehicle: str, runs: list[dict]) -> list[dict]:
             worst = max((c["state"] for c in live), key=lambda s: RANK[s], default="none")
             node.update({"km": None, "hours": None, "ratio": None, "state": worst, "runs": 0})
         else:
-            node.update(part_counters(p, runs))
+            node.update(part_counters(p, runs, logs))
+            node["history"] = sorted((l for l in logs if l["part_id"] == p["id"]), key=lambda l: (l["date"], l["id"]), reverse=True)[:12]
             live = [c for c in node["children"] if not c.get("removed_at")]
             node["state"] = max([node["state"]] + [c["state"] for c in live], key=lambda s: RANK[s])
         return node
@@ -200,8 +317,10 @@ def alerts(nodes: list[dict], path: str = "") -> list[dict]:
     out = []
     for n in nodes:
         here = f"{path} › {n['name']}" if path else n["name"]
-        if not n.get("removed_at") and not n.get("group") and n["state"] in ("warn", "over") and n.get("ratio") is not None:
-            out.append({"id": n["id"], "path": here, "state": n["state"], "ratio": n["ratio"], "km": n["km"], "hours": n["hours"], "limit_km": n.get("limit_km"), "limit_hours": n.get("limit_hours")})
+        if not n.get("removed_at") and not n.get("group"):
+            for m in n.get("meters", []):
+                if m["state"] in ("warn", "over") and m["ratio"] is not None:
+                    out.append({"id": n["id"], "path": here, "type": m["type"], "label": m["label"], "state": m["state"], "ratio": m["ratio"], "km": m["km"], "hours": m["hours"], "limit_km": m["limit_km"], "limit_hours": m["limit_hours"]})
         out += alerts(n["children"], here)
     return out
 
@@ -365,7 +484,7 @@ def car_overview(c: dict) -> dict:
     al = alerts(nodes)
     meta = cars_coll().get(c["key"]) or {}
     state = max([a["state"] for a in al] + ["ok" if nodes else "none"], key=lambda s: RANK[s])
-    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
+    return {**c, "bu": meta.get("bu", ""), "archived": bool(meta.get("archived")), "template": ({"id": meta["template_id"], "name": meta.get("template_name", "")} if meta.get("template_id") else None), "odoo": ({"id": meta["odoo_id"], "name": meta.get("odoo_name", "")} if meta.get("odoo_id") else None), "photo": bool(meta.get("photo")), "state": state, "alerts": len(al), "over": sum(1 for a in al if a["state"] == "over"),
             "km_total": round(sum(r.get("km") or 0 for r in runs), 1), "hours_total": round(sum(r.get("hours") or 0 for r in runs), 1),
             "runs": len(runs), "last_run": runs[-1]["date"] if runs else None, "parts": sum(1 for p in parts_coll().all() if p["vehicle"] == c["key"] and not p.get("removed_at") and not p.get("group"))}
 
@@ -429,6 +548,8 @@ def delete_part(pid: str) -> None:
     for p in parts_coll().all():
         if p.get("parent_id") == pid:
             delete_part(p["id"])
+    for l in [l for l in maint_coll().all() if l["part_id"] == pid]:
+        maint_coll().delete(l["id"])
     parts_coll().delete(pid)
 
 
@@ -446,6 +567,99 @@ def replace_part(pid: str, data: ReplaceIn, user: str) -> dict:
     for ch in [p for p in parts_coll().all() if p.get("parent_id") == pid and not p.get("removed_at")]:
         parts_coll().put(ch["id"], {**ch, "parent_id": nid})                       # les sous-pièces suivent le nouvel emplacement
     return new
+
+
+def log_maint(pid: str, data: MaintIn, user: str) -> dict:
+    """Enregistre une maintenance (révision, vidange…) : le compteur de ce type repart de cette date. Un remplacement se fait par « Remplacer »."""
+    p = parts_coll().get(pid)
+    if not p or p.get("group") or p.get("removed_at"):
+        raise LookupError("Pièce introuvable ou démontée")
+    if data.type == "replace":
+        raise ValueError("Un remplacement s'enregistre avec « Remplacer » : la pièce démontée garde son historique")
+    if data.type not in types_of(p):
+        raise ValueError("Cette maintenance n'est pas suivie sur cette pièce")
+    mid = "m-" + uuid.uuid4().hex[:10]
+    doc = {"id": mid, "part_id": pid, "vehicle": p["vehicle"], "type": data.type, "date": data.date.isoformat(), "notes": data.notes.strip(), "by": user.lower(), "created_at": now().isoformat()}
+    maint_coll().put(mid, doc)
+    return doc
+
+
+def delete_maint(mid: str) -> None:
+    if not maint_coll().get(mid):
+        raise LookupError("Maintenance introuvable")
+    maint_coll().delete(mid)
+
+
+# ---- Magasin de pièces : modèles d'architecture (Ensemble › Sous-ensemble) ---------------------------------------------------------------------
+
+def list_templates() -> list[dict]:
+    return sorted(templates_coll().all(), key=lambda t: t["name"].lower())
+
+
+def save_template(tid: str | None, data: TemplateIn, user: str) -> dict:
+    cur = templates_coll().get(tid) if tid else None
+    if tid and not cur:
+        raise LookupError("Modèle introuvable")
+    if any(t["id"] != tid and t["name"].lower() == data.name.strip().lower() for t in templates_coll().all()):
+        raise ValueError("Un modèle porte déjà ce nom")
+    tid = tid or "t-" + uuid.uuid4().hex[:8]
+    doc = {"id": tid, **data.model_dump(mode="json"), "name": data.name.strip(), "created_by": (cur or {}).get("created_by", user.lower()), "created_at": (cur or {}).get("created_at", now().isoformat()),
+           "updated_at": now().isoformat(), "updated_by": user.lower()}
+    templates_coll().put(tid, doc)
+    return doc
+
+
+def delete_template(tid: str) -> None:
+    if not templates_coll().get(tid):
+        raise LookupError("Modèle introuvable")
+    templates_coll().delete(tid)                                     # les voitures déjà construites sur ce modèle gardent leurs pièces
+
+
+def _node_part(n: dict, vehicle: str, parent: str | None, user: str) -> dict:
+    types = [t for t in MAINT_TYPES if t in n.get("types", [])]
+    rep = n.get("replace") or {}
+    doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
+           "limit_km": None, "limit_hours": None, "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
+    if not n.get("group"):
+        if "replace" in types:
+            doc.update(limit_km=rep.get("limit_km"), limit_hours=rep.get("limit_hours"), warn_pct=rep.get("warn_pct") or 75.0)
+        doc["maint"] = {t: {k: (n.get(t) or {}).get(k) for k in ("limit_km", "limit_hours", "warn_pct")} for t in ("revision", "fluids") if t in types}
+    return doc
+
+
+def apply_template(vehicle: str, tid: str, user: str) -> dict:
+    """Construit l'arborescence du modèle sur la voiture. Non destructif : un élément qui existe déjà (même nom au même endroit, non démonté) est conservé tel quel."""
+    if not car_of(vehicle):
+        raise LookupError("Voiture introuvable")
+    t = templates_coll().get(tid)
+    if not t:
+        raise LookupError("Modèle introuvable")
+    existing = [p for p in parts_coll().all() if p["vehicle"] == vehicle and not p.get("removed_at")]
+    mapping: dict[str, str] = {}                                      # id du nœud du modèle -> id de la pièce de la voiture
+    created = kept = 0
+    pending = list(t["nodes"])
+    guard = 0
+    while pending and guard < 500:
+        guard += 1
+        n = pending.pop(0)
+        if n.get("parent_id") and n["parent_id"] not in mapping:
+            pending.append(n)                                         # le parent n'est pas encore traité
+            continue
+        parent = mapping.get(n.get("parent_id")) if n.get("parent_id") else None
+        same = next((p for p in existing if p.get("parent_id") == parent and p["name"].lower() == n["name"].lower()), None)
+        if same:
+            mapping[n["id"]] = same["id"]
+            kept += 1
+            continue
+        doc = _node_part(n, vehicle, parent, user)
+        parts_coll().put(doc["id"], doc)
+        existing.append(doc)
+        mapping[n["id"]] = doc["id"]
+        created += 1
+    meta = cars_coll().get(vehicle) or {"id": vehicle}
+    meta["template_id"], meta["template_name"] = tid, t["name"]
+    cars_coll().put(vehicle, meta)
+    return {"created": created, "kept": kept, "template": {"id": tid, "name": t["name"]}}
 
 
 # ---- Circuits et runs -------------------------------------------------------------------------------------------------------------------

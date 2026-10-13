@@ -871,6 +871,47 @@ def rd_replace_part(pid: str, body: rides.ReplaceIn, user: str = Depends(granted
     return _rd(rides.replace_part, pid, body, user)
 
 
+@app.post("/api/rides/parts/{pid}/maint")
+def rd_log_maint(pid: str, body: rides.MaintIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.log_maint, pid, body, user)
+
+
+@app.delete("/api/rides/maint/{mid}")
+def rd_delete_maint(mid: str, _user: str = Depends(granted("consigner/rides"))):
+    _rd(rides.delete_maint, mid)
+    return {"ok": True}
+
+
+@app.get("/api/rides/templates")
+def rd_templates(_user: str = Depends(granted("consigner/rides", "consigner/parts"))):
+    return {"templates": rides.list_templates()}
+
+
+@app.post("/api/rides/templates")
+def rd_create_template(body: rides.TemplateIn, user: str = Depends(granted("consigner/parts"))):
+    return _rd(rides.save_template, None, body, user)
+
+
+@app.put("/api/rides/templates/{tid}")
+def rd_update_template(tid: str, body: rides.TemplateIn, user: str = Depends(granted("consigner/parts"))):
+    return _rd(rides.save_template, tid, body, user)
+
+
+@app.delete("/api/rides/templates/{tid}")
+def rd_delete_template(tid: str, _user: str = Depends(granted("consigner/parts"))):
+    _rd(rides.delete_template, tid)
+    return {"ok": True}
+
+
+class ApplyTemplateIn(BaseModel):
+    template_id: str
+
+
+@app.post("/api/rides/cars/{key}/template")
+def rd_apply_template(key: str, body: ApplyTemplateIn, user: str = Depends(granted("consigner/rides"))):
+    return _rd(rides.apply_template, key, body.template_id, user)
+
+
 @app.post("/api/rides/cars/{key}/runs")
 def rd_add_run(key: str, body: rides.RunIn, user: str = Depends(granted("consigner/rides"))):
     return _rd(rides.add_run, key, body, user)

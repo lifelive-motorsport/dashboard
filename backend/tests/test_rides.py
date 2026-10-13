@@ -8,7 +8,7 @@ from app.main import app
 
 @pytest.fixture()
 def api(monkeypatch):
-    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog"):
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates"):
         monkeypatch.setattr(rides, n, None)
     monkeypatch.setattr(timesheets, "_blobs", None)
     monkeypatch.setattr(users, "is_super", lambda e: True)
@@ -142,3 +142,44 @@ def test_refresh_rereads_google_resources(api, monkeypatch):
     api.get("/api/rides/cars?refresh=1")
     api.get("/api/resources?refresh=1")
     assert True in calls and calls.count(True) >= 2
+
+
+def _tpl():
+    return {"name": "Voiture circuit turbo 2RM", "description": "", "nodes": [
+        {"id": "g1", "name": "Motorisation", "group": True},
+        {"id": "n1", "parent_id": "g1", "name": "Moteur", "types": ["replace", "revision", "fluids"], "replace": {"limit_km": 5000}, "revision": {"limit_km": 1500, "warn_pct": 80}, "fluids": {"limit_km": 500, "limit_hours": 5}},
+        {"id": "n2", "parent_id": "g1", "name": "Turbo", "types": ["replace"], "replace": {"limit_km": 2000, "warn_pct": 50}}]}
+
+
+def test_template_assign_and_maintenance_meters(api):
+    c = car(api)["key"]
+    t = api.post("/api/rides/templates", json=_tpl()).json()
+    assert api.post("/api/rides/templates", json=_tpl()).status_code == 422                     # nom déjà pris
+    bad = _tpl(); bad["nodes"][1]["parent_id"] = "inconnu"
+    assert api.post("/api/rides/templates", json={**bad, "name": "x"}).status_code == 422
+    r = api.post(f"/api/rides/cars/{c}/template", json={"template_id": t["id"]}).json()
+    assert r["created"] == 3 and r["kept"] == 0
+    assert api.post(f"/api/rides/cars/{c}/template", json={"template_id": t["id"]}).json()["created"] == 0   # non destructif
+    assert car(api)["template"]["name"] == "Voiture circuit turbo 2RM"
+    api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-01", "name": "A", "km": 1300, "hours": 4})
+    d = api.get(f"/api/rides/cars/{c}").json()
+    eng = next(n for n in d["tree"][0]["children"] if n["name"] == "Moteur")
+    m = {x["type"]: x for x in eng["meters"]}
+    assert set(m) == {"replace", "revision", "fluids"}
+    assert m["replace"]["ratio"] == 0.26 and m["revision"]["state"] == "warn" and m["fluids"]["state"] == "over"      # 1300/1500 = 87 % >= 80 % ; 1300/500 > 100 %
+    assert eng["state"] == "over" and d["state"] == "over" and any(a["type"] == "fluids" and a["state"] == "over" for a in d["alerts_list"])
+    # vidange faite le 02/06 : le compteur repart
+    assert api.post(f"/api/rides/parts/{eng['id']}/maint", json={"type": "fluids", "date": "2026-06-02"}).status_code == 200
+    assert api.post(f"/api/rides/parts/{eng['id']}/maint", json={"type": "replace", "date": "2026-06-02"}).status_code == 422
+    api.post(f"/api/rides/cars/{c}/runs", json={"date": "2026-06-05", "name": "B", "km": 100})
+    eng = next(n for n in api.get(f"/api/rides/cars/{c}").json()["tree"][0]["children"] if n["name"] == "Moteur")
+    m = {x["type"]: x for x in eng["meters"]}
+    assert m["fluids"]["km"] == 100 and m["fluids"]["state"] == "ok" and m["fluids"]["last"] == "2026-06-02"
+    assert m["revision"]["km"] == 1400 and m["replace"]["km"] == 1400                      # la révision n'a pas été faite : elle continue de courir
+    hid = eng["history"][0]["id"]
+    assert api.delete(f"/api/rides/maint/{hid}").status_code == 200
+    turbo = next(n for n in api.get(f"/api/rides/cars/{c}").json()["tree"][0]["children"] if n["name"] == "Turbo")
+    assert api.post(f"/api/rides/parts/{turbo['id']}/maint", json={"type": "revision", "date": "2026-06-02"}).status_code == 422    # type non suivi
+    assert api.put(f"/api/rides/templates/{t['id']}", json={**_tpl(), "description": "maj"}).json()["description"] == "maj"
+    assert api.delete(f"/api/rides/templates/{t['id']}").status_code == 200
+    assert api.get("/api/rides/templates").json() == {"templates": []}

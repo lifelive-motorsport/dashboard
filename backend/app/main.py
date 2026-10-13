@@ -90,6 +90,7 @@ def config():
     return {"auth": settings.AUTH_ENABLED, "google_client_id": settings.GOOGLE_CLIENT_ID,
             "source": settings.PROVIDER, "analytic_link": link,
             "partner_link": settings.ODOO_PARTNER_LINK.replace("{base}", base) if base else "",
+            "client_link": settings.ODOO_CLIENT_LINK.replace("{base}", base) if base else "",
             "ga": ga.configured() or settings.PROVIDER == "demo",
             "hosts": {"xc": settings.GA_HOST_XC, "gs": settings.GA_HOST_GS, "site": settings.GA_HOST_SITE or settings.GA_HOST_XC}}
 

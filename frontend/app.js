@@ -197,8 +197,8 @@ const SUPPLIER_TABS = {total:'Général', XC:'XC', CARS:'CARS', MODERN_RALLY:'Mo
 const ALL_SUPPLIERS = Object.keys(SUPPLIER_TABS);
 
 // Libellé d'un client / fournisseur : lien vers sa fiche contact dans Odoo (nouvel onglet) quand l'adresse d'Odoo est connue.
-const partnerLink = c => (cfg && cfg.partner_link && c.id)
-  ? `<a class="olink" href="${esc(cfg.partner_link.replace('{id}', encodeURIComponent(c.id)))}" target="_blank" rel="noopener noreferrer" title="Ouvrir dans Odoo">${esc(c.name)}</a>` : esc(c.name);
+const partnerLink = (c, sup) => (cfg && (sup ? cfg.partner_link : cfg.client_link || cfg.partner_link) && c.id)
+  ? `<a class="olink" href="${esc((sup ? cfg.partner_link : cfg.client_link || cfg.partner_link).replace('{id}', encodeURIComponent(c.id)))}" target="_blank" rel="noopener noreferrer" title="Ouvrir dans Odoo">${esc(c.name)}</a>` : esc(c.name);
 // Classement clients (kind 'c') ou fournisseurs (kind 's') : mêmes colonnes, mêmes totaux.
 function ranking(d, kind, allowed, opts = {}) {
   const sup = kind === 's', tc = sup ? d.top_suppliers : d.top_clients, labels = sup ? SUPPLIER_TABS : CLIENT_TABS;
@@ -221,7 +221,7 @@ function ranking(d, kind, allowed, opts = {}) {
   const op = v => hasOpen ? `<td class="open">${v ? eur(v) : '–'}</td>` : '';
   const T = sup ? {one: 'fournisseurs', other: 'Autres fournisseurs', scope: 'Total des achats du périmètre', head: ['#', 'Fournisseur', 'Achats HT', '% des achats'], open: 'Reste à payer'}
                 : {one: 'clients', other: 'Autres clients et ventes sans client identifié', scope: 'Total du périmètre', head: ['#', 'Client', 'CA', '% du CA'], open: 'Solde ouvert'};
-  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${partnerLink(c)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${inv(c.invoices, c.avg)}${mx(c.mix)}${op(c.open || 0)}</tr>`);
+  const rows = list.map((c, i) => `<tr><td>${i + 1}</td><td>${partnerLink(c, sup)}</td><td>${eur(c.ca)}</td><td>${share(c.ca)}</td>${inv(c.invoices, c.avg)}${mx(c.mix)}${op(c.open || 0)}</tr>`);
   if (list.length) rows.push(`<tr class="tot"><td></td><td>Total des ${list.length} premiers ${T.one}</td><td>${eur(shown)}</td><td>${share(shown)}</td>${inv(topInv, topInv ? topAmt / topInv : null)}${mx(null)}${op(sumOpen)}</tr>`,
     `<tr><td></td><td>${T.other}</td><td>${eur(other)}</td><td>${share(other)}</td>${inv(st ? Math.max(0, st.invoices - topInv) : null, null)}${mx(null)}${op(scopeOpen - sumOpen)}</tr>`,
     `<tr class="tot"><td></td><td>${T.scope}</td><td>${eur(scope)}</td><td>100,0 %</td>${inv(st ? st.invoices : null, st ? st.avg : null)}${mx((tc._mix || {})[cur])}${op(scopeOpen)}</tr>`);

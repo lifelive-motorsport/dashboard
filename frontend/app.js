@@ -809,3 +809,12 @@ async function alertsBanner() {
   document.getElementById('page').prepend(b);
   if (typeof i18nNode === 'function' && LANG === 'en') i18nNode(b);
 }
+
+
+// Liens du contenu vers une page à laquelle l'utilisateur n'a pas droit : retirés (sinon un clic renvoie sans explication à l'accueil)
+(() => {
+  const page = document.getElementById('page'); if (!page) return;
+  let queued = false;
+  const pass = () => { queued = false; page.querySelectorAll('a[href^="#/"]').forEach(a => { const k = a.getAttribute('href').slice(2).split('?')[0]; if (item(k) && !allowedPage(k)) a.remove(); }); };
+  new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(pass); } }).observe(page, {childList: true, subtree: true});
+})();

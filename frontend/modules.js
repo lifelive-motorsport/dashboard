@@ -10,12 +10,12 @@ const CHAPTERS = [
     {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', sub: true, pages: ['planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']}]},
   {id: 'consigner', n: '03', label: 'Consigner', modules: [
     {id: 'timesheets', label: 'Pointages', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team']},
-    {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
-    {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
+    {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']}]},
   {id: 'technique', n: '04', label: 'Opérer', modules: [
     {id: 'garage', label: 'Garage', source: 'Logbook · Odoo · Google Agenda', pages: ['consigner/rides']},
     {id: 'parts', label: 'Magasin de pièces', source: 'Logbook', pages: ['consigner/parts']},
-    {id: 'runs', label: 'Roulages', source: 'Logbook', pages: ['consigner/runs']}]},
+    {id: 'runs', label: 'Roulages', source: 'Logbook', pages: ['consigner/runs']},
+    {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']}]},
   {id: 'administrer', n: '05', label: 'Administrer', modules: [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},
     {id: 'connections', label: 'Connexions', source: 'Odoo · Google', pages: ['others/tags']}]},

@@ -477,3 +477,6 @@ body.wall-full .wl-week{min-height:calc((100vh - 230px) / 5)}
 .rd-ident{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 .ps-ref{max-width:200px}.rd-lim{flex-wrap:wrap}
 .rd-fold{border:0;background:none;color:inherit;cursor:pointer;padding:0 6px 0 0;font-size:14px}
+#theme-btn{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;padding:0 8px}
+:root[data-theme="light"] .logo-on-dark{display:none}:root[data-theme="light"] .logo-on-light{display:block}:root[data-theme="dark"] .logo-on-dark{display:block}:root[data-theme="dark"] .logo-on-light{display:none}
+@media print{#theme-btn{display:none!important}}

@@ -1,6 +1,6 @@
 // Roulages (Consigner › Roulages) : kilométrage et temps de roulage des voitures de course et de leurs pièces (remplace RPM).
 // Voitures = véhicules de course de Ressources ; pièces en arborescence (Groupe › Pièce › Sous-pièce) avec limite et seuil d'alerte ; runs = tours × circuit, ou spéciales × passages.
-const rd = {cars: null, catalog: [], circuits: [], car: null, loading: false, error: null, msg: null, form: null, run: null, repl: null, settings: false, showRemoved: false, showArchived: false, odoo: null, templates: null, mf: null, cat: null, circ: {name: '', length_km: ''}};
+const rd = {cars: null, catalog: [], circuits: [], car: null, loading: false, error: null, msg: null, form: null, run: null, repl: null, settings: false, q: '', showRemoved: false, showArchived: false, odoo: null, templates: null, mf: null, cat: null, circ: {name: '', length_km: ''}};
 const rdKm = v => v == null ? '–' : new Intl.NumberFormat(LOCALE(), {maximumFractionDigits: 1}).format(v);
 const rdPct = r => r == null ? '' : Math.round(r * 100) + ' %';
 const RD_STATE = {over: ['neg', 'Limite dépassée'], warn: ['warn', 'À surveiller'], ok: ['pos', 'OK'], none: ['na', '']};
@@ -36,14 +36,15 @@ async function rdReload() { if (rd.car) { try { rd.car = await rsCall('/api/ride
 // ---- Liste des voitures -----------------------------------------------------------------------------------------------------------------
 const rdChip = (state, n) => { const [c, l] = RD_STATE[state] || RD_STATE.none; return l ? `<span class="rd-chip ${c}">${state === 'ok' ? '' : '⚠ '}${esc(l)}${n ? ` · ${n}` : ''}</span>` : ''; };
 const rdPhoto = (c, big) => c.photo ? `<img class="rd-photo${big ? ' big' : ''}" src="/api/rides/cars/${encodeURIComponent(c.key)}/photo?t=${rd.photoT || 0}" alt="" loading="lazy">` : `<div class="rd-photo${big ? ' big' : ''} none" aria-hidden="true">${esc(c.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase())}</div>`;
+const rdFoldQ = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().split(/\s+/).filter(Boolean);
 function rdList() {
   if (!rd.cars) return '<p class="na loading">Chargement…</p>';
   const nNoBu = rd.cars.filter(c => !c.bu && !c.archived).length;
   const guessBar = nNoBu ? `<div class="note"><b>${nNoBu} voiture${nNoBu > 1 ? 's' : ''} sans BU.</b> <button type="button" data-rd="guessbu">Proposer les BU manquantes</button> <small class="na">d’après la catégorie (Rallye / Circuit) et le nom ; à vérifier ensuite voiture par voiture</small></div>` : '';
   const nNoOdoo = rd.cars.filter(c => !c.odoo && !c.archived).length;
   const odooBar = nNoOdoo ? `<div class="note"><b>${nNoOdoo} voiture${nNoOdoo > 1 ? 's' : ''} non reliée${nNoOdoo > 1 ? 's' : ''} à un compte analytique Odoo (axe CARS).</b> <button type="button" data-rd="linkodoo">Relier les correspondances sûres</button> <small class="na">comparaison des noms ; le reste se relie dans la fiche de chaque voiture</small></div>` : '';
-  const nArch = rd.cars.filter(c => c.archived).length, shown = rd.cars.filter(c => rdBuOk(c) && (rd.showArchived || !c.archived));
-  if (rd.cars.length && !shown.length) return '<p class="na">Aucune voiture dans cette BU : la BU d’une voiture se choisit dans sa fiche.</p>';
+  const q = rdFoldQ(rd.q), nArch = rd.cars.filter(c => c.archived).length, shown = rd.cars.filter(c => rdBuOk(c) && (rd.showArchived || !c.archived) && (!q || q.every(w => rdFoldQ([c.name, c.race_number, c.livery, c.chassis, c.engine_no, c.gearbox_no, c.template && c.template.name].filter(Boolean).join(' ')).join(' ').includes(w))));
+  if (rd.cars.length && !shown.length) return q.length ? `<p class="na">${esc(tx('Aucune voiture ne correspond à la recherche.'))}</p>` : '<p class="na">Aucune voiture dans cette BU : la BU d’une voiture se choisit dans sa fiche.</p>';
   if (!rd.cars.length) return '<p class="na">Aucune voiture de course : elles viennent de Planifier › Ressources › Véhicules (catégories Rally et Circuit).</p>';
   return guessBar + odooBar + `<div class="rd-grid">${shown.map(c => `<button type="button" class="rd-card${c.archived ? ' arch' : ''}" data-rd="open" data-k="${esc(c.key)}">${rdPhoto(c)}<div class="rd-cbody"><b>${c.race_number ? `<span class="rd-no">#${esc(c.race_number)}</span> ` : ''}${esc(c.name)}${c.archived ? ' <span class="rd-chip">Archivée</span>' : ''}</b><small class="na">${c.odoo ? '<span class="pos" title="' + esc(c.odoo.name) + '">Odoo ✓</span>' : '<span class="neg">non reliée à Odoo</span>'} · ${c.bu ? esc(RD_BULAB[c.bu]) : '<span class="neg">BU à définir</span>'} · ${c.category === 'rally' ? 'Rallye' : 'Circuit'} · ${c.parts} pièce${c.parts > 1 ? 's' : ''}</small>
     <div>${rdChip(c.state, c.alerts)}${c.doc_alerts ? ` <span class="rd-chip ${c.doc_over ? 'neg' : 'warn'}" title="${esc(t('Documents à renouveler'))}">📄 ${c.doc_alerts}</span>` : ''}</div><small class="na">${rdKm(c.km_total)} km${c.hours_total ? ` · ${rdKm(c.hours_total)} h` : ''}${c.last_run ? ' · dernier run ' + fmtDate(c.last_run) : ''}</small></div></button>`).join('')}</div>`;
@@ -182,7 +183,7 @@ function rdLightbox(u, name, pdf) {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { const lb = document.getElementById('rd-lb'); if (lb) lb.remove(); } });
 document.addEventListener('click', e => { const lb = document.getElementById('rd-lb'); if (lb && (e.target === lb || (e.target.closest && e.target.closest('[data-lb=close]')))) lb.remove(); });
-document.addEventListener('input', e => { if (e.target.id === 'rd-docq') { rd.docQ = e.target.value; rdDocFilter(); } });
+document.addEventListener('input', e => { if (e.target.id === 'rd-q') { rd.q = e.target.value; const b = document.getElementById('rd-listbox'); if (b) b.innerHTML = rdList(); if (b && typeof i18nNode === 'function' && LANG === 'en') i18nNode(b); return; } if (e.target.id === 'rd-docq') { rd.docQ = e.target.value; rdDocFilter(); } });
 
 // ---- Dessin -----------------------------------------------------------------------------------------------------------------------------
 function rdDraw() {
@@ -194,7 +195,7 @@ function rdDraw() {
   const msg = rd.msg && !rd.form && !rd.run && !rd.repl ? `<p class="na">${esc(rd.msg)}</p>` : '';
   if (!c) {
     const nArchBar = rd.cars ? rd.cars.filter(c => c.archived).length : 0;
-    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading && rd.cars ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rdList()}`;
+    el.innerHTML = `<div class="sdbar"><button type="button" data-rd="reread" title="Relire les ressources Google (nom corrigé, voiture ajoutée)">↻ Relire Google</button><input type="search" class="sdin rd-q" id="rd-q" placeholder="${esc(t('Rechercher une voiture, un n° de course, une livrée…'))}" value="${esc(rd.q)}" autocomplete="off"><span class="wl-sp"></span>${nArchBar ? `<label class="chk rd-rm"><input type="checkbox" id="rd-archived" ${rd.showArchived ? 'checked' : ''}> afficher les voitures archivées (${nArchBar})</label>` : ''}${rd.loading && rd.cars ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}<div id="rd-listbox">${rdList()}</div>`;
     return;
   }
   const alertsHtml = c.alerts_list.length ? `<div class="rd-alerts">${c.alerts_list.map(a => a.type === 'inspection' ? `<span class="rd-chip warn" title="${esc((a.items || []).join('\n'))}">⚠ ${esc(a.label)}</span>` : `<span class="rd-chip ${a.state === 'over' ? 'neg' : 'warn'}" title="${rdKm(a.km)} km${a.limit_km ? ' / ' + rdKm(a.limit_km) : ''}">${a.state === 'over' ? '⛔' : '⚠'} ${esc(a.path)} · ${esc(a.label)} · ${rdPct(a.ratio)}</span>`).join(' ')}</div>` : '';

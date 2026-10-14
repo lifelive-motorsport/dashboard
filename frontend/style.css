@@ -514,3 +514,4 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .tf-sheet{display:grid;grid-template-columns:minmax(150px,1.6fr) repeat(var(--n),minmax(70px,1fr));gap:6px 8px;align-items:center;max-width:760px}.tf-sl{font-size:13px}.tf-ch{text-align:center}
 .tf-wt{display:flex;flex-wrap:wrap;gap:8px 22px;margin:8px 0}.tf-wt dt{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.tf-wt dd{margin:0;font-weight:600}
 @media(max-width:700px){.tf-sheet{grid-template-columns:repeat(var(--n),1fr)}.tf-sl{grid-column:1 / -1;margin-top:6px;font-weight:600}.tf-ch,.tf-sheet>span{display:none}}
+.rd-q{max-width:340px;flex:1 1 220px}

@@ -1753,6 +1753,8 @@ Object.assign(EN_T, {
   "Poids sous le minimum": "Below minimum weight",
   "Pesée incomplète : les quatre roues sont nécessaires pour le calcul.": "Incomplete weighing: all four wheels are needed for the calculation.",
   "valeurs renseignées": "values filled in",
+  "Rechercher une voiture, un n° de course, une livrée…": "Search a car, a race number, a livery…",
+  "Aucune voiture ne correspond à la recherche.": "No car matches the search.",
   "Détail non communiqué": "Details not shared",
   "Aperçu": "Preview",
   "👁 Aperçu : vous voyez l'espace tel que ce client le voit (lecture seule).": "👁 Preview: you see the area exactly as this client sees it (read-only).",

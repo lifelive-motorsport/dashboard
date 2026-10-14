@@ -82,6 +82,8 @@ def catalog_coll() -> Coll:
 
 # ---- Modèles ----------------------------------------------------------------------------------------------------------------------------
 
+# Fonction normalisée d'une pièce : relie les jobs (lignes de liste de contrôle, formulaires) aux pièces du Garage sans dépendre de leur nom ; choisie dans la fiche de la pièce ou dans le modèle du Magasin.
+FUNCTIONS = {"engine": "Moteur", "gearbox": "Boîte de vitesses", "rear_axle": "Pont arrière", "front_axle": "Pont avant", "clutch": "Embrayage", "brakes": "Freins (circuit hydraulique)", "steering": "Direction", "cooling": "Refroidissement"}
 MAINT_TYPES = ("inspection", "fluids", "revision", "revision2", "replace")          # ordre chronologique logique : contrôle, vidange, révisions, remplacement
 MAINT_LABEL = {"replace": "Remplacement", "revision": "Révision 1", "revision2": "Révision 2", "fluids": "Vidange et nouveaux fluides", "inspection": "Contrôle"}
 LOGGED = ("revision", "revision2", "fluids", "inspection")          # maintenances qui s'enregistrent avec 🛠 (le remplacement se fait par « Remplacer »)
@@ -119,6 +121,7 @@ class PartIn(BaseModel):
     limit_hours: float | None = Field(default=None, gt=0, le=1e6)
     limit_note: str = Field(default="", max_length=160)
     reference: str = Field(default="", max_length=60)                # référence constructeur
+    fn: str = Field(default="", max_length=20)                       # fonction normalisée (FUNCTIONS) : vide = non reliée aux jobs
     warn_pct: float = Field(default=75.0, gt=0, le=100)
     km_start: float = Field(default=0.0, ge=0, le=1e7)               # kilomètres déjà parcourus au montage (pièce d'occasion, reprise de RPM)
     hours_start: float = Field(default=0.0, ge=0, le=1e6)
@@ -127,6 +130,13 @@ class PartIn(BaseModel):
     notes: str = Field(default="", max_length=500)
     types: list[str] = Field(default_factory=list, max_length=5)      # maintenances suivies : replace (limites ci-dessus), revision, fluids (limites dans `maint`)
     maint: dict[str, MaintLimit] = Field(default_factory=dict)        # intervalles de la révision et de la vidange : {"revision": {...}, "fluids": {...}}
+
+    @field_validator("fn")
+    @classmethod
+    def _fn(cls, v):
+        if v and v not in FUNCTIONS:
+            raise ValueError("fonction inconnue")
+        return v
 
     @field_validator("types")
     @classmethod
@@ -160,6 +170,7 @@ class TNode(BaseModel):
     group: bool = False                                              # Ensemble (ex. Motorisation) ; sinon sous-ensemble (Moteur, Turbo…)
     types: list[str] = Field(default_factory=list, max_length=5)
     reference: str = Field(default="", max_length=60)                # référence constructeur
+    fn: str = Field(default="", max_length=20)                       # fonction normalisée (FUNCTIONS)
     replace: MaintLimit = Field(default_factory=MaintLimit)
     revision: MaintLimit = Field(default_factory=MaintLimit)
     revision2: MaintLimit = Field(default_factory=MaintLimit)
@@ -761,7 +772,7 @@ def delete_template(tid: str) -> None:
 def _node_part(n: dict, vehicle: str, parent: str | None, user: str) -> dict:
     types = [t for t in MAINT_TYPES if t in n.get("types", [])]
     rep = n.get("replace") or {}
-    doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "reference": n.get("reference", ""), "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
+    doc = {"id": "p-" + uuid.uuid4().hex[:10], "vehicle": vehicle, "name": n["name"], "parent_id": parent, "group": bool(n.get("group")), "serial": "", "notes": "", "reference": n.get("reference", ""), "fn": n.get("fn") if n.get("fn") in FUNCTIONS else "", "km_start": 0.0, "hours_start": 0.0, "mounted_from": None,
            "limit_km": None, "limit_hours": None, "limit_note": "", "warn_pct": 75.0, "types": types, "maint": {}, "removed_at": None, "created_by": user.lower(), "created_at": now().isoformat()}
     if not n.get("group"):
         if "replace" in types:
@@ -791,6 +802,9 @@ def apply_template(vehicle: str, tid: str, user: str) -> dict:
         parent = mapping.get(n.get("parent_id")) if n.get("parent_id") else None
         same = next((p for p in existing if p.get("parent_id") == parent and p["name"].lower() == n["name"].lower()), None)
         if same:
+            if not same.get("fn") and n.get("fn") in FUNCTIONS and not same.get("group"):
+                same["fn"] = n["fn"]                                 # une pièce déjà là reçoit la fonction du modèle (rien d'autre n'est modifié)
+                parts_coll().put(same["id"], same)
             mapping[n["id"]] = same["id"]
             kept += 1
             continue

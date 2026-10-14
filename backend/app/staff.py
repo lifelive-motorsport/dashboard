@@ -123,7 +123,7 @@ class Person(BaseModel):
     @field_validator("workshop")
     @classmethod
     def _workshop(cls, v):
-        if v not in ("", "mechanic", "chef_cars", "chef_xc", "chef_all"):
+        if v not in ("", "mechanic", "chef_cars", "chef_xc", "chef_all", "coordinator"):
             raise ValueError("rôle d'atelier inconnu")
         return v
 

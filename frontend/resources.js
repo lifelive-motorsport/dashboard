@@ -48,7 +48,7 @@ async function loadResources() {
   } catch (e) { rs.error = e.message; rs.loaded = true; }
 }
 
-const RS_WS = [['', '— Hors atelier —'], ['mechanic', 'Mécanicien'], ['chef_cars', 'Chef d’atelier CARS'], ['chef_xc', 'Chef d’atelier XC'], ['chef_all', 'Chef d’atelier CARS + XC']];
+const RS_WS = [['', '— Hors atelier —'], ['mechanic', 'Mécanicien'], ['coordinator', 'Ingénieur / Coordinateur'], ['chef_cars', 'Chef d’atelier CARS'], ['chef_xc', 'Chef d’atelier XC'], ['chef_all', 'Chef d’atelier CARS + XC']];
 function drawResources() {
   rsDrawStaff(); rsDrawExt(); rsDrawVeh();
   if (!superUser) {                                                      // fiches du staff : lecture seule (le rôle Atelier et le compte Google se règlent par le Super User)

@@ -102,6 +102,8 @@ class EntryIn(BaseModel):
 class LineIn(BaseModel):
     text: str = Field(min_length=1, max_length=300)
     note: str = Field(default="", max_length=200)
+    fn: str = Field(default="", max_length=20)                       # lien avec le Garage : fonction de la pièce (rides.FUNCTIONS) et type de maintenance (mt) ; vide = lien par défaut d'après le texte
+    mt: str = Field(default="", max_length=12)
 
 
 class SectionIn(BaseModel):
@@ -240,6 +242,8 @@ def role_of(email: str) -> dict:
     if not p:
         return {"role": None, "bus": [], "person": None, "super": False}
     w = p.get("workshop") or ""
+    if w == "coordinator":                                            # ingénieur / coordinateur : confirme les mises à jour du Garage, ne valide pas les pointages
+        return {"role": "coordinator", "bus": ["XC", "CARS"], "person": p, "super": False}
     if w.startswith("chef_"):
         bus = {"chef_cars": ["CARS"], "chef_xc": ["XC"]}.get(w, ["XC", "CARS"])
         return {"role": "chef", "bus": bus, "person": p, "super": False}
@@ -307,8 +311,13 @@ def job_view(j: dict) -> dict:
 
 # ---- Modèles de jobs et listes de contrôle ------------------------------------------------------------------------------------------------
 
+def _link(fn: str, mt: str) -> dict:
+    from . import rides
+    return {"fn": fn, "mt": mt} if fn in rides.FUNCTIONS and mt in rides.LOGGED else {}
+
+
 def _template_doc(data: TemplateIn, tid: str, user: str, created: str | None = None) -> dict:
-    secs = [{"id": f"s{i}", "title": s.title.strip(), "lines": [{"id": f"l{i}-{j}", "text": ln.text.strip(), "note": ln.note.strip()} for j, ln in enumerate(s.lines) if ln.text.strip()]}
+    secs = [{"id": f"s{i}", "title": s.title.strip(), "lines": [{"id": f"l{i}-{j}", "text": ln.text.strip(), "note": ln.note.strip(), **_link(ln.fn, ln.mt)} for j, ln in enumerate(s.lines) if ln.text.strip()]}
             for i, s in enumerate(data.sections)]
     return {"id": tid, "name": data.name.strip(), "bu": data.bu, "natures": list(data.natures), "sections": [s for s in secs if s["lines"]],
             "created_by": user.lower(), "created_at": created or now().isoformat(), "updated_at": now().isoformat()}
@@ -347,7 +356,7 @@ def save_template(data: TemplateIn, user: str, tid: str | None = None) -> dict:
 def make_checklist(t: dict) -> dict:
     """Copie du modèle dans le job : modifier le modèle plus tard ne change pas les jobs déjà créés."""
     return {"template_id": t["id"], "template_name": t["name"], "sections": [{"id": s["id"], "title": s["title"], "lines": [
-        {"id": ln["id"], "text": ln["text"], "note": ln.get("note", ""), "done": False, "done_by": None, "done_at": None, "entry_id": None} for ln in s["lines"]]} for s in t["sections"]]}
+        {"id": ln["id"], "text": ln["text"], "note": ln.get("note", ""), **_link(ln.get("fn", ""), ln.get("mt", "")), "done": False, "done_by": None, "done_at": None, "entry_id": None} for ln in s["lines"]]} for s in t["sections"]]}
 
 
 def person_name(email: str) -> str:

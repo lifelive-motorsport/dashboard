@@ -1,6 +1,7 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
-  {date: 'Octobre 2026', title: 'Formulaires techniques : mesure d’embrayage, boîte et pont', tag: 'Consigner', items: [
+  {date: 'Octobre 2026', title: 'Formulaires techniques : mesure d’embrayage, boîte, pont et setup', tag: 'Consigner', items: [
+    'Demandes de setup (rallye, circuit) et relevés de setup / setdown : suspension, géométrie, pesée avec calcul du centrage, de la pesée à vide et du poids sans essence ; feuille PDF pour le pilote.',
     'Révisions de boîte de vitesses (M3, Z4 GT3, avec différentiel) et de pont arrière : chaque élément est OK ou NOK avec un commentaire, plus la demande de réglage ; validation par le chef d’atelier et feuille PDF.',
     'Dans un job d’atelier, bouton « Formulaires » : mesure d’embrayage 4 ou 6 patins (épaisseurs des disques, conicité des plateaux), saisie sur tablette ou téléphone.',
     'Calcul automatique de l’usure, de l’usure aux 1 000 km et du kilométrage restant estimé ; le chef d’atelier valide, puis le formulaire est verrouillé.',

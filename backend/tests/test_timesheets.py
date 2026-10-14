@@ -555,7 +555,7 @@ def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
     jid = mkjob(api, vehicle={"id": "1", "name": "Porsche 992"}).json()["id"]
     as_(api, MEC)
     types = api.get("/api/timesheets/form-types").json()["types"]
-    assert {t["id"] for t in types} == {"clutch4", "clutch6", "gearbox_m3", "gearbox_z4", "gearbox_diff", "rear_axle"}
+    assert {t["id"] for t in types} == {"clutch4", "clutch6", "gearbox_m3", "gearbox_z4", "gearbox_diff", "rear_axle", "setup_request", "setup_request_circuit", "setup_reading", "setdown_reading"}
     r = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data()})
     assert r.status_code == 200
     f = r.json()
@@ -677,3 +677,30 @@ def test_gearbox_and_rear_axle_checklist_forms(api, monkeypatch):
     page = api.get(f"/api/timesheets/forms/{f['id']}/print").text
     assert "Dent écaillée" in page and "545 022" in page and "BMW M3 E30" in page and "1 NOK" in page
     assert "All OK" in api.get(f"/api/timesheets/forms/{f2['id']}/print?lang=en").text
+
+
+def test_setup_request_and_weighing_readings(api, monkeypatch):
+    from app import tforms
+    monkeypatch.setattr(tforms, "_forms", None)
+    jid = mkjob(api, vehicle={"id": "1", "name": "Porsche 992 Rally"}).json()["id"]
+    as_(api, MEC)
+    req = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "setup_request", "data": {"inputs": {"pilot_name": "A. Pilote", "pilot_kg": "85,5", "copilot_name": "B. Copilote", "copilot_kg": 80},
+                                                                                         "rows": {"amortisseur": {"av": "Ohlins 12", "ar": "Ohlins 14"}}, "notes": "Gravel"}}).json()
+    assert req["data"]["inputs"]["pilot_kg"] == 85.5 and req["data"]["rows"]["amortisseur"]["av"] == "Ohlins 12" and req["calc"]["filled"] == 2 and req["calc"]["weights"] is None
+    # relevé : poids de l'équipage repris de la demande, calculs de pesée
+    wr = {"av_g": "380", "av_d": "372", "ar_g": "395", "ar_d": "403"}
+    f = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "setup_reading", "data": {"inputs": {"fuel_l": 20, "min_weight": 1400}, "rows": {"wheel_weights": wr}}}).json()
+    assert f["data"]["inputs"]["pilot_kg"] == 85.5 and f["data"]["inputs"]["copilot_kg"] == 80
+    w = f["calc"]["weights"]
+    assert w["total"] == 1550 and w["front_pct"] == 48.52 and w["cross_pct"] == 50.52                         # (380+372)/1550 ; (380+403)/1550
+    assert w["no_fuel"] == 1535 and w["no_crew"] == 1384.5 and w["empty"] == 1369.5 and w["min_ok"] is True and f["calc"]["state"] == "ok"
+    low = api.put(f"/api/timesheets/forms/{f['id']}", json={"data": {"inputs": {"fuel_l": 20, "min_weight": 1600}, "rows": {"wheel_weights": wr}}}).json()
+    assert low["calc"]["weights"]["min_ok"] is False and low["calc"]["state"] == "nok"
+    # pesée incomplète : pas de calcul ; texte libre accepté, valeur d'entrée hors limites refusée
+    inc = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "setdown_reading", "data": {"rows": {"wheel_weights": {"av_g": "380"}, "carrossage": {"av_g": "-3,2"}}}}).json()
+    assert inc["calc"]["weights"] is None and inc["data"]["rows"]["carrossage"]["av_g"] == "-3,2"
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "setup_reading", "data": {"inputs": {"fuel_l": 99999}}}).status_code == 422
+    as_(api, CHEF)
+    page = api.get(f"/api/timesheets/forms/{f['id']}/print").text
+    assert "Porsche 992 Rally" in page and "Centrage en croix" in page and "Poids sous le minimum" in page
+    assert "Ohlins 14" in api.get(f"/api/timesheets/forms/{req['id']}/print?lang=en").text

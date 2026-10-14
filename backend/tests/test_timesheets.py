@@ -127,6 +127,17 @@ def test_week_summary_occupancy_and_billable(api):
     assert row["name"] == "Nolan Collinet" and row["summary"]["total"] == 570
 
 
+def test_team_lists_entries_of_accounts_outside_the_staff_list(api):
+    car = mkjob(api, vehicle={"id": "1", "name": "P"}).json()["id"]
+    eid = "e-hors"                                                   # pointage d'un compte (ex. Super User) sans fiche staff liée
+    timesheets.entries().put(eid, {**entry(car, minutes=60), "id": eid, "user": NOBODY.lower(), "created_at": "2026-01-01T00:00:00+00:00", "validated": False, "lines": [], "attachments": []})
+    as_(api, CHEF)
+    rows = api.get("/api/timesheets/team", params={"start": date.today().isoformat()}).json()["rows"]
+    other = next(r for r in rows if r.get("other"))
+    assert other["user"] == NOBODY.lower() and other["summary"]["total"] == 60 and other["entries"][0]["id"] == eid
+    assert not any(r.get("other") for r in rows if r["name"] == "Nolan Collinet")
+
+
 def test_attachments_rules(api):
     jid = mkjob(api).json()["id"]
     as_(api, MEC)

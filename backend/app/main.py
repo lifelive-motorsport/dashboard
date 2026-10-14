@@ -1439,6 +1439,12 @@ def ts_team(start: date, bu: str = "all", user: str = Depends(require_user)):
         ents = [e for e in all_ents if e["user"] == p["google_email"].lower() and timesheets.chef_for(r, jm.get(e["job_id"]))]
         rows.append({"name": p["name"], "alloc": p.get("alloc", {}), "bus": staff.resource_bus(p), "all_bus": bool(p.get("all_bus")), "workshop": p["workshop"], "user": p["google_email"].lower(), "summary": timesheets.summary(ents, p, jm),
                      "entries": [timesheets.entry_view(timesheets.public_attachments(e), user, r, jm) for e in sorted(ents, key=lambda e: (e["date"], e["created_at"]))]})
+    known = {p["google_email"].lower() for p in people}
+    for u in sorted({e["user"] for e in all_ents} - known):          # comptes absents de la liste (Super User, personne non liée à une fiche) : leurs pointages restent visibles et validables
+        ents = [e for e in all_ents if e["user"] == u and timesheets.chef_for(r, jm.get(e["job_id"]))]
+        if ents:
+            rows.append({"name": u, "alloc": {}, "bus": [], "all_bus": False, "workshop": "", "user": u, "other": True, "summary": timesheets.summary(ents, None, jm),
+                         "entries": [timesheets.entry_view(timesheets.public_attachments(e), user, r, jm) for e in sorted(ents, key=lambda e: (e["date"], e["created_at"]))]})
     return {"start": a, "rows": rows}
 
 

@@ -1544,6 +1544,7 @@ Object.assign(EN_T, {
   "Interventions": "Interventions",
   "Documents": "Documents",
   "Accès clients": "Client access",
+  "hors liste de l’équipe": "not on the team list",
   "Détail non communiqué": "Details not shared",
   "Aperçu": "Preview",
   "👁 Aperçu : vous voyez l'espace tel que ce client le voit (lecture seule).": "👁 Preview: you see the area exactly as this client sees it (read-only).",

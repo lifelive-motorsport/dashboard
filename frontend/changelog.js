@@ -1,5 +1,9 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Maintenances à prévoir dans les jobs', tag: 'Opérer', items: [
+    'Dans un job d’atelier (bouton Formulaires), les maintenances de la voiture en alerte dans le Garage sont listées : « Ajouter à la liste du job » crée la ligne à cocher ; une fois faite et confirmée, le Garage se met à jour.',
+    'Menu : « Consommables » passe au-dessus de « Roulages », et le chapitre « Consigner » passe après « Opérer ».',
+  ]},
   {date: 'Octobre 2026', title: 'Atelier, Modèles et Historique', tag: 'Opérer', items: [
     '« Pointages » devient « Atelier » (chapitre Opérer). Nouvelle section « Modèles » pour le chef d’atelier, l’ingénieur / coordinateur et le Super User : modèles de jobs, modèles de formulaires (modifiables, duplicables) et modèles d’architecture voiture.',
     'Le « Magasin de pièces » affiche maintenant toutes les pièces d’une voiture choisie, avec leur fonction, leurs kilomètres et leur état.',

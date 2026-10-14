@@ -1565,27 +1565,44 @@ def _garage_ctx(jid: str, user: str) -> tuple[dict, dict]:
 @app.get("/api/timesheets/jobs/{jid}/garage")
 def ts_garage(jid: str, user: str = Depends(require_user)):
     _, job = _garage_ctx(jid, user)
-    return {**tgarage.proposals(job), "functions": rides.FUNCTIONS}
+    return _garage_payload(job)
+
+
+def _garage_payload(job: dict) -> dict:
+    return {**tgarage.proposals(job), "functions": rides.FUNCTIONS, "due": tgarage.due(job)}
 
 
 @app.post("/api/timesheets/jobs/{jid}/garage/apply")
 def ts_garage_apply(jid: str, body: GarageApply, user: str = Depends(require_user)):
     _, job = _garage_ctx(jid, user)
-    return {"results": tgarage.apply(job, body.items, user), **tgarage.proposals(job)}
+    return {"results": tgarage.apply(job, body.items, user), **_garage_payload(job)}
+
+
+class GarageDueIn(BaseModel):
+    items: list[dict] = Field(default_factory=list, max_length=40)
+
+
+@app.post("/api/timesheets/jobs/{jid}/garage/add-lines")
+def ts_garage_add_lines(jid: str, body: GarageDueIn, user: str = Depends(require_user)):
+    _, job = _garage_ctx(jid, user)
+    if job.get("kind") != "atelier":
+        raise HTTPException(422, "Les maintenances du Garage se rattachent à un job d'atelier")
+    res = tgarage.add_lines(job, body.items)
+    return {"results": res, **_garage_payload(job)}
 
 
 @app.post("/api/timesheets/jobs/{jid}/garage/ignore")
 def ts_garage_ignore(jid: str, body: GarageKey, user: str = Depends(require_user)):
     _, job = _garage_ctx(jid, user)
     _tf(tgarage.ignore, job, body.key, user)
-    return tgarage.proposals(job)
+    return _garage_payload(job)
 
 
 @app.post("/api/timesheets/jobs/{jid}/garage/restore")
 def ts_garage_restore(jid: str, body: GarageKey, user: str = Depends(require_user)):
     _, job = _garage_ctx(jid, user)
     _tf(tgarage.restore, job, body.key)
-    return tgarage.proposals(job)
+    return _garage_payload(job)
 
 
 # ---- Modèles de formulaires (modifiables par le chef d'atelier, l'ingénieur / coordinateur et le Super User) ----------------------------------------

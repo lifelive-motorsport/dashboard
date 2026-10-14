@@ -835,3 +835,39 @@ def test_history_records_restores_and_is_super_only(api, monkeypatch):
     n = len(history.coll().all())
     timesheets.templates().put(tid, timesheets.templates().get(tid))
     assert len(history.coll().all()) == n
+
+
+def test_garage_due_maintenance_added_as_job_lines_and_closed_loop(api, monkeypatch):
+    from datetime import date as _d
+    from app import rides, tforms, tgarage
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
+        monkeypatch.setattr(rides, n, None)
+    monkeypatch.setattr(tforms, "_forms", None)
+    monkeypatch.setattr(tgarage, "_coll", None)
+    car = rides.race_cars()[0]
+    rides.cars_coll().put(car["key"], {"id": car["key"], "odoo_id": 77})
+    ens = rides.add_part(car["key"], rides.PartIn(name="Moteur", group=True), "t")
+    oil = rides.add_part(car["key"], rides.PartIn(name="Huile moteur", parent_id=ens["id"], types=["fluids", "replace"], maint={"fluids": {"limit_km": 1000}}, limit_km=5000), "t")       # pas de fonction
+    fine = rides.add_part(car["key"], rides.PartIn(name="Filtre", parent_id=ens["id"], types=["fluids"], maint={"fluids": {"limit_km": 100000}}), "t")
+    rides.add_run(car["key"], rides.RunIn(date=_d(2026, 6, 1), name="Essais", km=900), "t")                                   # 90 % de la limite de vidange : à surveiller ; remplacement à 18 %
+    jid = mkjob(api, vehicle={"id": "77", "name": "X"}).json()["id"]                                                      # job sans liste de contrôle
+    as_(api, MEC)
+    assert api.get(f"/api/timesheets/jobs/{jid}/garage").status_code == 403
+    as_(api, CHEF)
+    d = api.get(f"/api/timesheets/jobs/{jid}/garage").json()["due"]
+    assert [(m["part_id"], m["type"], m["state"]) for m in d["maint"]] == [(oil["id"], "fluids", "warn")] and d["replace"] == [] and d["maint"][0]["added"] is False
+    r = api.post(f"/api/timesheets/jobs/{jid}/garage/add-lines", json={"items": [{"part_id": oil["id"], "type": "fluids"}, {"part_id": fine["id"], "type": "fluids"}]}).json()
+    assert [x["ok"] for x in r["results"]] == [True, False] and r["due"]["maint"][0]["added"] is True                      # le filtre n'est pas à prévoir
+    again = api.post(f"/api/timesheets/jobs/{jid}/garage/add-lines", json={"items": [{"part_id": oil["id"], "type": "fluids"}]}).json()
+    job = timesheets.jobs().get(jid)
+    assert len(job["checklist"]["sections"][0]["lines"]) == 1 and job["checklist"]["sections"][0]["title"] == "Maintenances Garage" and again["results"][0]["ok"] is True      # sans doublon
+    # le mécanicien coche la ligne dans son pointage ; le chef confirme : le Garage reçoit la vidange sur CETTE pièce (sans fonction)
+    line = job["checklist"]["sections"][0]["lines"][0]
+    as_(api, MEC)
+    assert api.post("/api/timesheets/entries", json=entry(jid, lines=[line["id"]])).status_code == 200
+    as_(api, CHEF)
+    prop = [p for p in api.get(f"/api/timesheets/jobs/{jid}/garage").json()["proposals"] if p["key"].startswith("line:")][0]
+    assert prop["part_id"] == oil["id"] and prop["type"] == "fluids" and prop["tracked"] is True
+    res = api.post(f"/api/timesheets/jobs/{jid}/garage/apply", json={"items": [{"key": prop["key"]}]}).json()
+    assert res["results"][0]["ok"] is True and [l["part_id"] for l in rides.maint_coll().all()] == [oil["id"]]
+    assert res["due"]["maint"] == []                                                                                      # la vidange est faite : plus à prévoir

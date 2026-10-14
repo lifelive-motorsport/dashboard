@@ -19,6 +19,15 @@ async function tfOpen(jid) {
 }
 // Mises à jour du Garage proposées par le job (lignes cochées, formulaires validés) : confirmées par le chef d'atelier, le Super User ou l'ingénieur / coordinateur ; jamais automatiques.
 function tfSetGarage(g) { tf.garage = g; for (const p of g.proposals) { if (p.kind !== 'maint') continue; if (!(p.key in tf.gsel)) tf.gsel[p.key] = !!(p.part_id && p.tracked); if (!(p.key in tf.gpart)) tf.gpart[p.key] = p.part_id || ''; } }
+function tfDuePanel(g) {
+  const d = g.due; if (!d || !d.car_key) return '';
+  const chip = r => `<span class="rd-chip ${r.state === 'over' ? 'neg' : 'warn'}">${r.state === 'over' ? '⛔' : '⚠'} ${esc(tx(r.state_label))}${r.ratio != null ? ' · ' + Math.round(r.ratio * 100) + ' %' : ''}</span>`;
+  const rows = d.maint.map(m => `<div class="tf-gr"><span><b>${esc(m.part)}</b> <small class="na">→ ${esc(tx(m.type_label))}</small></span> ${chip(m)} ${m.added ? `<span class="ok">✓ ${esc(tx('Ajoutée à la liste du job'))}</span>` : `<button type="button" class="mini" data-tf="gadd" data-p="${esc(m.part_id)}" data-t="${esc(m.type)}">＋ ${esc(tx('Ajouter à la liste du job'))}</button>`}</div>`)
+    .concat(d.replace.map(m => `<div class="tf-gr"><span class="neg">⚠ ${esc(tx('À remplacer bientôt'))} : <b>${esc(m.part)}</b></span> ${chip(m)} <button type="button" class="mini" data-tf="garage" data-k="${esc(d.car_key)}">${esc(tx('Ouvrir le Garage'))}</button></div>`));
+  const todo = d.maint.some(m => !m.added);
+  return `<div class="tf-gar"><h5>${esc(tx('Maintenances à prévoir pour cette voiture'))}</h5>${rows.length ? rows.join('') : `<p class="na">${esc(tx('Aucune maintenance en alerte pour cette voiture.'))}</p>`}
+    ${todo ? `<div class="sdbar"><button type="button" data-tf="gadd" data-all="1">＋ ${esc(tx('Tout ajouter à la liste du job'))}</button><small class="na">${esc(tx('Le mécanicien les coche en pointant ; vous confirmez ensuite la mise à jour du Garage.'))}</small></div>` : ''}</div>`;
+}
 function tfGaragePanel() {
   const g = tf.garage; if (!g) return '';
   const rows = g.proposals.map(p => {
@@ -32,7 +41,7 @@ function tfGaragePanel() {
       <button type="button" class="mini" data-tf="gignore" data-k="${esc(p.key)}">${esc(tx('Ignorer'))}</button>${bad ? `<small class="neg">${esc(tx('Cette pièce ne suit pas ce type de maintenance : cochez-le dans sa fiche du Garage.'))}</small>` : ''}</div>`;
   });
   const pend = g.proposals.some(p => p.kind === 'maint' && p.status === 'pending');
-  return `<div class="tf-gar"><h5>${esc(tx('Mises à jour du Garage proposées'))}</h5>${rows.length ? rows.join('') : `<p class="na">${esc(tx('Aucune mise à jour proposée : elles viennent des lignes de liste cochées et des formulaires validés de ce job.'))}</p>`}
+  return `${tfDuePanel(g)}<div class="tf-gar"><h5>${esc(tx('Mises à jour du Garage proposées'))}</h5>${rows.length ? rows.join('') : `<p class="na">${esc(tx('Aucune mise à jour proposée : elles viennent des lignes de liste cochées et des formulaires validés de ce job.'))}</p>`}
     ${pend ? `<div class="sdbar"><button type="button" class="primary" data-tf="gapply">${esc(tx('Enregistrer dans le Garage'))}</button><small class="na">${esc(tx('Rien n’est écrit dans le Garage sans cette confirmation.'))}</small></div>` : ''}${tf.gmsg ? `<p class="neg">${esc(tf.gmsg)}</p>` : ''}</div>`;
 }
 const tfClose = () => { tf.job = null; tf.edit = null; tf.msg = null; tsDraw(); };
@@ -161,6 +170,12 @@ document.addEventListener('click', async ev => {
     if (a === 'val') { const f = await rsCall(`/api/timesheets/forms/${encodeURIComponent(id)}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}); tf.forms = tf.forms.map(x => x.id === f.id ? f : x); return tsDraw(); }
     if (a === 'del') { if (!confirm(tx('Supprimer ce formulaire ?'))) return; await rsCall(`/api/timesheets/forms/${encodeURIComponent(id)}`, {method: 'DELETE'}); tf.forms = tf.forms.filter(x => x.id !== id); return tsDraw(); }
     if (a === 'garage') return tfGoGarage(b.dataset.k);
+    if (a === 'gadd') {
+      const items = b.dataset.all ? tf.garage.due.maint.filter(m => !m.added).map(m => ({part_id: m.part_id, type: m.type})) : [{part_id: b.dataset.p, type: b.dataset.t}];
+      tf.gmsg = null; const r = await rsCall(`/api/timesheets/jobs/${encodeURIComponent(tf.job)}/garage/add-lines`, {method: 'POST', body: JSON.stringify({items})});
+      tfSetGarage(r); const bad = r.results.filter(x => !x.ok); if (bad.length) tf.gmsg = bad.map(x => x.error).join(' · ');
+      await tsLoad(tsPage()); return;
+    }
     if (a === 'gapply' || a === 'gignore' || a === 'grestore') {
       const base = `/api/timesheets/jobs/${encodeURIComponent(tf.job)}/garage`; tf.gmsg = null;
       if (a === 'gapply') {

@@ -216,9 +216,9 @@ def print_page(f: dict, job: dict, lang: str = "fr") -> str:
     h = f["data"]["header"]
     T = (lambda fr, eng: eng if en else fr)
     state = {"ok": T("OK pour la prochaine course", "OK for the next event"), "replace": T("À REMPLACER", "REPLACE"), None: "—"}[c["state"]]
-    head = [(T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
-            (T("Date", "Date"), h.get("date", "")), (T("Mécanicien", "Mechanic"), h.get("mechanic", "")), (T("Mécanisme", "Mechanism"), h.get("mechanism", "")),
-            (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
+    head = [(T("Date", "Date"), h.get("date", "")), (T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
+            (T("Mécanicien", "Mechanic"), h.get("mechanic", "")), (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("Mécanisme", "Mechanism"), h.get("mechanism", "")),
+            (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
     parts = []
     for disc in spec["discs"]:
         rows = f["data"]["discs"][disc["id"]]

@@ -565,6 +565,18 @@ def validate_entry(eid: str, validated: bool, user: str, r: dict) -> dict:
     return e
 
 
+def set_client_hidden(eid: str, hidden: bool, user: str, r: dict) -> dict:
+    """Masque (ou réaffiche) le texte d'un pointage dans l'espace client ; réservé au chef d'atelier."""
+    e = entries().get(eid)
+    if not e:
+        raise KeyError(eid)
+    if not chef_for(r, jobs().get(e["job_id"])):
+        raise PermissionError("Réservé au chef d'atelier")
+    e["client_hidden"] = bool(hidden)
+    entries().put(eid, e)
+    return e
+
+
 def reject_entry(eid: str, reason: str, user: str, r: dict) -> dict:
     """Renvoie le pointage au mécanicien (« Info requise ») avec un motif obligatoire ; il le corrige puis le renvoie, sans limite de 24 h."""
     e = entries().get(eid)

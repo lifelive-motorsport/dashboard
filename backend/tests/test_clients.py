@@ -184,3 +184,33 @@ def test_similar_car_names_never_leak_jobs_between_clients(env):
     make_client(env, [m3, p992])
     c, _ = login(env)
     assert c.get(f"/api/client/cars/{m3}/jobs").json()["jobs"] == []                                    # nom proche mais pas identique : rien
+
+
+
+def test_hidden_text_and_super_user_preview(env, monkeypatch):
+    k = keys(env)
+    m3 = k["BMW M3 E30"]
+    rides.cars_coll().put(m3, {"id": m3, "odoo_id": 77})
+    j = timesheets.create_job(timesheets.JobIn(kind="atelier", nature="custom", bu="CARS", vehicle=timesheets.VehicleRef(id="77", name="BMW M3"), title="Révision"), "chef@lifelive-motorsport.com")
+    timesheets.entries().put("e1", {"id": "e1", "job_id": j["id"], "user": "julien@lifelive-motorsport.com", "date": "2026-06-02", "minutes": 60, "assignment": "prepa", "system": "moteur",
+                                    "created_at": "2026-06-02T10:00:00+00:00", "text": "Texte sensible", "validated": True, "attachments": []})
+    cid = make_client(env, [m3]).json()["id"]
+    c, _ = login(env)
+    ent = lambda cl: cl.get(f"/api/client/cars/{m3}/jobs").json()["jobs"][0]["entries"][0]
+    assert ent(c)["text"] == "Texte sensible" and not ent(c)["text_hidden"]
+    assert env.post("/api/timesheets/entries/e1/client-visibility?hidden=true").status_code == 200
+    assert ent(c)["text"] == "" and ent(c)["text_hidden"] is True and "Texte sensible" not in c.get(f"/api/client/cars/{m3}/jobs").text
+    assert env.post("/api/timesheets/entries/e1/client-visibility?hidden=false").status_code == 200 and ent(c)["text"] == "Texte sensible"
+    # aperçu : réservé au Super User, session d'aperçu lecture seule sans adresse
+    assert env.post("/api/admin/clients/inconnu/preview").status_code == 404
+    pv = TestClient(app)
+    r = env.post(f"/api/admin/clients/{cid}/preview")
+    assert r.status_code == 200
+    pv.cookies.set(clients.COOKIE, r.cookies.get(clients.COOKIE))
+    me = pv.get("/api/client/me").json()
+    assert me["preview"] is True and me["email"] == "" and me["cars"][0]["name"] == "BMW M3 E30"
+    assert pv.get(f"/api/client/cars/{m3}/jobs").status_code == 200
+    # le cookie d'aperçu ne s'obtient pas sans être Super User, et un client ordinaire n'a pas d'aperçu
+    monkeypatch.setattr(users, "is_super", lambda e: False)
+    assert TestClient(app).post(f"/api/admin/clients/{cid}/preview").status_code in (401, 403)
+    assert c.get("/api/client/me").json()["preview"] is False

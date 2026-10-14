@@ -51,11 +51,12 @@ function tsEntryHtml(e, mine) {
   const acts = e.can_edit ? `<button type="button" data-ts="edit" data-id="${e.id}">${e.status === 'returned' ? 'Corriger' : 'Modifier'}</button><button type="button" class="danger" data-ts="del" data-id="${e.id}">Supprimer</button>` : '';
   const chef = ts.me.role === 'chef' && !mine;
   const val = chef ? (e.validated ? `<button type="button" data-ts="val" data-id="${e.id}" data-v="0">Annuler la validation</button>` : `<button type="button" class="okbtn" data-ts="val" data-id="${e.id}" data-v="1"${hold}>${coarse ? 'Maintenir pour valider' : 'Valider'}</button>${e.status === 'returned' ? '' : `<button type="button" data-ts="rej" data-id="${e.id}">Renvoyer</button>`}`) : '';
+  const hide = chef && e.text ? `<button type="button" data-ts="hide" data-id="${e.id}" data-v="${e.client_hidden ? 0 : 1}" title="Texte visible ou non dans l’espace client">${e.client_hidden ? '👁 Afficher au client' : '🚫 Masquer pour le client'}</button>` : '';
   const th = e.thread || [], last = th.length ? th[th.length - 1] : null;
   const note = e.status === 'returned' && e.return_reason ? `<div class="ts-reason"><b>Motif :</b> ${esc(e.return_reason)}</div>` : (e.status === 'adjusted' || e.status === 'sent') && last && last.kind !== 'reject' ? `<div class="ts-reason soft">${esc(last.by)} : ${esc(last.text)}</div>` : '';
   const done = e.job_done ? '<span class="ts-tag">Job terminé</span>' : '';
   return `<div class="ts-entry"><div class="ts-top"><b>${esc(e.job.title)}</b>${e.job.billable ? '<span class="ts-tag">Facturable</span>' : ''}${done}<span class="ts-min">${tsDur(e.minutes)}</span></div>
-    <div class="ts-sub">${[a && (e.job.assignment || e.assignment) !== 'autre' ? a : '', sy && e.system !== 'autre' ? sy : ''].filter(Boolean).map(esc).join(' · ')}${e.text ? ' — ' + esc(e.text) : ''}</div>${note}${tsLinesHtml(e)}${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}</div></div>`;
+    <div class="ts-sub">${[a && (e.job.assignment || e.assignment) !== 'autre' ? a : '', sy && e.system !== 'autre' ? sy : ''].filter(Boolean).map(esc).join(' · ')}${e.text ? ' — ' + esc(e.text) : ''}${e.client_hidden && e.text ? ' <span class="ts-n">🚫 masqué au client</span>' : ''}</div>${note}${tsLinesHtml(e)}${att ? `<div class="ts-att">${att}</div>` : ''}<div class="ts-act">${lock}${acts}${val}${hide}</div></div>`;
 }
 
 function tsLinesHtml(e) {
@@ -311,6 +312,7 @@ document.addEventListener('click', async ev => {
   if (a === 'jd') { tsReadForm(); ts.form.job_done = b.dataset.v === '1'; return tsDraw(); }
   if (a === 'rej') { const why = await tsAsk(t('Renvoyer le pointage'), t('Motif (obligatoire) : ce que le mécanicien doit corriger'), t('Renvoyer')); if (!why) return; return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/reject`, {method: 'POST', body: JSON.stringify({reason: why})})); }
   if ((a === 'val' || a === 'valall') && b.hasAttribute('data-hold') && !b._held) { ts.msg = 'Maintenez le bouton enfoncé pour valider.'; return tsDraw(); }
+  if (a === 'hide') return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/client-visibility?hidden=${b.dataset.v === '1'}`, {method: 'POST'}));
   if (a === 'val') return tsDo(() => rsCall(`/api/timesheets/entries/${b.dataset.id}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}));
   if (a === 'valall') { const r = ts.team.rows.find(x => x.user === b.dataset.u); return tsDo(async () => { for (const e of r.entries.filter(x => !x.validated)) await rsCall(`/api/timesheets/entries/${e.id}/validate?validated=true`, {method: 'POST'}); }); }
   if (['dur', 'step', 'day'].includes(a)) {

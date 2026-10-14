@@ -48,7 +48,7 @@ function jobsHtml(c) {
   const ph = (e, id) => `/api/client/cars/${encodeURIComponent(c.key)}/entries/${encodeURIComponent(e.id)}/photos/${encodeURIComponent(id)}`;
   return cl.jobs.map(j => `<section class="rn-card"><div class="rn-head"><div><b>${esc(j.title)}</b> <span class="rd-chip ${j.open ? 'warn' : 'pos'}">${esc(tx(j.open ? 'En cours' : 'Terminé'))}</span>${j.nature ? ` <span class="rd-chip">${esc(j.nature)}</span>` : ''}<br><small class="na">${j.event ? esc(j.event) + ' · ' : ''}${esc(tx('ouvert le'))} ${fmtD(j.created)}${j.minutes ? ' · ' + esc(tx('temps passé')) + ' ' + fmtMin(j.minutes) : ''}${j.progress ? ` · ${j.progress.done} / ${j.progress.total} ${esc(tx('points de contrôle'))}` : ''}</small></div></div>
     ${j.checklist.length ? `<details class="cl-check"><summary>${esc(tx('Liste de contrôle'))}</summary>${j.checklist.map(s => `<h5>${esc(s.title)}</h5><ul class="cl-lines">${s.lines.map(l => `<li class="${l.done ? 'done' : ''}">${l.done ? '☑' : '☐'} ${esc(l.text)}${l.done && l.done_at ? ` <small class="na">${fmtD(l.done_at)}</small>` : ''}</li>`).join('')}</ul>`).join('')}</details>` : ''}
-    ${j.entries.length ? `<div class="cl-entries">${j.entries.map(e => `<div class="cl-entry"><div class="cl-edate"><b>${fmtD(e.date)}</b><small class="na">${fmtMin(e.minutes)}</small></div><div class="cl-ebody">${e.system || e.assignment ? `<small class="na">${esc([e.assignment, e.system].filter(Boolean).join(' · '))}</small><br>` : ''}${e.text ? `<span class="cl-etext">${esc(e.text)}</span>` : ''}${e.lines.length ? `<ul class="cl-lines">${e.lines.map(l => `<li>☑ ${esc(l)}</li>`).join('')}</ul>` : ''}
+    ${j.entries.length ? `<div class="cl-entries">${j.entries.map(e => `<div class="cl-entry"><div class="cl-edate"><b>${fmtD(e.date)}</b><small class="na">${fmtMin(e.minutes)}</small></div><div class="cl-ebody">${e.system || e.assignment ? `<small class="na">${esc([e.assignment, e.system].filter(Boolean).join(' · '))}</small><br>` : ''}${e.text ? `<span class="cl-etext">${esc(e.text)}</span>` : e.text_hidden ? `<small class="na">${esc(tx('Détail non communiqué'))}</small>` : ''}${e.lines.length ? `<ul class="cl-lines">${e.lines.map(l => `<li>☑ ${esc(l)}</li>`).join('')}</ul>` : ''}
       ${e.photos.length ? `<div class="cl-photos">${e.photos.map(p => `<button type="button" class="rd-fthumb cl-ph" data-cl="preview" data-u="${ph(e, p.id)}" data-n="${esc(p.name || '')}" data-pdf="0"><img src="${ph(e, p.id)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}</div></div>`).join('')}</div>` : `<p class="na">${esc(tx('Aucune intervention validée pour le moment.'))}</p>`}</section>`).join('');
 }
 function carHtml() {
@@ -63,7 +63,8 @@ function carHtml() {
 }
 function draw() {
   const el = $c('cl'); if (!el) return;
-  $c('cl-out').hidden = !cl.me;
+  $c('cl-out').hidden = !cl.me || !!cl.me.preview;
+  const pv = $c('cl-prev'); if (pv) pv.hidden = !(cl.me && cl.me.preview);
   el.innerHTML = !cl.me ? loginHtml() : carHash() ? carHtml() : homeHtml();
 }
 async function route() {
@@ -86,13 +87,14 @@ function lightbox(u, name, pdf) {
 
 // ---- Événements ---------------------------------------------------------------------------------------------------------------------------
 document.addEventListener('click', async e => {
-  const b = e.target.closest && e.target.closest('[data-cl],#cl-send,#cl-out,.cl-back'); if (!b) { const lb = $c('cl-lb'); if (lb && e.target === lb) lb.remove(); return; }
+  const b = e.target.closest && e.target.closest('[data-cl],#cl-send,#cl-out,#cl-prevout,.cl-back'); if (!b) { const lb = $c('cl-lb'); if (lb && e.target === lb) lb.remove(); return; }
   if (b.id === 'cl-send') {
     cl.email = ($c('cl-email').value || '').trim(); cl.err = null; if (!cl.email) return;
     cl.busy = true; draw();
     try { await api('/api/client/request-link', {method: 'POST', body: JSON.stringify({email: cl.email})}); cl.sent = true; } catch (err) { cl.err = err.message; }
     cl.busy = false; return draw();
   }
+  if (b.id === 'cl-prevout') { try { await api('/api/client/logout', {method: 'POST', body: '{}'}); } catch {} window.close(); location.href = '/'; return; }
   if (b.id === 'cl-out') { try { await api('/api/client/logout', {method: 'POST', body: '{}'}); } catch {} cl.me = cl.car = cl.jobs = null; cl.sent = false; location.hash = ''; return draw(); }
   if (b.classList.contains('cl-back')) { e.preventDefault(); location.hash = ''; return; }
   const a = b.dataset.cl;

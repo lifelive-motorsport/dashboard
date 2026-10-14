@@ -922,6 +922,15 @@ class SendLinkIn(BaseModel):
     email: str
 
 
+@app.post("/api/admin/clients/{cid}/preview")
+def adm_client_preview(cid: str, request: Request, response: Response, user: str = Depends(super_user)):
+    """« Voir comme ce client » : cookie d'aperçu de 2 h, lecture seule comme pour un client."""
+    value = _rd(clients.start_preview, cid, user)
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(clients.COOKIE, value, max_age=clients.PREVIEW_HOURS * 3600, httponly=True, secure=secure, samesite="strict", path="/")
+    return {"ok": True}
+
+
 @app.post("/api/admin/clients/{cid}/send-link")
 def adm_client_link(cid: str, body: SendLinkIn, _user: str = Depends(super_user)):
     c = clients.clients_coll().get(cid)
@@ -1461,6 +1470,17 @@ def ts_delete_entry(eid: str, user: str = Depends(require_user)):
     except Exception as ex:
         _ts_err(ex)
     return {"deleted": eid}
+
+
+@app.post("/api/timesheets/entries/{eid}/client-visibility")
+def ts_client_visibility(eid: str, hidden: bool = True, user: str = Depends(require_user)):
+    """Chef d'atelier : masque ou réaffiche le texte d'un pointage dans l'espace client."""
+    r = _ts_ctx(user)
+    try:
+        e = timesheets.set_client_hidden(eid, hidden, user, r)
+    except Exception as ex:
+        _ts_err(ex)
+    return timesheets.entry_view(timesheets.public_attachments(e), user, r, {j["id"]: j for j in timesheets.jobs().all()})
 
 
 @app.post("/api/timesheets/entries/{eid}/validate")

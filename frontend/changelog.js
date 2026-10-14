@@ -2,6 +2,7 @@
 const CHANGELOG = [
   {date: 'Octobre 2026', title: 'Accès clients', tag: 'Administrer', items: [
     'Administrer › Accès clients : on crée un client avec ses adresses e-mail et ses voitures du Garage ; il se connecte par un lien reçu par e-mail (valable 15 minutes, à usage unique).',
+    'Accès clients : « 👁 Voir comme ce client » ouvre son espace en aperçu (2 h, lecture seule) ; dans Pointages, le chef d’atelier peut « Masquer pour le client » le texte d’une intervention.',
     'Le client consulte, en lecture seule, ses voitures, leurs documents et roulages, et les jobs avec leurs pointages validés (sans nom de mécanicien ni coût) ; journal des connexions pour le Super User.']},
   {date: 'Octobre 2026', title: 'Opérer : Garage, Magasin de pièces et Roulages', tag: 'Opérer', items: [
     'Garage : fiche de chaque voiture (photo, BU, compte Odoo, identité : châssis, moteur, boîte, livrée, n° de course), pièces avec compteurs calculés depuis les roulages et alertes aux seuils.',

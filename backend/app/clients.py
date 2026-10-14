@@ -120,8 +120,15 @@ def delete_client(cid: str) -> None:
     clients_coll().delete(cid)
 
 
+PREVIEW = "preview:"
+PREVIEW_HOURS = 2
+
+
 def clients_of(email: str) -> list[dict]:
     e = (email or "").strip().lower()
+    if e.startswith(PREVIEW):                                        # aperçu du Super User : « voir comme ce client » (aucune adresse réelle)
+        c = clients_coll().get(e[len(PREVIEW):])
+        return [c] if c else []
     return [c for c in clients_coll().all() if c.get("active", True) and e in c.get("emails", [])]
 
 
@@ -181,7 +188,8 @@ def _mac(body: str) -> str:
 
 def make_session(email: str, t: float | None = None) -> str:
     t = int(t or time.time())
-    body = base64.urlsafe_b64encode(json.dumps({"t": "client", "e": email, "exp": t + SESSION_DAYS * 86400}, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    life = PREVIEW_HOURS * 3600 if email.startswith(PREVIEW) else SESSION_DAYS * 86400
+    body = base64.urlsafe_b64encode(json.dumps({"t": "client", "e": email, "exp": t + life}, separators=(",", ":")).encode()).rstrip(b"=").decode()
     return f"{body}.{_mac(body)}"
 
 
@@ -220,12 +228,13 @@ def own(email: str, key: str) -> None:
 
 def me(email: str) -> dict:
     cs = clients_of(email)
+    preview = email.startswith(PREVIEW)
     cars = []
     for k in car_keys(email):
         c = rides.car_of(k)
         meta = rides.cars_coll().get(k) or {}
         cars.append({"key": k, "name": c["name"], "category": c["category"], "photo": bool(meta.get("photo")), "race_number": meta.get("race_number", ""), "livery": meta.get("livery", "")})
-    return {"email": email, "clients": [{"id": c["id"], "name": c["name"]} for c in cs], "cars": sorted(cars, key=lambda c: c["name"].lower())}
+    return {"email": "" if preview else email, "preview": preview, "clients": [{"id": c["id"], "name": c["name"]} for c in cs], "cars": sorted(cars, key=lambda c: c["name"].lower())}
 
 
 def car_view(email: str, key: str) -> dict:
@@ -269,7 +278,7 @@ def jobs_of_car(email: str, key: str) -> list[dict]:
         lines = {ln["id"]: ln["text"] for s in (j.get("checklist") or {}).get("sections", []) for ln in s["lines"]}
         ents = []
         for e in sorted(ents_by_job.get(j["id"], []), key=lambda e: (e["date"], e.get("created_at", ""))):
-            ents.append({"id": e["id"], "date": e["date"], "minutes": e["minutes"], "system": sysl.get(e.get("system"), ""), "assignment": asl.get(e.get("assignment"), ""), "text": e.get("text", ""),
+            ents.append({"id": e["id"], "date": e["date"], "minutes": e["minutes"], "system": sysl.get(e.get("system"), ""), "assignment": asl.get(e.get("assignment"), ""), "text": "" if e.get("client_hidden") else e.get("text", ""), "text_hidden": bool(e.get("client_hidden") and e.get("text")),
                          "lines": [lines[i] for i in e.get("lines", []) if i in lines], "photos": [{"id": a["id"], "name": a.get("name", "")} for a in e.get("attachments", []) if a.get("kind") == "photo"]})
         checklist = [{"title": s["title"], "lines": [{"text": ln["text"], "done": bool(ln.get("done")), "done_at": (ln.get("done_at") or "")[:10]} for ln in s["lines"]]} for s in (j.get("checklist") or {}).get("sections", [])]
         out.append({"id": j["id"], "title": j.get("title", ""), "nature": timesheets.N_IDS.get(j.get("nature", ""), ""), "open": bool(j.get("open", True)), "created": (j.get("created_at") or "")[:10],
@@ -290,3 +299,12 @@ def entry_photo(email: str, key: str, eid: str, aid: str) -> tuple[bytes, str]:
     if not got:
         raise LookupError("Photo introuvable")
     return got[0], got[1]
+
+
+def start_preview(cid: str, user: str) -> str:
+    """Cookie d'aperçu (2 h) : le Super User voit exactement l'espace de ce client, même désactivé n'est pas permis (comme pour lui)."""
+    c = clients_coll().get(cid)
+    if not c:
+        raise LookupError("Client introuvable")
+    _log(user.lower(), "preview", c["name"])
+    return make_session(PREVIEW + cid)

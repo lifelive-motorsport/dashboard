@@ -1483,6 +1483,7 @@ def ts_delete_entry(eid: str, user: str = Depends(require_user)):
 class TFormIn(BaseModel):
     type: str = ""
     data: dict = Field(default_factory=dict)
+    part_id: str | None = None                                       # pièce « Embrayage » du Garage liée à la mesure
 
 
 def _tf(fn, *a):
@@ -1503,17 +1504,17 @@ def ts_form_types(user: str = Depends(require_user)):
 @app.get("/api/timesheets/jobs/{jid}/forms")
 def ts_job_forms(jid: str, user: str = Depends(require_user)):
     _ts_ctx(user)
-    return {"forms": _tf(tforms.list_for_job, jid)}
+    return _tf(tforms.list_for_job, jid)
 
 
 @app.post("/api/timesheets/jobs/{jid}/forms")
 def ts_create_form(jid: str, body: TFormIn, user: str = Depends(require_user)):
-    return _tf(tforms.create, jid, body.type, body.data, user, _ts_ctx(user))
+    return _tf(tforms.create, jid, body.type, body.data, body.part_id or "", user, _ts_ctx(user))
 
 
 @app.put("/api/timesheets/forms/{fid}")
 def ts_update_form(fid: str, body: TFormIn, user: str = Depends(require_user)):
-    return _tf(tforms.update, fid, body.data, user, _ts_ctx(user))
+    return _tf(tforms.update, fid, body.data, body.part_id, user, _ts_ctx(user))
 
 
 @app.post("/api/timesheets/forms/{fid}/validate")

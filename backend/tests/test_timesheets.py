@@ -596,3 +596,36 @@ def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
     # un job qui n'est pas d'atelier n'accepte pas de formulaire
     bg = mkjob(api, kind="background", title="Rangement", bu="ALL").json()["id"]
     assert api.post(f"/api/timesheets/jobs/{bg}/forms", json={"type": "clutch4", "data": {}}).status_code == 422
+
+
+def test_clutch_form_links_to_garage_part_and_logs_inspection(api, monkeypatch):
+    from app import rides, tforms
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
+        monkeypatch.setattr(rides, n, None)
+    monkeypatch.setattr(tforms, "_forms", None)
+    car = rides.race_cars()[0]
+    rides.cars_coll().put(car["key"], {"id": car["key"], "odoo_id": 77})
+    ens = rides.add_part(car["key"], rides.PartIn(name="Embrayage", group=True), "t")
+    part = rides.add_part(car["key"], rides.PartIn(name="Embrayage 4 patins", parent_id=ens["id"], types=["inspection"], maint={"inspection": {"limit_events": 1}}, km_start=250), "t")
+    other = rides.add_part(car["key"], rides.PartIn(name="Disque de frein", parent_id=rides.add_part(car["key"], rides.PartIn(name="Freins", group=True), "t")["id"]), "t")
+    jid = mkjob(api, vehicle={"id": "77", "name": "Voiture test"}).json()["id"]
+    lst = api.get(f"/api/timesheets/jobs/{jid}/forms").json()
+    assert lst["car_key"] == car["key"] and [p["id"] for p in lst["parts"]] == [part["id"]]                  # seul l'embrayage est proposé, pas les freins
+    f = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data(km=None)}).json()
+    assert f["part_id"] == part["id"] and f["data"]["header"]["km"] == 250                                    # un seul embrayage : lié d'office, km repris du Garage
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": {}, "part_id": other["id"]}).status_code == 422
+    # validation : un contrôle est enregistré sur la pièce, la réouverture le retire
+    assert api.post(f"/api/timesheets/forms/{f['id']}/validate").json()["garage"]["logged"] is True
+    logs = [l for l in rides.maint_coll().all() if l["part_id"] == part["id"]]
+    assert len(logs) == 1 and logs[0]["type"] == "inspection" and "Mesure d'embrayage" in logs[0]["notes"]
+    assert api.post(f"/api/timesheets/forms/{f['id']}/validate?validated=false").json()["garage"] == {}
+    assert [l for l in rides.maint_coll().all() if l["part_id"] == part["id"]] == []
+    # pièce qui ne suit pas le contrôle : rien d'enregistré, jamais de remplacement automatique
+    p = rides.parts_coll().get(part["id"]); p["types"] = []; rides.parts_coll().put(p["id"], p)
+    g = api.post(f"/api/timesheets/forms/{f['id']}/validate").json()["garage"]
+    assert g["logged"] is False and g["reason"] == "not_tracked"
+    assert rides.parts_coll().get(part["id"]).get("removed_at") is None
+    # sans embrayage encodé : le formulaire fonctionne sans lien
+    jid2 = mkjob(api, title="Révision autre voiture", vehicle={"id": "999", "name": "Inconnue"}).json()["id"]
+    f2 = api.post(f"/api/timesheets/jobs/{jid2}/forms", json={"type": "clutch4", "data": _clutch4_data()}).json()
+    assert f2["part_id"] == "" and api.post(f"/api/timesheets/forms/{f2['id']}/validate").json()["garage"]["reason"] == "no_part"

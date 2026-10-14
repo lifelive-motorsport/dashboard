@@ -9,9 +9,10 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from . import timesheets
+from . import rides, timesheets
 from .timesheets import Coll
 
+CLUTCH_SET = "Embrayage"   # ensemble du Garage dont les pièces peuvent être liées à la mesure
 EP0 = 6.0          # épaisseur d'un disque neuf (mm), d'après l'intitulé des fiches
 MINI = 4.6         # épaisseur minimale (mm), idem
 
@@ -114,6 +115,58 @@ def view(f: dict) -> dict:
     return {**f, "calc": compute(f["type"], f["data"]), "label": FORM_TYPES[f["type"]]["label"]}
 
 
+# ---- Lien avec le Garage : la mesure se rattache à l'embrayage de la voiture (pièce de l'ensemble « Embrayage ») ---------------------------------
+
+def car_key_of(job: dict | None) -> str | None:
+    """Voiture du Garage correspondant au véhicule du job : compte analytique Odoo, à défaut égalité EXACTE du nom (même règle que l'espace client)."""
+    from . import clients
+    for c in rides.race_cars():
+        meta = rides.cars_coll().get(c["key"]) or {}
+        if job and clients._job_matches(job, c["key"], meta, c["name"]):
+            return c["key"]
+    return None
+
+
+def clutch_parts(job: dict | None) -> list[dict]:
+    """Pièces montées de l'ensemble « Embrayage » de la voiture du job, avec leurs kilomètres calculés par le Garage."""
+    key = car_key_of(job)
+    if not key:
+        return []
+    nodes = rides.tree(key, rides._runs_of(key))
+    out: list[dict] = []
+
+    def walk(ns, inside):
+        for n in ns:
+            if n.get("removed_at"):
+                continue
+            here = inside or rides._fold(n["name"]) == rides._fold(CLUTCH_SET)
+            if here and not n.get("group"):
+                out.append({"id": n["id"], "name": n["name"], "km": n.get("km"), "tracks_inspection": "inspection" in rides.types_of(n)})
+            walk(n.get("children", []), here)
+    walk(nodes, False)
+    return out
+
+
+def _part_of(f: dict, job: dict | None) -> dict | None:
+    return next((p for p in clutch_parts(job) if p["id"] == f.get("part_id")), None)
+
+
+def _check_part(part_id: str, job: dict | None) -> str:
+    if not part_id:
+        return ""
+    if not any(p["id"] == part_id for p in clutch_parts(job)):
+        raise ValueError("Cette pièce n'est pas un embrayage monté sur la voiture du job")
+    return part_id
+
+
+def garage_note(f: dict) -> str:
+    c = compute(f["type"], f["data"])
+    spec = FORM_TYPES[f["type"]]
+    bits = [f"{d['label']} {_n(c['discs'][d['id']]['mean'], 'mm')}" for d in spec["discs"] if c["discs"][d["id"]]["mean"] is not None]
+    verdict = {"ok": "OK", "replace": "À remplacer", None: ""}[c["state"]]
+    return ("Mesure d'embrayage : " + " ; ".join(bits) + (f" — {verdict}" if verdict else ""))[:300]
+
+
 # ---- Accès --------------------------------------------------------------------------------------------------------------------------------
 
 def _job(jid: str) -> dict:
@@ -123,12 +176,12 @@ def _job(jid: str) -> dict:
     return j
 
 
-def list_for_job(jid: str) -> list[dict]:
-    _job(jid)
-    return [view(f) for f in sorted(forms().all(), key=lambda f: f["created_at"]) if f["job_id"] == jid]
+def list_for_job(jid: str) -> dict:
+    job = _job(jid)
+    return {"forms": [view(f) for f in sorted(forms().all(), key=lambda f: f["created_at"]) if f["job_id"] == jid], "parts": clutch_parts(job), "car_key": car_key_of(job)}
 
 
-def create(jid: str, ftype: str, data: dict, user: str, r: dict) -> dict:
+def create(jid: str, ftype: str, data: dict, part_id: str, user: str, r: dict) -> dict:
     job = _job(jid)
     if job.get("kind") != "atelier":
         raise ValueError("Les formulaires techniques se rattachent à un job d'atelier")
@@ -138,8 +191,10 @@ def create(jid: str, ftype: str, data: dict, user: str, r: dict) -> dict:
     h["mechanic"] = h["mechanic"] or p.get("name", "")
     h["date"] = h["date"] or date.today().isoformat()
     h["chassis"] = _car_name(job)
+    part_id = _check_part(part_id, job) or (lambda ps: ps[0]["id"] if len(ps) == 1 else "")(clutch_parts(job))        # un seul embrayage sur la voiture : lié d'office
+    _fill_km(spec_data, part_id, job)
     fid = "f-" + uuid.uuid4().hex[:10]
-    doc = {"id": fid, "job_id": jid, "type": ftype, "data": spec_data, "validated": False, "created_by": user.lower(), "created_at": timesheets.now().isoformat(), "updated_at": timesheets.now().isoformat()}
+    doc = {"id": fid, "job_id": jid, "type": ftype, "part_id": part_id, "data": spec_data, "validated": False, "created_by": user.lower(), "created_at": timesheets.now().isoformat(), "updated_at": timesheets.now().isoformat()}
     forms().put(fid, doc)
     return view(doc)
 
@@ -149,6 +204,14 @@ def _car_name(job: dict | None) -> str:
     return ((job or {}).get("vehicle") or {}).get("name", "")[:120]
 
 
+def _fill_km(data: dict, part_id: str, job: dict | None) -> None:
+    """Kilométrage vide : repris de la pièce du Garage (kilomètres calculés depuis son montage)."""
+    if part_id and data["header"].get("km") is None:
+        km = next((p["km"] for p in clutch_parts(job) if p["id"] == part_id), None)
+        if km is not None:
+            data["header"]["km"] = round(km)
+
+
 def _get(fid: str) -> dict:
     f = forms().get(fid)
     if not f:
@@ -156,14 +219,18 @@ def _get(fid: str) -> dict:
     return f
 
 
-def update(fid: str, data: dict, user: str, r: dict) -> dict:
+def update(fid: str, data: dict, part_id: str | None, user: str, r: dict) -> dict:
     f = _get(fid)
     if f.get("validated"):
         raise PermissionError("Formulaire validé : le chef d'atelier doit le rouvrir pour le modifier")
     if f["created_by"] != user.lower() and not timesheets.chef_for(r, timesheets.jobs().get(f["job_id"])):
         raise PermissionError("Seul son auteur ou le chef d'atelier peut le modifier")
     f["data"] = clean(f["type"], data)
-    f["data"]["header"]["chassis"] = _car_name(timesheets.jobs().get(f["job_id"]))
+    job = timesheets.jobs().get(f["job_id"])
+    f["data"]["header"]["chassis"] = _car_name(job)
+    if part_id is not None:
+        f["part_id"] = _check_part(part_id, job)
+    _fill_km(f["data"], f.get("part_id", ""), job)
     f["updated_at"] = timesheets.now().isoformat()
     forms().put(fid, f)
     return view(f)
@@ -173,9 +240,31 @@ def validate(fid: str, validated: bool, user: str, r: dict) -> dict:
     f = _get(fid)
     if not timesheets.chef_for(r, timesheets.jobs().get(f["job_id"])):
         raise PermissionError("Réservé au chef d'atelier")
+    job = timesheets.jobs().get(f["job_id"])
     f.update(validated=bool(validated), validated_by=user.lower() if validated else None, validated_at=timesheets.now().isoformat() if validated else None)
+    f["garage"] = _sync_garage(f, job, bool(validated), user)
     forms().put(fid, f)
     return view(f)
+
+
+def _sync_garage(f: dict, job: dict | None, validated: bool, user: str) -> dict:
+    """Validé : un « Contrôle » est enregistré sur la pièce du Garage (le compteur de contrôle repart de la date de la mesure) ; rouvert : ce contrôle est retiré.
+    Rien n'est jamais remplacé automatiquement : « À remplacer » reste une proposition, le remplacement se fait par ⟳ Remplacer dans le Garage."""
+    mid = (f.get("garage") or {}).get("maint_id")
+    if mid:
+        try:
+            rides.delete_maint(mid)
+        except LookupError:
+            pass
+    if not validated:
+        return {}
+    part = _part_of(f, job)
+    if not part:
+        return {"logged": False, "reason": "no_part"}
+    if not part["tracks_inspection"]:
+        return {"logged": False, "reason": "not_tracked", "part_id": part["id"]}
+    d = rides.log_maint(part["id"], rides.MaintIn(type="inspection", date=date.fromisoformat(f["data"]["header"]["date"]), notes=garage_note(f)), user)
+    return {"logged": True, "maint_id": d["id"], "part_id": part["id"]}
 
 
 def delete(fid: str, user: str, r: dict) -> None:
@@ -185,6 +274,8 @@ def delete(fid: str, user: str, r: dict) -> None:
         raise PermissionError("Formulaire validé")
     if not chef and f["created_by"] != user.lower():
         raise PermissionError("Seul son auteur ou le chef d'atelier peut le supprimer")
+    if (f.get("garage") or {}).get("maint_id"):
+        _sync_garage({**f, "garage": f["garage"]}, timesheets.jobs().get(f["job_id"]), False, user)
     forms().delete(fid)
 
 

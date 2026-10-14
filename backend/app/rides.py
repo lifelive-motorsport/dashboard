@@ -614,7 +614,9 @@ def car_detail(key: str) -> dict:
     from . import vdocs
     keep: dict = {}
     ov = car_overview(c, keep=keep)
-    return {**ov, "docs": vdocs.view(key, meta=keep["meta"], car=c), "tree": keep["nodes"], "alerts_list": keep["alerts"], "runs_list": sorted(keep["runs"], key=lambda r: (r["date"], r["id"]), reverse=True)[:200]}
+    from . import tforms
+    ids = {p["id"] for p in parts_coll().all() if p["vehicle"] == key}
+    return {**ov, "clutch_measures": tforms.measures_by_part(ids), "ep0": tforms.EP0, "mini": tforms.MINI, "docs": vdocs.view(key, meta=keep["meta"], car=c), "tree": keep["nodes"], "alerts_list": keep["alerts"], "runs_list": sorted(keep["runs"], key=lambda r: (r["date"], r["id"]), reverse=True)[:200]}
 
 
 # ---- Pièces -----------------------------------------------------------------------------------------------------------------------------

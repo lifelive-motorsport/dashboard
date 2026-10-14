@@ -629,3 +629,24 @@ def test_clutch_form_links_to_garage_part_and_logs_inspection(api, monkeypatch):
     jid2 = mkjob(api, title="Révision autre voiture", vehicle={"id": "999", "name": "Inconnue"}).json()["id"]
     f2 = api.post(f"/api/timesheets/jobs/{jid2}/forms", json={"type": "clutch4", "data": _clutch4_data()}).json()
     assert f2["part_id"] == "" and api.post(f"/api/timesheets/forms/{f2['id']}/validate").json()["garage"]["reason"] == "no_part"
+
+
+def test_clutch_wear_curve_data_in_garage_sheet(api, monkeypatch):
+    from app import rides, tforms
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
+        monkeypatch.setattr(rides, n, None)
+    monkeypatch.setattr(tforms, "_forms", None)
+    car = rides.race_cars()[0]
+    rides.cars_coll().put(car["key"], {"id": car["key"], "odoo_id": 77})
+    ens = rides.add_part(car["key"], rides.PartIn(name="Embrayage", group=True), "t")
+    part = rides.add_part(car["key"], rides.PartIn(name="Embrayage", parent_id=ens["id"], types=["inspection"], maint={"inspection": {"limit_events": 1}}), "t")
+    jid = mkjob(api, vehicle={"id": "77", "name": "X"}).json()["id"]
+    ids = []
+    for km, th in ((300, 5.8), (800, 5.2)):
+        f = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data(km=km, top=th, bottom=th)}).json()
+        ids.append(f["id"])
+    api.post(f"/api/timesheets/forms/{ids[0]}/validate"); api.post(f"/api/timesheets/forms/{ids[1]}/validate")
+    third = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data(km=900, top=4.0, bottom=4.0)}).json()      # non validée : hors courbe
+    d = rides.car_detail(car["key"])
+    pts = d["clutch_measures"][part["id"]]
+    assert [p["km"] for p in pts] == [300, 800] and pts[1]["discs"]["motor"]["mean"] == 5.2 and d["ep0"] == 6.0 and d["mini"] == 4.6

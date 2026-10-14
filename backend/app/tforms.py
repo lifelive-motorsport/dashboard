@@ -147,6 +147,21 @@ def clutch_parts(job: dict | None) -> list[dict]:
     return out
 
 
+def measures_by_part(part_ids: set[str]) -> dict[str, list[dict]]:
+    """Historique des mesures VALIDÉES liées à des pièces du Garage (courbe d'usure) : [{date, km, state, discs: {id: {label, mean}}}], du plus ancien au plus récent."""
+    out: dict[str, list[dict]] = {}
+    for f in forms().all():
+        if not f.get("validated") or f.get("part_id") not in part_ids:
+            continue
+        c = compute(f["type"], f["data"])
+        labels = {d["id"]: d["label"] for d in FORM_TYPES[f["type"]]["discs"]}
+        out.setdefault(f["part_id"], []).append({"form_id": f["id"], "date": f["data"]["header"].get("date", ""), "km": f["data"]["header"].get("km"), "state": c["state"],
+                                                 "discs": {k: {"label": labels[k], "mean": v["mean"]} for k, v in c["discs"].items() if v["mean"] is not None}})
+    for v in out.values():
+        v.sort(key=lambda m: (m["date"], m["form_id"]))
+    return out
+
+
 def _part_of(f: dict, job: dict | None) -> dict | None:
     return next((p for p in clutch_parts(job) if p["id"] == f.get("part_id")), None)
 

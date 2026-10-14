@@ -506,3 +506,4 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .tf-discs{display:flex;flex-wrap:wrap;gap:18px}.tf-disc h5,.tf-panel h5{margin:6px 0;font-size:14px}.tf-grid{display:grid;grid-template-columns:auto repeat(var(--cols),minmax(64px,90px));gap:6px;align-items:center}.tf-pad{font-size:13px}
 .tf-plates{display:flex;flex-direction:column;gap:8px}.tf-plate{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.tf-plate>b{min-width:110px}.tf-row{display:flex;gap:6px;flex-wrap:wrap}.tf-row .sdin,.tf-grid .sdin{width:72px;text-align:right}
 @media(max-width:700px){.tf-grid .sdin,.tf-row .sdin{width:100%;min-width:60px}.tf-row{display:grid;grid-template-columns:repeat(3,1fr)}}
+.rd-wear{margin:4px 0 10px;max-width:520px;color:var(--text)}.rd-wsvg{width:100%;height:auto;display:block}.rd-wleg{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px}.rd-wleg svg{vertical-align:middle}

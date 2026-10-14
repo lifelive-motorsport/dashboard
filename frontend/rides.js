@@ -81,9 +81,25 @@ function rdNode(n, depth) {
   const pad = `style="padding-left:${depth * 22}px"`;
   const ms = n.group ? '' : (n.meters && n.meters.length) ? n.meters.map(rdMeter).join('') : `<div class="rd-m"><small class="na">${rdKm(n.km)} km · pas de maintenance suivie</small></div>`;
   const hasMaint = (n.types || []).some(t => t !== 'replace');
-  const acts = n.removed_at ? `<small class="na">démontée le ${fmtDate(n.removed_at)}</small>` : `<span class="rd-acts">${hasMaint ? `<button type="button" class="mini" data-rd="maint" data-p="${esc(n.id)}" title="Enregistrer une révision / une vidange">🛠</button>` : ''}${n.group ? '' : `<button type="button" class="mini" data-rd="editpart" data-p="${esc(n.id)}" title="Modifier">✎</button>`}${n.group ? '' : `<button type="button" class="mini" data-rd="replace" data-p="${esc(n.id)}" title="Remplacer (démonter et monter une neuve)">⟳</button>`}<button type="button" class="mini" data-rd="delpart" data-p="${esc(n.id)}" title="Supprimer">🗑</button></span>`;
+  const wearN = ((rd.car || {}).clutch_measures || {})[n.id] || [];
+  const acts = n.removed_at ? `<small class="na">démontée le ${fmtDate(n.removed_at)}</small>` : `<span class="rd-acts">${wearN.length ? `<button type="button" class="mini" data-rd="wear" data-p="${esc(n.id)}" title="${esc(tx('Courbe d’usure'))}" aria-pressed="${(rd.wear || {})[n.id] ? 'true' : 'false'}">📉</button>` : ''}${hasMaint ? `<button type="button" class="mini" data-rd="maint" data-p="${esc(n.id)}" title="Enregistrer une révision / une vidange">🛠</button>` : ''}${n.group ? '' : `<button type="button" class="mini" data-rd="editpart" data-p="${esc(n.id)}" title="Modifier">✎</button>`}${n.group ? '' : `<button type="button" class="mini" data-rd="replace" data-p="${esc(n.id)}" title="Remplacer (démonter et monter une neuve)">⟳</button>`}<button type="button" class="mini" data-rd="delpart" data-p="${esc(n.id)}" title="Supprimer">🗑</button></span>`;
   return `<div class="rd-row ${n.group ? 'grp' : ''} ${n.removed_at ? 'gone' : ''}" ${pad}><span class="rd-name">${hasKids ? `<button type="button" class="rd-fold" data-rd="fold" data-p="${esc(n.id)}" aria-label="${esc(tx(folded ? 'Déplier' : 'Replier'))}">${folded ? '▸' : '▾'}</button>` : n.group ? '▾ ' : ''}${esc(n.name)}${n.reference ? ` <small class="na">${esc(n.reference)}</small>` : ''}${n.serial ? ` <small class="na">${esc(n.serial)}</small>` : ''}${folded ? ` <small class="na">· ${rdCount(n)} ${esc(tx('éléments'))}</small>` : ''}</span>${n.group && !n.removed_at ? rdChip(n.state === 'ok' ? 'none' : n.state) : ''}<span class="rd-ms">${ms}</span>${acts}</div>`
+    + ((rd.wear || {})[n.id] && wearN.length ? `<div class="rd-wear" ${pad}>${rdWearChart(wearN)}</div>` : '')
     + (folded ? '' : n.children.map(c => rdNode(c, depth + 1)).join(''));
+}
+
+// Courbe d'usure d'un embrayage : épaisseur moyenne de chaque disque (mesures validées des formulaires Pointages), neuf et minimale en repère.
+function rdWearChart(pts) {
+  const ep0 = rd.car.ep0, mini = rd.car.mini, W = 460, H = 170, L = 40, R = 12, T = 12, B = 30;
+  const xs = pts.map((p, i) => p.km != null && p.km !== '' ? Number(p.km) : i), x0 = Math.min(...xs), x1 = Math.max(...xs), dx = x1 > x0 ? x1 - x0 : 1;
+  const lo = Math.floor(Math.min(mini, ...pts.flatMap(p => Object.values(p.discs).map(d => d.mean))) * 2 - 1) / 2, hi = Math.ceil(ep0 * 2 + 0.5) / 2, dy = hi - lo;
+  const X = v => L + (xs.length > 1 ? (v - x0) / dx : 0.5) * (W - L - R), Y = v => T + (1 - (v - lo) / dy) * (H - T - B);
+  const ids = [...new Set(pts.flatMap(p => Object.keys(p.discs)))], dash = ['', '5 3', '1.5 3'];
+  const lines = ids.map((id, k) => { const ps = pts.map((p, i) => p.discs[id] ? [X(xs[i]), Y(p.discs[id].mean), p, p.discs[id]] : null).filter(Boolean);
+    return `<polyline fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="${dash[k % 3]}" points="${ps.map(q => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ')}"/>` + ps.map(q => `<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3.5" fill="currentColor"><title>${esc(q[3].label)} · ${fmtDate(q[2].date)} · ${q[3].mean} mm${q[2].km != null ? ' · ' + q[2].km + ' km' : ''}</title></circle>`).join(''); }).join('');
+  const ref = (v, label, dsh) => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="currentColor" stroke-opacity=".45" stroke-dasharray="${dsh}"/><text x="${L - 4}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor">${v}</text><text x="${W - R}" y="${(Y(v) - 3).toFixed(1)}" text-anchor="end" font-size="10" fill="currentColor" opacity=".7">${esc(tx(label))}</text>`;
+  const legend = ids.map((id, k) => `<span><svg width="26" height="8"><line x1="0" x2="26" y1="4" y2="4" stroke="currentColor" stroke-width="2" stroke-dasharray="${dash[k % 3]}"/></svg> ${esc(tx(pts.find(p => p.discs[id]).discs[id].label))}</span>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="rd-wsvg" role="img" aria-label="${esc(tx('Courbe d’usure'))}">${ref(ep0, 'neuf', '2 3')}${ref(mini, 'minimum', '5 3')}${lines}<text x="${L}" y="${H - 8}" font-size="10" fill="currentColor" opacity=".7">${esc(tx(pts.some(p => p.km != null && p.km !== '') ? 'km' : 'mesures'))}${xs.length > 1 ? ` ${Math.round(x0)} → ${Math.round(x1)}` : ''}</text></svg><div class="rd-wleg">${legend}<small class="na">${esc(tx('Épaisseur moyenne (mm) · mesures validées'))}</small></div>`;
 }
 function rdPartForm() {
   const f = rd.form; if (!f) return '';
@@ -273,6 +289,7 @@ document.addEventListener('click', async e => {
   const a = b.dataset.rd, k = rd.car && rd.car.key;
   try {
     if (a === 'open') return rdOpen(b.dataset.k);
+    if (a === 'wear') { rd.wear = rd.wear || {}; rd.wear[b.dataset.p] = !rd.wear[b.dataset.p]; return rdDraw(); }
     if (a === 'fold') { const n = rdFind(b.dataset.p); rd.fold = rd.fold || {}; rd.fold[n.id] = !rdFolded(n, n.parent_id ? 1 : 0); return rdDraw(); }
     if (a === 'foldall') { rdFoldAll(b.dataset.on === '1'); return rdDraw(); }
     if (a === 'preview') return rdLightbox(b.dataset.u, b.dataset.n, b.dataset.pdf === '1');

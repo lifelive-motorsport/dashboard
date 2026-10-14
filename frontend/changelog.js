@@ -4,6 +4,7 @@ const CHANGELOG = [
     'Dans un job d’atelier, bouton « Formulaires » : mesure d’embrayage 4 ou 6 patins (épaisseurs des disques, conicité des plateaux), saisie sur tablette ou téléphone.',
     'Calcul automatique de l’usure, de l’usure aux 1 000 km et du kilométrage restant estimé ; le chef d’atelier valide, puis le formulaire est verrouillé.',
     'Feuille imprimable aux couleurs de Lifelive, à enregistrer en PDF.',
+    'Liée à l’embrayage du Garage : le contrôle s’y enregistre à la validation, avec une courbe d’usure (📉) ; « À remplacer » reste une proposition.',
   ]},
   {date: 'Octobre 2026', title: 'Accès clients', tag: 'Administrer', items: [
     'Administrer › Accès clients : on crée un client avec ses adresses e-mail et ses voitures du Garage ; il se connecte par un lien reçu par e-mail (valable 15 minutes, à usage unique).',

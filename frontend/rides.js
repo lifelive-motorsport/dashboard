@@ -219,7 +219,9 @@ document.addEventListener('input', e => {
 document.addEventListener('change', async e => {
   const t = e.target; if (!document.getElementById('rd-view')) return;
   if (t.dataset.rdId) {                             // identité : enregistrement dès la saisie
-    try { await rsCall('/api/rides/cars/' + encodeURIComponent(rd.car.key), {method: 'PUT', body: JSON.stringify({[t.dataset.rdId]: t.value})}); rd.car[t.dataset.rdId] = t.value.trim(); const k = rd.cars && rd.cars.find(x => x.key === rd.car.key); if (k) k[t.dataset.rdId] = t.value.trim(); } catch (err) { rdErr(err); }
+    const car = rd.car, f = t.dataset.rdId, v = t.value;               // la fiche peut être refermée (← Voitures) pendant l'enregistrement
+    if (!car) return;
+    try { await rsCall('/api/rides/cars/' + encodeURIComponent(car.key), {method: 'PUT', body: JSON.stringify({[f]: v})}); car[f] = v.trim(); const k = rd.cars && rd.cars.find(x => x.key === car.key); if (k) k[f] = v.trim(); } catch (err) { rdErr(err); }
     return;
   }
   if (t.dataset.rdD !== undefined) {                // documents : enregistrement dès la saisie

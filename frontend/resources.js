@@ -95,7 +95,7 @@ function rsDrawVeh() {
   c.innerHTML = '<p class="na">Véhicules lus dans le module « Ressources » de Google Agenda : ils seront réservés comme ressources invitées aux événements. <button type="button" class="mini" data-rs-refresh>↻ Relire depuis Google</button> <small class="na">(la liste est aussi relue toutes les 2 minutes ; Google peut mettre quelques minutes à propager un changement)</small></p>'
     + (cats.length ? `<div class="bu-bar"><div class="bu-filter" role="group" aria-label="Filtrer par catégorie">${pill('all', 'Tous', v.items.length)}${cats.map(k => pill(k.id, k.label, v.items.filter(x => x.category === k.id).length)).join('')}</div></div>` : '')
     + (v.message ? `<p class="${v.items.length ? 'na' : 'neg'}">${esc(v.message)}</p>` : '')
-    + (vitems.length ? table(['Véhicule', 'Catégorie', 'Type', 'Adresse de la ressource', 'Description'], vitems.map(x => `<tr><td class="prod">${esc(x.name)}</td><td>${esc(catLabel(x.category))}</td><td>${esc(x.type || '')}</td><td>${x.email ? esc(x.email) : '<small class="na">—</small>'}</td><td>${esc(x.description || '')}</td></tr>`), 'prodtable') : '');
+    + (vitems.length ? table(['Véhicule', 'Catégorie', 'Type', 'Adresse de la ressource'], vitems.map(x => `<tr><td class="prod">${esc(x.name)}</td><td>${esc(catLabel(x.category))}</td><td>${esc(x.type || '')}</td><td>${x.email ? esc(x.email) : '<small class="na">—</small>'}</td></tr>`), 'prodtable') : '');
 }
 
 async function rsSaveExternals() {

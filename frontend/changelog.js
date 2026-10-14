@@ -1,5 +1,8 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Accès clients', tag: 'Administrer', items: [
+    'Administrer › Accès clients : on crée un client avec ses adresses e-mail et ses voitures du Garage ; il se connecte par un lien reçu par e-mail (valable 15 minutes, à usage unique).',
+    'Le client consulte, en lecture seule, ses voitures, leurs documents et roulages, et les jobs avec leurs pointages validés (sans nom de mécanicien ni coût) ; journal des connexions pour le Super User.']},
   {date: 'Octobre 2026', title: 'Opérer : Garage, Magasin de pièces et Roulages', tag: 'Opérer', items: [
     'Garage : fiche de chaque voiture (photo, BU, compte Odoo, identité : châssis, moteur, boîte, livrée, n° de course), pièces avec compteurs calculés depuis les roulages et alertes aux seuils.',
     'Magasin de pièces : modèles d’architecture (11 ensembles fixes, sous-ensembles, composants) avec, pour chacun, contrôle, vidange, révisions 1 et 2 et remplacement ; modèle de départ Toyota GR Yaris Rally2 ; un modèle s’assigne à une voiture depuis sa fiche.',

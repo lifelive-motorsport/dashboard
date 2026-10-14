@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, feedback, projection, rides, users, vdocs, wall
+from . import access, clients, feedback, projection, rides, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -70,7 +70,7 @@ async def legacy_host_redirect(request, call_next):
 @app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
-    framed = request.url.path.startswith("/api/rides/cars/") and "/docs/" in request.url.path and "/files/" in request.url.path        # aperçu des documents de voiture dans la fiche
+    framed = request.url.path.startswith(("/api/rides/cars/", "/api/client/cars/")) and "/docs/" in request.url.path and "/files/" in request.url.path        # aperçu des documents de voiture dans la fiche
     resp.headers.update({"X-Content-Type-Options": "nosniff", "Referrer-Policy": "same-origin",
                          "X-Frame-Options": "SAMEORIGIN" if framed else "DENY"})
     if request.url.path.startswith("/api/"):
@@ -891,6 +891,146 @@ def home_alerts(user: str = Depends(require_user)):
     """Module « Alertes » de l'accueil : documents de voiture échus ou proches de l'échéance, pour le Super User et le chef d'atelier de la BU."""
     r = vdocs.viewer(user)
     return {"vehicle_docs": vdocs.all_alerts(r) if r else []}
+
+
+# ---- Administrer › Accès clients (Super User) et espace client -------------------------------------------------------------------------------
+
+@app.get("/api/admin/clients")
+def adm_clients(_user: str = Depends(super_user)):
+    return {"clients": clients.list_clients(), "cars": [{"key": c["key"], "name": c["name"], "odoo": bool((rides.cars_coll().get(c["key"]) or {}).get("odoo_id")),
+                                                          "archived": bool((rides.cars_coll().get(c["key"]) or {}).get("archived"))} for c in sorted(rides.race_cars(), key=lambda c: c["name"].lower())],
+            "audit": clients.audit_list()}
+
+
+@app.post("/api/admin/clients")
+def adm_add_client(body: clients.ClientIn, user: str = Depends(super_user)):
+    return _rd(clients.save_client, None, body, user)
+
+
+@app.put("/api/admin/clients/{cid}")
+def adm_update_client(cid: str, body: clients.ClientIn, user: str = Depends(super_user)):
+    return _rd(clients.save_client, cid, body, user)
+
+
+@app.delete("/api/admin/clients/{cid}")
+def adm_delete_client(cid: str, _user: str = Depends(super_user)):
+    _rd(clients.delete_client, cid)
+    return {"ok": True}
+
+
+class SendLinkIn(BaseModel):
+    email: str
+
+
+@app.post("/api/admin/clients/{cid}/send-link")
+def adm_client_link(cid: str, body: SendLinkIn, _user: str = Depends(super_user)):
+    c = clients.clients_coll().get(cid)
+    if not c or body.email.strip().lower() not in c.get("emails", []):
+        raise HTTPException(404, "Adresse inconnue pour ce client")
+    if not c.get("active", True):
+        raise HTTPException(422, "Ce client est désactivé")
+    return {"sent": clients.request_link(body.email)}
+
+
+_client_hits: dict[str, list[float]] = {}
+
+
+def _ip(request: Request) -> str:
+    return (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+
+
+class LinkReq(BaseModel):
+    email: str = Field(max_length=200)
+
+
+class TokenReq(BaseModel):
+    token: str = Field(max_length=200)
+
+
+@app.post("/api/client/request-link")
+def client_request_link(body: LinkReq, request: Request):
+    """Public : demande d'un lien de connexion. Réponse identique que l'adresse existe ou non ; 10 demandes par heure et par adresse IP."""
+    ip, t = _ip(request), time.time()
+    hits = [h for h in _client_hits.get(ip, []) if t - h < 3600]
+    if len(hits) >= 10:
+        raise HTTPException(429, "Trop de demandes : réessayez dans une heure.")
+    _client_hits[ip] = hits + [t]
+    clients.request_link(body.email, ip)
+    return {"ok": True}
+
+
+@app.post("/api/client/verify")
+def client_verify(body: TokenReq, request: Request, response: Response):
+    try:
+        email = clients.consume_token(body.token, _ip(request))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    response.set_cookie(clients.COOKIE, clients.make_session(email), max_age=clients.SESSION_DAYS * 86400, httponly=True, secure=secure, samesite="strict", path="/")
+    return clients.me(email)
+
+
+@app.post("/api/client/logout")
+def client_logout(response: Response):
+    response.delete_cookie(clients.COOKIE, path="/")
+    return {"ok": True}
+
+
+def require_client(request: Request) -> str:
+    email = clients.read_session(request.cookies.get(clients.COOKIE, ""))
+    if not email:
+        raise HTTPException(401, "Connexion requise")
+    return email
+
+
+def _cl(fn, *a):
+    try:
+        return fn(*a)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/client/me")
+def client_me(email: str = Depends(require_client)):
+    return clients.me(email)
+
+
+@app.get("/api/client/cars/{key}")
+def client_car(key: str, email: str = Depends(require_client)):
+    return _cl(clients.car_view, email, key)
+
+
+@app.get("/api/client/cars/{key}/jobs")
+def client_jobs(key: str, email: str = Depends(require_client)):
+    return {"jobs": _cl(clients.jobs_of_car, email, key)}
+
+
+@app.get("/api/client/cars/{key}/photo")
+def client_car_photo(key: str, email: str = Depends(require_client)):
+    _cl(clients.own, email, key)
+    got = rides.get_photo(key)
+    if not got:
+        raise HTTPException(404, "Pas de photo")
+    return RawResponse(got[0], media_type=got[1], headers={"Cache-Control": "private, max-age=300"})
+
+
+@app.get("/api/client/cars/{key}/docs/{item}/files/{fid}")
+def client_doc_file(key: str, item: str, fid: str, email: str = Depends(require_client)):
+    _cl(clients.own, email, key)
+    data, ctype, name = _cl(vdocs.get_file, key, item, fid)
+    return RawResponse(data, media_type=ctype, headers={"Content-Disposition": f'inline; filename="{name}"', "Cache-Control": "private, max-age=300"})
+
+
+@app.get("/api/client/cars/{key}/docs/{item}/files/{fid}/thumb")
+def client_doc_thumb(key: str, item: str, fid: str, email: str = Depends(require_client)):
+    _cl(clients.own, email, key)
+    return RawResponse(_cl(vdocs.thumb, key, item, fid), media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/api/client/cars/{key}/entries/{eid}/photos/{aid}")
+def client_entry_photo(key: str, eid: str, aid: str, email: str = Depends(require_client)):
+    data, ctype = _cl(clients.entry_photo, email, key, eid, aid)
+    return RawResponse(data, media_type=ctype, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.post("/api/cron/vehicle-docs")

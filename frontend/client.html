@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Logbook — Espace client</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<script>try { const th = localStorage.getItem('lm_theme'); if (th === 'light' || th === 'dark') document.documentElement.dataset.theme = th; } catch (e) {}</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="cl-body">
+<header>
+  <h1><a href="#" id="home" aria-label="Logbook" title="Logbook"><svg class="app-icon" width="34" height="34" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="10" fill="#2B2B2B"/><circle cx="13" cy="20" r="2.5" fill="#fff"/><circle cx="13" cy="44" r="2.5" fill="#fff"/><line x1="22" y1="20" x2="50" y2="20" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line x1="22" y1="32" x2="46" y2="32" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="logo-line" x1="22" y1="44" x2="36" y2="44" stroke="#fff" stroke-width="4" stroke-linecap="round"/><g id="logo-line-cars" display="none"><line x1="22" y1="44" x2="27" y2="44" stroke="#6F8FD6" stroke-width="5" stroke-linecap="round"/><line x1="29.5" y1="44" x2="34.5" y2="44" stroke="#009540" stroke-width="5" stroke-linecap="round"/><line x1="37" y1="44" x2="42" y2="44" stroke="#F4BE00" stroke-width="5" stroke-linecap="round"/></g></svg><span class="brand"><span class="brand-name">Logbook</span><img class="logo logo-on-dark" src="brand/LOGO_LIFELIVE_White.svg" alt="LifeLive" width="80" height="10"><img class="logo logo-on-light" src="brand/LOGO_LIFELIVE_Black.svg" alt="LifeLive" width="80" height="10"></span></a></h1>
+  <div class="controls">
+    <div class="lang" role="group" aria-label="Langue / Language"><button type="button" data-lang="fr" aria-pressed="true">FR</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
+    <button id="theme-btn" type="button" title="Affichage clair / sombre" aria-label="Affichage clair / sombre"></button>
+    <button id="cl-out" type="button" hidden>Se déconnecter</button>
+  </div>
+</header>
+<main id="cl" class="cl-wrap"><p class="na loading">Chargement…</p></main>
+<script src="i18n.js"></script>
+<script src="i18n-en.js"></script>
+<script src="theme.js"></script>
+<script src="client.js"></script>
+</body>
+</html>

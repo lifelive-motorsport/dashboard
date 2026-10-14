@@ -1,5 +1,9 @@
 // Roulages (Consigner › Roulages) : kilométrage et temps de roulage des voitures de course et de leurs pièces (remplace RPM).
 // Voitures = véhicules de course de Ressources ; pièces en arborescence (Groupe › Pièce › Sous-pièce) avec limite et seuil d'alerte ; runs = tours × circuit, ou spéciales × passages.
+// Fonctions normalisées des pièces (miroir de rides.FUNCTIONS côté serveur) : relient les jobs aux pièces du Garage ; types de maintenance reliables à une ligne de liste.
+const GARAGE_FN = [['engine', 'Moteur'], ['gearbox', 'Boîte de vitesses'], ['rear_axle', 'Pont arrière'], ['front_axle', 'Pont avant'], ['clutch', 'Embrayage'], ['brakes', 'Freins (circuit hydraulique)'], ['steering', 'Direction'], ['cooling', 'Refroidissement']];
+const GARAGE_MT = [['inspection', 'Contrôle'], ['fluids', 'Vidange et nouveaux fluides'], ['revision', 'Révision 1'], ['revision2', 'Révision 2']];
+const rdFnSelect = (cur, attr) => `<select class="sdin" ${attr}><option value="">—</option>${GARAGE_FN.map(([k, l]) => `<option value="${k}"${cur === k ? ' selected' : ''}>${esc(tx(l))}</option>`).join('')}</select>`;
 const rd = {cars: null, catalog: [], circuits: [], car: null, loading: false, error: null, msg: null, form: null, run: null, repl: null, settings: false, q: '', showRemoved: false, showArchived: false, odoo: null, templates: null, mf: null, cat: null, circ: {name: '', length_km: ''}};
 const rdKm = v => v == null ? '–' : new Intl.NumberFormat(LOCALE(), {maximumFractionDigits: 1}).format(v);
 const rdPct = r => r == null ? '' : Math.round(r * 100) + ' %';
@@ -110,7 +114,7 @@ function rdPartForm() {
   const used = new Set(((rd.car || {}).tree || []).filter(n => !n.removed_at && n.id !== f.id).map(n => n.name));
   const nameField = root ? `<label class="sdfield"><span>Ensemble</span><select class="sdin" data-rd-f="name"><option value="">—</option>${(rd.ensembles || []).map(e => `<option value="${esc(e)}" ${f.name === e ? 'selected' : ''} ${used.has(e) ? 'disabled' : ''}>${esc(e)}</option>`).join('')}${f.name && !(rd.ensembles || []).includes(f.name) ? `<option value="${esc(f.name)}" selected>${esc(f.name)}</option>` : ''}</select></label>` : inp('name', 'Nom', {ph: 'Moteur, Turbo, Boîte…'});
   return `<div class="note rd-form"><b>${f.id ? 'Modifier' : f.parent_id ? 'Ajouter sous « ' + esc(rdFind(f.parent_id).name) + ' »' : 'Ajouter à la voiture'}</b>
-    <div class="sdgrid">${nameField}${root ? '' : inp('reference', 'Référence constructeur', {w: '220px'})}${root ? '' : inp('serial', 'N° de série', {w: '200px'})}</div>
+    <div class="sdgrid">${nameField}${root ? '' : inp('reference', 'Référence constructeur', {w: '220px'})}${root ? '' : inp('serial', 'N° de série', {w: '200px'})}${root || f.group ? '' : `<label class="sdfield"><span>${esc(tx('Fonction (lien avec les jobs)'))}</span>${rdFnSelect(f.fn || '', 'data-rd-f="fn"')}</label>`}</div>
     ${root ? '' : `<label class="chk"><input type="checkbox" data-rd-f="group" ${f.group ? 'checked' : ''} ${f.id ? 'disabled' : ''}> Regroupement : pas de compteur propre, son état est celui de ses éléments</label>`}
     ${f.group ? '' : `<div class="rd-types"><b>Maintenances suivies</b>${RD_MAINT.map(([t, l]) => `<label class="chk"><input type="checkbox" data-rd-ft="${t}" ${f.types.includes(t) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
       ${RD_MAINT.filter(([t]) => f.types.includes(t)).map(([t]) => lim(t)).join("")}
@@ -214,7 +218,7 @@ function rdDraw() {
 // ---- Actions ----------------------------------------------------------------------------------------------------------------------------
 const rdErr = e => { rd.msg = e.message; rdDraw(); };
 function rdPartBody(f) {
-  const o = {name: f.name.trim(), parent_id: f.parent_id || null, group: !!f.group, serial: f.serial || '', reference: f.reference || '', notes: f.notes || ''};
+  const o = {name: f.name.trim(), parent_id: f.parent_id || null, group: !!f.group, serial: f.serial || '', reference: f.reference || '', fn: f.fn || '', notes: f.notes || ''};
   if (!f.group) {
     const L = t => ({limit_km: rdNum(f.lim[t].limit_km), limit_hours: rdNum(f.lim[t].limit_hours), warn_pct: rdNum(f.lim[t].warn_pct) || 75});
     Object.assign(o, {types: f.types, km_start: rdNum(f.km_start) || 0, hours_start: rdNum(f.hours_start) || 0, mounted_from: f.mounted_from || null, maint: {}});
@@ -305,7 +309,7 @@ document.addEventListener('click', async e => {
     if (a === 'delcar') { const c = rd.car; if (!confirm(`Supprimer définitivement « ${c.name} » ?\n\nSes ${c.parts} pièce(s), ses ${c.runs} run(s) et sa photo seront effacés, sans retour possible.${'\n\n'}Le véhicule reste dans Planifier › Ressources : laissez-le archivé s'il y figure encore.`)) return; const j = await rsCall('/api/rides/cars/' + encodeURIComponent(k), {method: 'DELETE'}); rd.car = null; rd.msg = `Données supprimées (${j.parts} pièce(s), ${j.runs} run(s)).`; return rdReload(); }
     if (a === 'back') { rd.car = null; rd.form = rd.run = rd.repl = null; rd.msg = null; rdDraw(); window.scrollTo({top: 0}); rdReload(); return; }          // la liste en mémoire s'affiche tout de suite, elle se rafraîchit en arrière-plan
     if (a === 'editpart') { const n = rdFind(b.dataset.p); const tys = (n.types && n.types.length) ? n.types : (n.limit_km || n.limit_hours) ? ['replace'] : [], mm = n.maint || {}, lm = rdLimOf;
-      rd.form = {id: n.id, parent_id: n.parent_id, name: n.name, group: !!n.group, serial: n.serial || '', reference: n.reference || '', types: tys, lim: {replace: lm(n), revision: lm(mm.revision || {}), revision2: lm(mm.revision2 || {}), fluids: lm(mm.fluids || {}), inspection: lm(mm.inspection || {})}, km_start: n.km_start || '', hours_start: n.hours_start || '', mounted_from: n.mounted_from || '', notes: n.notes || ''}; rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
+      rd.form = {id: n.id, parent_id: n.parent_id, name: n.name, group: !!n.group, serial: n.serial || '', reference: n.reference || '', fn: n.fn || '', types: tys, lim: {replace: lm(n), revision: lm(mm.revision || {}), revision2: lm(mm.revision2 || {}), fluids: lm(mm.fluids || {}), inspection: lm(mm.inspection || {})}, km_start: n.km_start || '', hours_start: n.hours_start || '', mounted_from: n.mounted_from || '', notes: n.notes || ''}; rd.run = rd.repl = rd.mf = null; rd.msg = null; return rdDraw(); }
     if (a === 'savepart') { const f = rd.form, body = rdPartBody(f); await rsCall(f.id ? '/api/rides/parts/' + encodeURIComponent(f.id) : `/api/rides/cars/${encodeURIComponent(k)}/parts`, {method: f.id ? 'PUT' : 'POST', body: JSON.stringify(body)}); rd.form = null; rd.msg = null; return rdReload(); }
     if (a === 'delpart') { const n = rdFind(b.dataset.p); if (!confirm(`Supprimer « ${n.name} »${n.children.length ? ' et ses sous-éléments' : ''} ? Pour une pièce usée, préférez « Remplacer » : elle garde son historique.`)) return; await rsCall('/api/rides/parts/' + encodeURIComponent(n.id), {method: 'DELETE'}); return rdReload(); }
     if (a === 'replace') { rd.repl = {id: b.dataset.p, on: rdToday(), serial: ''}; rd.form = rd.run = null; rd.msg = null; return rdDraw(); }

@@ -704,3 +704,66 @@ def test_setup_request_and_weighing_readings(api, monkeypatch):
     page = api.get(f"/api/timesheets/forms/{f['id']}/print").text
     assert "Porsche 992 Rally" in page and "Centrage en croix" in page and "Poids sous le minimum" in page
     assert "Ohlins 14" in api.get(f"/api/timesheets/forms/{req['id']}/print?lang=en").text
+
+
+def test_garage_proposals_from_checked_lines_and_forms(api, monkeypatch):
+    from app import rides, tforms, tgarage
+    for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
+        monkeypatch.setattr(rides, n, None)
+    monkeypatch.setattr(tforms, "_forms", None)
+    monkeypatch.setattr(tgarage, "_coll", None)
+    car = rides.race_cars()[0]
+    rides.cars_coll().put(car["key"], {"id": car["key"], "odoo_id": 77})
+    ens = rides.add_part(car["key"], rides.PartIn(name="Transmission", group=True), "t")
+    box = rides.add_part(car["key"], rides.PartIn(name="Boîte", parent_id=ens["id"], fn="gearbox", types=["fluids", "revision"], maint={"fluids": {"limit_km": 1000}, "revision": {"limit_km": 3000}}), "t")
+    other = rides.add_part(car["key"], rides.PartIn(name="Pont arrière", parent_id=ens["id"], types=["fluids"], maint={"fluids": {"limit_km": 1000}}), "t")            # sans fonction
+    jid = mkjob(api, vehicle={"id": "77", "name": "X"}).json()["id"]
+    job = timesheets.jobs().get(jid)
+    job["checklist"] = {"template_id": "", "template_name": "T", "sections": [{"id": "s", "title": "Transmission", "lines": [
+        {"id": "l1", "text": "Vidange BV, nettoyage des filtres", "note": "", "done": True, "done_at": "2026-06-02T10:00:00+00:00"},
+        {"id": "l2", "text": "Vidange du pont, nettoyage des filtres", "note": "", "done": True, "done_at": "2026-06-02T11:00:00+00:00"},
+        {"id": "l3", "text": "Contrôle des serrages", "note": "", "done": True, "done_at": "2026-06-02T11:30:00+00:00"},
+        {"id": "l4", "text": "Vidange moteur", "note": "", "done": False}]}]}
+    timesheets.jobs().put(jid, job)
+    # texte libre d'un pointage : rien n'est proposé ; ni pour un mécanicien
+    as_(api, MEC)
+    assert api.get(f"/api/timesheets/jobs/{jid}/garage").status_code == 403
+    as_(api, CHEF)
+    d = api.get(f"/api/timesheets/jobs/{jid}/garage").json()
+    keys = {p["label"]: p for p in d["proposals"]}
+    assert set(keys) == {"Vidange BV, nettoyage des filtres", "Vidange du pont, nettoyage des filtres"}            # ligne non cochée ou sans lien : aucune proposition
+    bv, pont = keys["Vidange BV, nettoyage des filtres"], keys["Vidange du pont, nettoyage des filtres"]
+    assert bv["part_id"] == box["id"] and bv["type"] == "fluids" and bv["date"] == "2026-06-02" and bv["tracked"] is True and pont["part_id"] == ""
+    # le pont n'a pas de fonction : le confirmateur choisit la pièce, le choix est mémorisé
+    r = api.post(f"/api/timesheets/jobs/{jid}/garage/apply", json={"items": [{"key": bv["key"]}, {"key": pont["key"]}]}).json()
+    res = {x["key"]: x for x in r["results"]}
+    assert res[bv["key"]]["ok"] is True and res[pont["key"]]["ok"] is False
+    r = api.post(f"/api/timesheets/jobs/{jid}/garage/apply", json={"items": [{"key": pont["key"], "part_id": other["id"]}]}).json()
+    assert r["results"][0]["ok"] is True
+    logs = {l["part_id"]: l for l in rides.maint_coll().all()}
+    assert logs[box["id"]]["type"] == "fluids" and logs[box["id"]]["date"] == "2026-06-02" and logs[other["id"]]["type"] == "fluids"
+    assert (rides.cars_coll().get(car["key"]) or {}).get("fn_map", {}).get("rear_axle") == other["id"]
+    again = api.post(f"/api/timesheets/jobs/{jid}/garage/apply", json={"items": [{"key": bv["key"]}]}).json()
+    assert again["results"][0].get("already") is True and len(rides.maint_coll().all()) == 2                              # une ligne = une seule maintenance
+    # annulation : la maintenance disparaît de la pièce
+    api.post(f"/api/timesheets/jobs/{jid}/garage/restore", json={"key": bv["key"]})
+    assert len(rides.maint_coll().all()) == 1 and [p for p in api.get(f"/api/timesheets/jobs/{jid}/garage").json()["proposals"] if p["key"] == bv["key"]][0]["status"] == "pending"
+    # pièce qui ne suit pas ce type : erreur claire, rien d'écrit ; ignorer une proposition
+    gb = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "gearbox_m3", "data": {"header": {"date": "2026-06-03"}}}).json()
+    api.post(f"/api/timesheets/forms/{gb['id']}/validate")
+    prop = [p for p in api.get(f"/api/timesheets/jobs/{jid}/garage").json()["proposals"] if p["source"] == "form"][0]
+    assert prop["type"] == "revision" and prop["part_id"] == box["id"]
+    assert api.post(f"/api/timesheets/jobs/{jid}/garage/ignore", json={"key": prop["key"]}).status_code == 200
+    assert [p for p in api.get(f"/api/timesheets/jobs/{jid}/garage").json()["proposals"] if p["key"] == prop["key"]][0]["status"] == "ignored"
+
+
+def test_coordinator_role_confirms_garage_but_does_not_validate(api):
+    cur = staff.store().get()
+    people = cur["data"]["people"] + [{"id": "k1", "name": "Ingrid Coord", "kind": "salarie", "function": "Engineer", "workshop": "coordinator", "google_email": "ingrid@lifelive-motorsport.com"}]
+    assert staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"]) is not None
+    jid = mkjob(api, vehicle={"id": "77", "name": "X"}).json()["id"]
+    as_(api, "ingrid@lifelive-motorsport.com")
+    assert api.get("/api/timesheets/me").json()["role"] == "coordinator"
+    assert api.get(f"/api/timesheets/jobs/{jid}/garage").status_code == 200
+    assert api.get("/api/timesheets/jobs?all=true").status_code == 200
+    assert api.post("/api/timesheets/jobs", json={"kind": "background", "title": "Z", "bu": "ALL"}).status_code == 403            # ne gère pas les jobs

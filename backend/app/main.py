@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, clients, feedback, projection, rides, tforms, users, vdocs, wall
+from . import access, clients, feedback, projection, rides, tforms, tgarage, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -1226,7 +1226,7 @@ def ts_me(user: str = Depends(require_user)):
 @app.get("/api/timesheets/jobs")
 def ts_jobs(all: bool = False, user: str = Depends(require_user)):
     r = _ts_ctx(user)
-    return {"jobs": timesheets.list_jobs(open_only=not (all and r["role"] == "chef")), "recent": timesheets.recent_job_ids(user)}
+    return {"jobs": timesheets.list_jobs(open_only=not (all and r["role"] in ("chef", "coordinator"))), "recent": timesheets.recent_job_ids(user)}
 
 
 @app.post("/api/timesheets/jobs")
@@ -1493,6 +1493,52 @@ def _tf(fn, *a):
         raise HTTPException(403, str(e))
     except (LookupError, ValueError) as e:
         raise HTTPException(404 if isinstance(e, LookupError) else 422, str(e))
+
+
+# ---- Mises à jour du Garage proposées par un job (lignes cochées, formulaires validés) --------------------------------------------------------
+
+class GarageApply(BaseModel):
+    items: list[dict] = Field(default_factory=list, max_length=60)
+
+
+class GarageKey(BaseModel):
+    key: str = Field(max_length=120)
+
+
+def _garage_ctx(jid: str, user: str) -> tuple[dict, dict]:
+    r = _ts_ctx(user)
+    job = timesheets.jobs().get(jid)
+    if not job:
+        raise HTTPException(404, "Job introuvable")
+    if not tgarage.can_confirm(r, job):
+        raise HTTPException(403, "Réservé au chef d'atelier, à l'ingénieur / coordinateur et au Super User")
+    return r, job
+
+
+@app.get("/api/timesheets/jobs/{jid}/garage")
+def ts_garage(jid: str, user: str = Depends(require_user)):
+    _, job = _garage_ctx(jid, user)
+    return {**tgarage.proposals(job), "functions": rides.FUNCTIONS}
+
+
+@app.post("/api/timesheets/jobs/{jid}/garage/apply")
+def ts_garage_apply(jid: str, body: GarageApply, user: str = Depends(require_user)):
+    _, job = _garage_ctx(jid, user)
+    return {"results": tgarage.apply(job, body.items, user), **tgarage.proposals(job)}
+
+
+@app.post("/api/timesheets/jobs/{jid}/garage/ignore")
+def ts_garage_ignore(jid: str, body: GarageKey, user: str = Depends(require_user)):
+    _, job = _garage_ctx(jid, user)
+    _tf(tgarage.ignore, job, body.key, user)
+    return tgarage.proposals(job)
+
+
+@app.post("/api/timesheets/jobs/{jid}/garage/restore")
+def ts_garage_restore(jid: str, body: GarageKey, user: str = Depends(require_user)):
+    _, job = _garage_ctx(jid, user)
+    _tf(tgarage.restore, job, body.key)
+    return tgarage.proposals(job)
 
 
 @app.get("/api/timesheets/form-types")

@@ -5,7 +5,7 @@ const PS_MAINT = RD_MAINT;
 const psId = () => 'n' + Math.random().toString(36).slice(2, 9);
 const psNum = v => v === '' || v == null ? null : parseFloat(String(v).replace(',', '.'));
 const psLim = (l = {}) => rdLimOf(l);
-const psMkNode = (parent, group) => ({id: psId(), parent_id: parent, name: '', reference: '', group, types: group ? [] : ['replace'], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim()]))});
+const psMkNode = (parent, group) => ({id: psId(), parent_id: parent, name: '', reference: '', fn: '', group, types: group ? [] : ['replace'], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim()]))});
 const psBlank = () => ({id: null, name: '', description: '', nodes: []});
 
 function partsBlocks() { return [{static: '<section class="block" data-bid="ps"><div id="ps-view"><p class="na loading">Chargement…</p></div></section>'}]; }
@@ -29,7 +29,7 @@ function psNodeHtml(t, n, depth) {
     + PS_MAINT.filter(([k]) => n.types.includes(k)).map(([k]) => rdLimRow(k, n[k], f => `data-ps-l="${esc(n.id)}" data-k="${k}" data-f="${f}"`)).join('');
   const used = new Set(t.nodes.filter(x => !x.parent_id && x.id !== n.id).map(x => x.name));
   const nameCtl = !n.parent_id ? `<select class="sdin ps-name" data-ps-n="${esc(n.id)}"><option value="">${esc(tx('Choisir un ensemble…'))}</option>${ps.ensembles.map(e => `<option value="${esc(e)}" ${n.name === e ? 'selected' : ''} ${used.has(e) ? 'disabled' : ''}>${esc(e)}</option>`).join('')}</select>`
-    : `<input class="sdin ps-name" data-ps-n="${esc(n.id)}" value="${esc(n.name)}" placeholder="${depth === 2 ? 'Moteur, Turbo, Boîte…' : 'Filtre, Bougies…'}"><input class="sdin ps-ref" data-ps-r="${esc(n.id)}" value="${esc(n.reference || '')}" placeholder="${esc(tx('Référence constructeur'))}" maxlength="60">`;
+    : `<input class="sdin ps-name" data-ps-n="${esc(n.id)}" value="${esc(n.name)}" placeholder="${depth === 2 ? 'Moteur, Turbo, Boîte…' : 'Filtre, Bougies…'}"><input class="sdin ps-ref" data-ps-r="${esc(n.id)}" value="${esc(n.reference || '')}" placeholder="${esc(tx('Référence constructeur'))}" maxlength="60">${n.group ? '' : `<span class="ps-fn" title="${esc(tx('Fonction (lien avec les jobs)'))}">${rdFnSelect(n.fn || '', `data-ps-fn="${esc(n.id)}"`)}</span>`}`;
   return `<div class="ps-node ${n.group ? 'grp' : ''}" ${pad}><div class="sdbar"><small class="na ps-kind">${lbl}</small>${nameCtl}
       ${depth < 3 ? `<button type="button" class="mini" data-ps="add" data-p="${esc(n.id)}" title="Ajouter dessous">＋ ${depth === 1 ? 'Sous-ensemble' : 'Composant'}</button>` : ''}<button type="button" class="mini" data-ps="del" data-p="${esc(n.id)}" title="Supprimer">🗑</button></div>${maint}</div>`
     + psKids(t, n.id).map(c => psNodeHtml(t, c, depth + 1)).join('');
@@ -55,15 +55,16 @@ function psDraw() {
     <div class="sdbar"><button type="button" class="primary" data-ps="save" ${ps.saving || !t.name.trim() ? 'disabled' : ''}>${ps.saving ? 'Enregistrement…' : 'Enregistrer le modèle'}</button><button type="button" data-ps="back">Fermer</button>${ps.dirty ? '<small class="na">Modifications non enregistrées</small>' : ''}</div>`;
 }
 const psLimBody = L => ({limit_km: psNum(L.limit_km), limit_hours: psNum(L.limit_hours), limit_events: psNum(L.limit_events), warn_pct: psNum(L.warn_pct) || 75, note: L.note || ''});
-const psBody = t => ({name: t.name.trim(), description: t.description || '', nodes: t.nodes.filter(n => n.name.trim()).map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name.trim(), reference: n.reference || '', group: !!n.group, types: n.group ? [] : n.types,
+const psBody = t => ({name: t.name.trim(), description: t.description || '', nodes: t.nodes.filter(n => n.name.trim()).map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name.trim(), reference: n.reference || '', fn: n.group ? '' : (n.fn || ''), group: !!n.group, types: n.group ? [] : n.types,
   ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLimBody(n[k])]))}))});
-const psFromApi = t => ({id: t.id, name: t.name, description: t.description || '', nodes: t.nodes.map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name, reference: n.reference || '', group: !!n.group, types: n.types || [], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim(n[k])]))}))});
+const psFromApi = t => ({id: t.id, name: t.name, description: t.description || '', nodes: t.nodes.map(n => ({id: n.id, parent_id: n.parent_id || null, name: n.name, reference: n.reference || '', fn: n.fn || '', group: !!n.group, types: n.types || [], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim(n[k])]))}))});
 
 document.addEventListener('input', e => {
   const t = e.target, c = ps.cur; if (!c || !document.getElementById('ps-view')) return;
   if (t.dataset.psF !== undefined) c[t.dataset.psF] = t.value;
   else if (t.dataset.psN !== undefined) c.nodes.find(n => n.id === t.dataset.psN).name = t.value;
   else if (t.dataset.psR !== undefined) c.nodes.find(n => n.id === t.dataset.psR).reference = t.value;
+  else if (t.dataset.psFn !== undefined) c.nodes.find(n => n.id === t.dataset.psFn).fn = t.value;
   else if (t.dataset.psL !== undefined) c.nodes.find(n => n.id === t.dataset.psL)[t.dataset.k][t.dataset.f] = t.value;
   else return;
   ps.dirty = true; const b = document.querySelector('[data-ps=save]'); if (b) b.disabled = ps.saving || !c.name.trim();

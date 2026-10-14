@@ -1,7 +1,7 @@
 // Pointages › formulaires techniques d'un job (phase 5) : mesure d'embrayage 4 et 6 patins, révisions de boîte de vitesses et de pont arrière (listes OK / NOK), demandes de setup et relevés de setup / setdown (feuilles de valeurs). Le panneau s'ouvre depuis la page Jobs (chef d'atelier) ou depuis « Ma semaine »
 // (mécanicien) ; le mécanicien saisit, le chef d'atelier valide, la feuille imprimable (charte Lifelive) se télécharge en PDF depuis l'impression du navigateur.
 // Données : /api/timesheets/jobs/{id}/forms, /api/timesheets/forms/{id} (backend/app/tforms.py) ; les calculs viennent toujours du serveur.
-const tf = {job: null, forms: null, parts: [], carKey: null, types: null, edit: null, msg: null, busy: false};
+const tf = {job: null, forms: null, garage: null, gsel: {}, gpart: {}, gmsg: null, parts: [], carKey: null, types: null, edit: null, msg: null, busy: false};
 const tfState = {ok: 'OK pour la prochaine course', replace: 'À remplacer'};
 const tfNum = (v, u = '', d = 2) => v == null ? '—' : `${Number(v).toLocaleString(LOCALE(), {maximumFractionDigits: d})}${u ? ' ' + u : ''}`;
 const tfType = id => ((tf.types || []).find(t => t.id === id) || {});
@@ -12,9 +12,28 @@ const tfBlank = type => { const s = tfType(type);
   return {id: null, type, part_id: tf.parts.length === 1 ? tf.parts[0].id : '', data: {header: {date: plToday(), km: '', after: '', mechanism: '', gearbox: '', chassis: '', mechanic: ''}, discs: Object.fromEntries((s.discs || []).map(d => [d.id, Array.from({length: d.pads}, () => Array(s.pads_per_measure).fill(''))])), plates: Object.fromEntries((s.plates || []).map(p => [p.id, Array(s.plate_points).fill('')])), spring_fingers: '', notes: ''}}; };
 
 async function tfOpen(jid) {
-  tf.job = jid; tf.edit = null; tf.msg = null; tf.forms = null; tf.parts = []; tf.carKey = null; tsDraw(); window.scrollTo({top: 0});
+  tf.job = jid; tf.edit = null; tf.msg = null; tf.forms = null; tf.parts = []; tf.carKey = null; tf.garage = null; tf.gmsg = null; tsDraw(); window.scrollTo({top: 0});
   try { if (!tf.types) tf.types = (await rsCall('/api/timesheets/form-types')).types; const j = await rsCall(`/api/timesheets/jobs/${encodeURIComponent(jid)}/forms`); tf.forms = j.forms; tf.parts = j.parts || []; tf.carKey = j.car_key; } catch (e) { tf.msg = e.message; tf.forms = tf.forms || []; }
   tsDraw();
+  if (ts.me && (ts.me.role === 'chef' || ts.me.role === 'coordinator')) { try { tfSetGarage(await rsCall(`/api/timesheets/jobs/${encodeURIComponent(jid)}/garage`)); } catch { tf.garage = null; } tsDraw(); }
+}
+// Mises à jour du Garage proposées par le job (lignes cochées, formulaires validés) : confirmées par le chef d'atelier, le Super User ou l'ingénieur / coordinateur ; jamais automatiques.
+function tfSetGarage(g) { tf.garage = g; for (const p of g.proposals) { if (p.kind !== 'maint') continue; if (!(p.key in tf.gsel)) tf.gsel[p.key] = !!(p.part_id && p.tracked); if (!(p.key in tf.gpart)) tf.gpart[p.key] = p.part_id || ''; } }
+function tfGaragePanel() {
+  const g = tf.garage; if (!g) return '';
+  const rows = g.proposals.map(p => {
+    if (p.kind === 'replace') return `<div class="tf-gr"><span class="neg">⚠ ${esc(tx(p.label))}</span> <small class="na">${esc(p.part_name)}</small> ${g.car_key ? `<button type="button" class="mini" data-tf="garage" data-k="${esc(g.car_key)}">${esc(tx('Ouvrir le Garage'))}</button>` : ''}</div>`;
+    const lab = `<b>${esc(p.label)}</b> <small class="na">→ ${esc(tx(p.type_label))} · ${esc(fmtDate(p.date))}</small>`;
+    if (p.status === 'applied') return `<div class="tf-gr done"><span class="ok">✓</span> ${lab} <small class="na">${esc(p.part_name)}</small> <button type="button" class="mini" data-tf="grestore" data-k="${esc(p.key)}">${esc(tx('Annuler'))}</button></div>`;
+    if (p.status === 'ignored') return `<div class="tf-gr ign"><span class="na">${esc(tx('Ignorée'))}</span> ${lab} <button type="button" class="mini" data-tf="grestore" data-k="${esc(p.key)}">${esc(tx('Remettre'))}</button></div>`;
+    const sel = tf.gpart[p.key] || '', part = g.parts.find(x => x.id === sel), bad = part && !part.types.includes(p.type);
+    return `<div class="tf-gr"><label class="chk"><input type="checkbox" data-tfg="sel" data-k="${esc(p.key)}" ${tf.gsel[p.key] ? 'checked' : ''}> ${lab}</label>
+      <select class="sdin" data-tfg="part" data-k="${esc(p.key)}"><option value="">${esc(tx('— Choisir la pièce —'))}</option>${g.parts.map(x => `<option value="${esc(x.id)}"${sel === x.id ? ' selected' : ''}>${esc(x.path)}${x.fn === p.fn ? ' ★' : ''}</option>`).join('')}</select>
+      <button type="button" class="mini" data-tf="gignore" data-k="${esc(p.key)}">${esc(tx('Ignorer'))}</button>${bad ? `<small class="neg">${esc(tx('Cette pièce ne suit pas ce type de maintenance : cochez-le dans sa fiche du Garage.'))}</small>` : ''}</div>`;
+  });
+  const pend = g.proposals.some(p => p.kind === 'maint' && p.status === 'pending');
+  return `<div class="tf-gar"><h5>${esc(tx('Mises à jour du Garage proposées'))}</h5>${rows.length ? rows.join('') : `<p class="na">${esc(tx('Aucune mise à jour proposée : elles viennent des lignes de liste cochées et des formulaires validés de ce job.'))}</p>`}
+    ${pend ? `<div class="sdbar"><button type="button" class="primary" data-tf="gapply">${esc(tx('Enregistrer dans le Garage'))}</button><small class="na">${esc(tx('Rien n’est écrit dans le Garage sans cette confirmation.'))}</small></div>` : ''}${tf.gmsg ? `<p class="neg">${esc(tf.gmsg)}</p>` : ''}</div>`;
 }
 const tfClose = () => { tf.job = null; tf.edit = null; tf.msg = null; tsDraw(); };
 
@@ -110,7 +129,7 @@ function tfHtml() {
   const j = tfJobOf();
   const body = tf.forms == null ? '<p class="na loading">Chargement…</p>' : tf.edit ? tfEditor() : `${tf.forms.length ? tf.forms.map(tfCard).join('') : `<p class="na">${esc(tx('Aucun formulaire pour ce job.'))}</p>`}
     <div class="sdbar"><select class="sdin" id="tf-newtype">${(tf.types || []).map(t => `<option value="${esc(t.id)}"${tf.newType === t.id ? ' selected' : ''}>${esc(tx(t.label))}</option>`).join('')}</select><button type="button" data-tf="new">＋ ${esc(tx('Nouveau formulaire'))}</button></div>${tf.msg ? `<p class="neg">${esc(tf.msg)}</p>` : ''}`;
-  return `<section class="ts-form tf-panel"><div class="tf-top"><h4>${esc(tx('Formulaires techniques'))} · ${esc(j.title || '')}</h4><button type="button" data-tf="close">${esc(tx('Fermer'))}</button></div>${body}</section>`;
+  return `<section class="ts-form tf-panel"><div class="tf-top"><h4>${esc(tx('Formulaires techniques'))} · ${esc(j.title || '')}</h4><button type="button" data-tf="close">${esc(tx('Fermer'))}</button></div>${body}${tf.edit ? '' : tfGaragePanel()}</section>`;
 }
 
 document.addEventListener('input', e => {
@@ -118,10 +137,11 @@ document.addEventListener('input', e => {
   const d = tf.edit.data, p = k.split(':'), v = e.target.value;
   if (p[0] === 'h') d.header[p[1]] = v; else if (p[0] === 'r') d.requests[p[1]] = v; else if (p[0] === 'i') d.inputs[p[1]] = v; else if (p[0] === 's') d.rows[p[1]][p[2]] = v; else if (p[0] === 'c') d.items[p[1]].comment = v; else if (p[0] === 'd') d.discs[p[1]][+p[2]][+p[3]] = v; else if (p[0] === 'p') d.plates[p[1]][+p[2]] = v; else if (k === 'sf') d.spring_fingers = v; else if (k === 'part') { tf.edit.part_id = v; const pt = tf.parts.find(x => x.id === v); if (pt && pt.km != null && !String(d.header.km ?? '').trim()) { d.header.km = Math.round(pt.km); const kb = document.querySelector('[data-tfv="h:km"]'); if (kb) kb.value = d.header.km; } } else if (k === 'notes') d.notes = v;
 });
-document.addEventListener('change', e => { if (e.target.id === 'tf-newtype') tf.newType = e.target.value; const k = e.target.dataset && e.target.dataset.tfv; if (k === 'h:date' && tf.edit) tf.edit.data.header.date = e.target.value; });
+document.addEventListener('change', e => { const g = e.target.dataset && e.target.dataset.tfg; if (g === 'sel') tf.gsel[e.target.dataset.k] = e.target.checked; else if (g === 'part') { tf.gpart[e.target.dataset.k] = e.target.value; const p = tf.garage.proposals.find(x => x.key === e.target.dataset.k), pt = tf.garage.parts.find(x => x.id === e.target.value); tf.gsel[e.target.dataset.k] = !!(pt && p && pt.types.includes(p.type)); tsDraw(); return; }
+  if (e.target.id === 'tf-newtype') tf.newType = e.target.value; const k = e.target.dataset && e.target.dataset.tfv; if (k === 'h:date' && tf.edit) tf.edit.data.header.date = e.target.value; });
 
 document.addEventListener('click', async ev => {
-  const b = ev.target.closest && ev.target.closest('[data-tf]'); if (!b || !document.getElementById('ts-view')) return;
+  const b = ev.target.closest && ev.target.closest('[data-tf]'); if (!b || !document.getElementById('ts-view') || b.tagName === 'INPUT') return;
   const a = b.dataset.tf, id = b.dataset.id;
   try {
     if (a === 'close') return tfClose();
@@ -141,6 +161,16 @@ document.addEventListener('click', async ev => {
     if (a === 'val') { const f = await rsCall(`/api/timesheets/forms/${encodeURIComponent(id)}/validate?validated=${b.dataset.v === '1'}`, {method: 'POST'}); tf.forms = tf.forms.map(x => x.id === f.id ? f : x); return tsDraw(); }
     if (a === 'del') { if (!confirm(tx('Supprimer ce formulaire ?'))) return; await rsCall(`/api/timesheets/forms/${encodeURIComponent(id)}`, {method: 'DELETE'}); tf.forms = tf.forms.filter(x => x.id !== id); return tsDraw(); }
     if (a === 'garage') return tfGoGarage(b.dataset.k);
+    if (a === 'gapply' || a === 'gignore' || a === 'grestore') {
+      const base = `/api/timesheets/jobs/${encodeURIComponent(tf.job)}/garage`; tf.gmsg = null;
+      if (a === 'gapply') {
+        const items = tf.garage.proposals.filter(p => p.kind === 'maint' && p.status === 'pending' && tf.gsel[p.key]).map(p => ({key: p.key, part_id: tf.gpart[p.key] || ''}));
+        if (!items.length) { tf.gmsg = tx('Cochez au moins une mise à jour (et choisissez la pièce).'); return tsDraw(); }
+        const r = await rsCall(base + '/apply', {method: 'POST', body: JSON.stringify({items})});
+        tfSetGarage(r); const bad = r.results.filter(x => !x.ok); if (bad.length) tf.gmsg = bad.map(x => x.error).join(' · ');
+      } else tfSetGarage(await rsCall(base + (a === 'gignore' ? '/ignore' : '/restore'), {method: 'POST', body: JSON.stringify({key: b.dataset.k})}));
+      return tsDraw();
+    }
     if (a === 'open') return tfOpen(id);
   } catch (err) { tf.msg = err.message; tsDraw(); }
 });

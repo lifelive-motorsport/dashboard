@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Jobs et Garage : mises à jour proposées', tag: 'Opérer', items: [
+    'Les lignes de liste cochées (vidanges) et les révisions de boîte ou de pont validées proposent une maintenance sur la pièce de la voiture ; le chef d’atelier, l’ingénieur / coordinateur ou le Super User confirme.',
+    'Chaque pièce du Garage et du Magasin de pièces peut recevoir une « fonction » (moteur, boîte, pont…) qui sert de lien avec les jobs ; rien n’est jamais enregistré ni remplacé sans confirmation.',
+    'Nouveau rôle d’atelier « Ingénieur / Coordinateur » (Planifier › Ressources › Staff interne).',
+  ]},
   {date: 'Octobre 2026', title: 'Formulaires techniques : mesure d’embrayage, boîte, pont et setup', tag: 'Consigner', items: [
     'Demandes de setup (rallye, circuit) et relevés de setup / setdown : suspension, géométrie, pesée avec calcul du centrage, de la pesée à vide et du poids sans essence ; feuille PDF pour le pilote.',
     'Révisions de boîte de vitesses (M3, Z4 GT3, avec différentiel) et de pont arrière : chaque élément est OK ou NOK avec un commentaire, plus la demande de réglage ; validation par le chef d’atelier et feuille PDF.',

@@ -515,3 +515,5 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .tf-wt{display:flex;flex-wrap:wrap;gap:8px 22px;margin:8px 0}.tf-wt dt{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}.tf-wt dd{margin:0;font-weight:600}
 @media(max-width:700px){.tf-sheet{grid-template-columns:repeat(var(--n),1fr)}.tf-sl{grid-column:1 / -1;margin-top:6px;font-weight:600}.tf-ch,.tf-sheet>span{display:none}}
 .rd-q{max-width:420px;min-width:200px;flex:1 1 260px}
+.tf-gar{margin-top:14px;padding-top:10px;border-top:1px solid var(--line)}.tf-gr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}.tf-gr select{max-width:320px;flex:1 1 200px}.tf-gr.done,.tf-gr.ign{opacity:.8}
+.ps-fn select{max-width:170px}

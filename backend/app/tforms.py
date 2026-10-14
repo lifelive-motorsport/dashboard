@@ -9,7 +9,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from . import rides, timesheets
+from . import rides, tcheck, timesheets
 from .timesheets import Coll
 
 CLUTCH_SET = "Embrayage"   # ensemble du Garage dont les pièces peuvent être liées à la mesure
@@ -38,8 +38,17 @@ def forms() -> Coll:
 
 
 def types() -> list[dict]:
-    return [{"id": k, **{f: v[f] for f in ("label", "pads_per_measure", "measure_names", "discs", "plates", "spring_fingers")}, "ep0": EP0, "mini": MINI, "plate_points": PLATE_POINTS}
-            for k, v in FORM_TYPES.items()]
+    clutch = [{"id": k, "kind": "clutch", **{f: v[f] for f in ("label", "pads_per_measure", "measure_names", "discs", "plates", "spring_fingers")}, "ep0": EP0, "mini": MINI, "plate_points": PLATE_POINTS}
+              for k, v in FORM_TYPES.items()]
+    return clutch + [{**t, "header_labels": {k: tcheck.HEADER_LABELS[k] for k in t["header"]}} for t in tcheck.types()]
+
+
+def label_of(ftype: str) -> str:
+    return (FORM_TYPES.get(ftype) or tcheck.TYPES[ftype])["label"]
+
+
+def is_clutch(ftype: str) -> bool:
+    return ftype in FORM_TYPES
 
 
 def _num(v, lo: float, hi: float) -> float | None:
@@ -56,6 +65,14 @@ def _num(v, lo: float, hi: float) -> float | None:
 
 def clean(ftype: str, data: dict) -> dict:
     """Normalise ce que le mécanicien a saisi : le gabarit du type fixe le nombre de disques, de patins et de mesures."""
+    if ftype in tcheck.TYPES:
+        out = tcheck.clean(ftype, data, _num)
+        d = out["header"]["date"]
+        try:
+            out["header"]["date"] = date.fromisoformat(d).isoformat() if d else ""
+        except ValueError:
+            raise ValueError("Date invalide")
+        return out
     spec = FORM_TYPES.get(ftype)
     if not spec:
         raise ValueError("Type de formulaire inconnu")
@@ -88,6 +105,8 @@ def compute(ftype: str, data: dict) -> dict:
     """Épaisseur moyenne par disque, usure par rapport au neuf, usure aux 1 000 km, kilométrage restant avant l'épaisseur minimale, conicité des plateaux.
     Remarque : les formules des fiches Excel d'origine (somme de 6 cellules divisée par 4, patin du bas ignoré, 6,9 mm au lieu de 6 mm) étaient incohérentes ; la moyenne
     porte ici sur toutes les mesures saisies."""
+    if ftype in tcheck.TYPES:
+        return tcheck.compute(ftype, data)
     spec = FORM_TYPES[ftype]
     km = (data.get("header") or {}).get("km")
     out_d = {}
@@ -112,7 +131,7 @@ def compute(ftype: str, data: dict) -> dict:
 
 
 def view(f: dict) -> dict:
-    return {**f, "calc": compute(f["type"], f["data"]), "label": FORM_TYPES[f["type"]]["label"]}
+    return {**f, "calc": compute(f["type"], f["data"]), "label": label_of(f["type"])}
 
 
 # ---- Lien avec le Garage : la mesure se rattache à l'embrayage de la voiture (pièce de l'ensemble « Embrayage ») ---------------------------------
@@ -151,7 +170,7 @@ def measures_by_part(part_ids: set[str]) -> dict[str, list[dict]]:
     """Historique des mesures VALIDÉES liées à des pièces du Garage (courbe d'usure) : [{date, km, state, discs: {id: {label, mean}}}], du plus ancien au plus récent."""
     out: dict[str, list[dict]] = {}
     for f in forms().all():
-        if not f.get("validated") or f.get("part_id") not in part_ids:
+        if not f.get("validated") or f.get("part_id") not in part_ids or not is_clutch(f["type"]):
             continue
         c = compute(f["type"], f["data"])
         labels = {d["id"]: d["label"] for d in FORM_TYPES[f["type"]]["discs"]}
@@ -206,8 +225,11 @@ def create(jid: str, ftype: str, data: dict, part_id: str, user: str, r: dict) -
     h["mechanic"] = h["mechanic"] or p.get("name", "")
     h["date"] = h["date"] or date.today().isoformat()
     h["chassis"] = _car_name(job)
-    part_id = _check_part(part_id, job) or (lambda ps: ps[0]["id"] if len(ps) == 1 else "")(clutch_parts(job))        # un seul embrayage sur la voiture : lié d'office
-    _fill_km(spec_data, part_id, job)
+    if is_clutch(ftype):
+        part_id = _check_part(part_id, job) or (lambda ps: ps[0]["id"] if len(ps) == 1 else "")(clutch_parts(job))        # un seul embrayage sur la voiture : lié d'office
+        _fill_km(spec_data, part_id, job)
+    else:
+        part_id = ""                                                 # révisions de boîte et de pont : pas encore reliées au Garage
     fid = "f-" + uuid.uuid4().hex[:10]
     doc = {"id": fid, "job_id": jid, "type": ftype, "part_id": part_id, "data": spec_data, "validated": False, "created_by": user.lower(), "created_at": timesheets.now().isoformat(), "updated_at": timesheets.now().isoformat()}
     forms().put(fid, doc)
@@ -243,9 +265,10 @@ def update(fid: str, data: dict, part_id: str | None, user: str, r: dict) -> dic
     f["data"] = clean(f["type"], data)
     job = timesheets.jobs().get(f["job_id"])
     f["data"]["header"]["chassis"] = _car_name(job)
-    if part_id is not None:
-        f["part_id"] = _check_part(part_id, job)
-    _fill_km(f["data"], f.get("part_id", ""), job)
+    if is_clutch(f["type"]):
+        if part_id is not None:
+            f["part_id"] = _check_part(part_id, job)
+        _fill_km(f["data"], f.get("part_id", ""), job)
     f["updated_at"] = timesheets.now().isoformat()
     forms().put(fid, f)
     return view(f)
@@ -265,6 +288,8 @@ def validate(fid: str, validated: bool, user: str, r: dict) -> dict:
 def _sync_garage(f: dict, job: dict | None, validated: bool, user: str) -> dict:
     """Validé : un « Contrôle » est enregistré sur la pièce du Garage (le compteur de contrôle repart de la date de la mesure) ; rouvert : ce contrôle est retiré.
     Rien n'est jamais remplacé automatiquement : « À remplacer » reste une proposition, le remplacement se fait par ⟳ Remplacer dans le Garage."""
+    if not is_clutch(f["type"]):
+        return {}
     mid = (f.get("garage") or {}).get("maint_id")
     if mid:
         try:
@@ -304,6 +329,13 @@ def _logo() -> str:
         return "<b>LIFELIVE</b>"
 
 
+def _d(iso: str) -> str:
+    try:
+        return date.fromisoformat(iso).strftime("%d/%m/%Y")
+    except ValueError:
+        return iso or ""
+
+
 def _n(v, unit: str = "", digits: int = 2) -> str:
     if v is None:
         return "—"
@@ -313,32 +345,12 @@ def _n(v, unit: str = "", digits: int = 2) -> str:
     return txt + (f" {unit}" if unit else "")
 
 
-def print_page(f: dict, job: dict, lang: str = "fr") -> str:
-    """Feuille A4 aux couleurs de Lifelive (Barlow Condensed / IBM Plex, graphite, noir réservé à l'impression)."""
+def _shell(title: str, lang: str, content: str, f: dict) -> str:
+    """Coque commune des feuilles imprimables : en-tête Lifelive, styles de la charte, pied de page (validation et identifiant)."""
     e = html.escape
-    en = lang == "en"
-    spec = FORM_TYPES[f["type"]]
-    c = compute(f["type"], f["data"])
-    h = f["data"]["header"]
-    T = (lambda fr, eng: eng if en else fr)
-    state = {"ok": T("OK pour la prochaine course", "OK for the next event"), "replace": T("À REMPLACER", "REPLACE"), None: "—"}[c["state"]]
-    head = [(T("Date", "Date"), h.get("date", "")), (T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
-            (T("Mécanicien", "Mechanic"), h.get("mechanic", "")), (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("Mécanisme", "Mechanism"), h.get("mechanism", "")),
-            (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
-    parts = []
-    for disc in spec["discs"]:
-        rows = f["data"]["discs"][disc["id"]]
-        cc = c["discs"][disc["id"]]
-        cells = "".join(f"<tr><th>{T('Patin', 'Pad')} {i + 1}</th>" + "".join(f"<td>{_n(v, '', 2)}</td>" for v in row) + "</tr>" for i, row in enumerate(rows))
-        names = "".join(f"<th>{e(n)} (mm)</th>" for n in spec["measure_names"]) if spec["pads_per_measure"] > 1 else f"<th>{T('Épaisseur (mm)', 'Thickness (mm)')}</th>"
-        parts.append(f"<section><h3>{e(disc['label'])} <small>ep0 {EP0:g} mm · mini {MINI:g} mm</small></h3><table class='m'><thead><tr><th></th>{names}</tr></thead><tbody>{cells}</tbody></table>"
-                     f"<dl><div><dt>{T('Épaisseur moyenne', 'Mean thickness')}</dt><dd>{_n(cc['mean'], 'mm')}</dd></div><div><dt>{T('Usure', 'Wear')}</dt><dd>{_n(cc['wear'], 'mm')}</dd></div>"
-                     f"<div><dt>{T('Usure / 1 000 km', 'Wear / 1,000 km')}</dt><dd>{_n(cc['wear_per_1000km'], 'mm', 3)}</dd></div><div><dt>{T('Restant estimé', 'Estimated remaining')}</dt><dd>{_n(cc['remaining_km'], 'km', 0)}</dd></div></dl></section>")
-    plates = "".join(f"<tr><th>{e(p['label'])}</th>" + "".join(f"<td>{_n(v)}</td>" for v in f["data"]["plates"][p["id"]]) + f"<td class='k'>{_n(c['plates'][p['id']]['taper'], 'mm')}</td></tr>" for p in spec["plates"])
-    sf = f"<p><b>Spring fingers :</b> {_n(f['data'].get('spring_fingers'), 'mm')}</p>" if spec["spring_fingers"] else ""
-    notes = f"<p class='notes'><b>{T('Remarques', 'Notes')} :</b> {e(f['data'].get('notes') or '')}</p>" if f["data"].get("notes") else ""
+    T = (lambda fr, eng: eng if lang == "en" else fr)
     valid = T("Validé par le chef d'atelier", "Approved by the workshop manager") if f.get("validated") else T("Non validé", "Not approved")
-    return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(spec['label'])}</title>
+    return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(title)}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -354,12 +366,69 @@ dl{{display:flex;gap:18px;margin:8px 0 0}}dt{{font-size:10px;text-transform:uppe
 footer{{margin-top:18px;padding-top:6px;border-top:1px solid var(--border);display:flex;justify-content:space-between;color:var(--muted);font-size:11px}}
 @media print{{body{{background:#fff}}.bar{{display:none}}.sheet{{padding:0;max-width:none}}section{{break-inside:avoid}}}}
 </style></head><body><div class="bar"><button onclick="window.print()">{T('Imprimer / Enregistrer en PDF', 'Print / Save as PDF')}</button></div>
-<div class="sheet"><header><div><h1>{e(spec['label'])}</h1></div><div>{_logo()}</div></header>
-<div class="head">{''.join(f'<div><span>{e(k)}</span>{e(v)}</div>' for k, v in head)}</div>
+<div class="sheet"><header><div><h1>{e(title)}</h1></div><div>{_logo()}</div></header>
+{content}
+<footer><span>Lifelive Motorsport — Logbook · {e(valid)}</span><span>{e(f['id'])}</span></footer></div></body></html>"""
+
+
+def _print_clutch(f: dict, job: dict, lang: str = "fr") -> str:
+    """Feuille A4 aux couleurs de Lifelive (Barlow Condensed / IBM Plex, graphite, noir réservé à l'impression)."""
+    e = html.escape
+    en = lang == "en"
+    spec = FORM_TYPES[f["type"]]
+    c = compute(f["type"], f["data"])
+    h = f["data"]["header"]
+    T = (lambda fr, eng: eng if en else fr)
+    state = {"ok": T("OK pour la prochaine course", "OK for the next event"), "replace": T("À REMPLACER", "REPLACE"), None: "—"}[c["state"]]
+    head = [(T("Date", "Date"), _d(h.get("date", ""))), (T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
+            (T("Mécanicien", "Mechanic"), h.get("mechanic", "")), (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("Mécanisme", "Mechanism"), h.get("mechanism", "")),
+            (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
+    parts = []
+    for disc in spec["discs"]:
+        rows = f["data"]["discs"][disc["id"]]
+        cc = c["discs"][disc["id"]]
+        cells = "".join(f"<tr><th>{T('Patin', 'Pad')} {i + 1}</th>" + "".join(f"<td>{_n(v, '', 2)}</td>" for v in row) + "</tr>" for i, row in enumerate(rows))
+        names = "".join(f"<th>{e(n)} (mm)</th>" for n in spec["measure_names"]) if spec["pads_per_measure"] > 1 else f"<th>{T('Épaisseur (mm)', 'Thickness (mm)')}</th>"
+        parts.append(f"<section><h3>{e(disc['label'])} <small>ep0 {EP0:g} mm · mini {MINI:g} mm</small></h3><table class='m'><thead><tr><th></th>{names}</tr></thead><tbody>{cells}</tbody></table>"
+                     f"<dl><div><dt>{T('Épaisseur moyenne', 'Mean thickness')}</dt><dd>{_n(cc['mean'], 'mm')}</dd></div><div><dt>{T('Usure', 'Wear')}</dt><dd>{_n(cc['wear'], 'mm')}</dd></div>"
+                     f"<div><dt>{T('Usure / 1 000 km', 'Wear / 1,000 km')}</dt><dd>{_n(cc['wear_per_1000km'], 'mm', 3)}</dd></div><div><dt>{T('Restant estimé', 'Estimated remaining')}</dt><dd>{_n(cc['remaining_km'], 'km', 0)}</dd></div></dl></section>")
+    plates = "".join(f"<tr><th>{e(p['label'])}</th>" + "".join(f"<td>{_n(v)}</td>" for v in f["data"]["plates"][p["id"]]) + f"<td class='k'>{_n(c['plates'][p['id']]['taper'], 'mm')}</td></tr>" for p in spec["plates"])
+    sf = f"<p><b>Spring fingers :</b> {_n(f['data'].get('spring_fingers'), 'mm')}</p>" if spec["spring_fingers"] else ""
+    notes = f"<p class='notes'><b>{T('Remarques', 'Notes')} :</b> {e(f['data'].get('notes') or '')}</p>" if f["data"].get("notes") else ""
+    valid = T("Validé par le chef d'atelier", "Approved by the workshop manager") if f.get("validated") else T("Non validé", "Not approved")
+    return _shell(spec["label"], lang, f"""<div class="head">{''.join(f'<div><span>{e(k)}</span>{e(v)}</div>' for k, v in head)}</div>
 {''.join(parts)}
 <h3>{T('Conicité des plateaux', 'Plate taper')} <small>{PLATE_POINTS} {T('mesures par plateau (mm) · conicité = écart maxi', 'readings per plate (mm) · taper = max spread')}</small></h3>
 <table><thead><tr><th></th>{''.join(f'<th>{i}</th>' for i in range(1, PLATE_POINTS + 1))}<th>{T('Conicité', 'Taper')}</th></tr></thead><tbody>{plates}</tbody></table>
 <p><b>{T('Conicité max', 'Max taper')} :</b> {_n(c['taper_max'], 'mm')}</p>{sf}
 <div class="state">{e(state)}</div>{notes}
 <p class="notes">{T("Contrôler la planéité des disques ainsi que le libre coulissement des plateaux / mécanisme. Un jeu de disques est prévu pour environ 1 000 km. À contrôler après chaque rallye.", "Check disc flatness and free movement of the plates / mechanism. A set of discs is meant for about 1,000 km. Check after each rally.")}</p>
-<footer><span>Lifelive Motorsport — Logbook · {e(valid)}</span><span>{e(f['id'])}</span></footer></div></body></html>"""
+""", f)
+
+
+def _print_check(f: dict, job: dict, lang: str) -> str:
+    e = html.escape
+    T = (lambda fr, eng: eng if lang == "en" else fr)
+    spec = tcheck.TYPES[f["type"]]
+    d = f["data"]
+    h = d["header"]
+    c = compute(f["type"], d)
+    head = [(T("Date", "Date"), _d(h.get("date", ""))), (T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
+            (T("Mécanicien", "Mechanic"), h.get("mechanic", ""))]
+    labels = {"gearbox_no": T("Boîte n°", "Gearbox no."), "diff_no": T("Diff n°", "Diff no."), "axle_no": T("Pont n°", "Axle no.")}
+    head += [(labels[k], h.get(k, "")) for k in spec["header"] if k in labels] + [(T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
+    req = "".join(f"<div><span>{e(T(r['label'], r['label']))}</span>{e(d['requests'].get(r['id'], ''))}</div>" for r in spec["requests"])
+    mark = {"ok": "✓", "nok": "✗", "": ""}
+    secs = "".join(f"<section><h3>{e(T(s['title'], s['title']))}</h3><table class='ck'><thead><tr><th></th><th>OK</th><th>NOK</th><th>{T('Commentaire', 'Comment')}</th></tr></thead><tbody>"
+                   + "".join(f"<tr class='{d['items'][i['id']]['status']}'><th>{e(i['label'])}</th><td>{mark['ok'] if d['items'][i['id']]['status'] == 'ok' else ''}</td><td>{mark['nok'] if d['items'][i['id']]['status'] == 'nok' else ''}</td><td>{e(d['items'][i['id']]['comment'])}</td></tr>" for i in s["items"])
+                   + "</tbody></table></section>" for s in spec["sections"])
+    state = (T("%d NOK à traiter", "%d NOK to handle") % c["nok"]) if c["nok"] else (T("Tout est OK", "All OK") if c["state"] == "ok" else T("%d élément(s) non contrôlé(s)", "%d item(s) not checked") % c["open"])
+    notes = f"<p class='notes'><b>{T('Commentaires', 'Comments')} :</b> {e(d.get('notes') or '')}</p>" if d.get("notes") else ""
+    extra = "<style>table.ck th{font-weight:500;width:46%}table.ck td{text-align:center;font-family:var(--ui)}table.ck td:last-child{text-align:left}table.ck tr.nok{background:#f1f1ef;font-weight:600}.ck thead th:nth-child(2),.ck thead th:nth-child(3){width:42px}</style>"
+    body = f"""{extra}<div class="head">{''.join(f'<div><span>{e(k)}</span>{e(v)}</div>' for k, v in head)}{req}</div>{secs}<div class="state">{e(state)}</div>{notes}"""
+    return _shell(spec["label"], lang, body, f)
+
+
+def print_page(f: dict, job: dict, lang: str = "fr") -> str:
+    """Feuille A4 aux couleurs de Lifelive (Barlow Condensed / IBM Plex, graphite, noir réservé à l'impression)."""
+    return _print_clutch(f, job, lang) if is_clutch(f["type"]) else _print_check(f, job, lang)

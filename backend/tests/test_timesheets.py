@@ -555,7 +555,7 @@ def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
     jid = mkjob(api, vehicle={"id": "1", "name": "Porsche 992"}).json()["id"]
     as_(api, MEC)
     types = api.get("/api/timesheets/form-types").json()["types"]
-    assert {t["id"] for t in types} == {"clutch4", "clutch6"}
+    assert {t["id"] for t in types} == {"clutch4", "clutch6", "gearbox_m3", "gearbox_z4", "gearbox_diff", "rear_axle"}
     r = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data()})
     assert r.status_code == 200
     f = r.json()
@@ -650,3 +650,30 @@ def test_clutch_wear_curve_data_in_garage_sheet(api, monkeypatch):
     d = rides.car_detail(car["key"])
     pts = d["clutch_measures"][part["id"]]
     assert [p["km"] for p in pts] == [300, 800] and pts[1]["discs"]["motor"]["mean"] == 5.2 and d["ep0"] == 6.0 and d["mini"] == 4.6
+
+
+def test_gearbox_and_rear_axle_checklist_forms(api, monkeypatch):
+    from app import tcheck, tforms
+    monkeypatch.setattr(tforms, "_forms", None)
+    jid = mkjob(api, vehicle={"id": "1", "name": "BMW M3 E30"}).json()["id"]
+    spec = tcheck.TYPES["gearbox_diff"]
+    ids = [i["id"] for s in spec["sections"] for i in s["items"]]
+    assert len(ids) == len(set(ids))                                                                          # identifiants d'éléments uniques dans un type
+    as_(api, MEC)
+    items = {ids[0]: {"status": "ok"}, ids[1]: {"status": "nok", "comment": "Dent écaillée"}}
+    f = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "gearbox_diff", "data": {"header": {"gearbox_no": "545 022", "km": 1500}, "requests": {"preload": "40 Nm"}, "items": items, "notes": "à revoir"}}).json()
+    assert f["part_id"] == "" and f["data"]["header"]["gearbox_no"] == "545 022" and f["data"]["requests"]["preload"] == "40 Nm"
+    c = f["calc"]
+    assert c["ok"] == 1 and c["nok"] == 1 and c["open"] == c["total"] - 2 and c["state"] == "nok"
+    # statut invalide refusé ; élément inconnu ignoré
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "rear_axle", "data": {"items": {"x": {"status": "ok"}, "couple_conique": {"status": "peut-être"}}}}).status_code == 422
+    done = {i["id"]: {"status": "ok"} for s in tcheck.TYPES["rear_axle"]["sections"] for i in s["items"]}
+    f2 = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "rear_axle", "data": {"items": done}}).json()
+    assert f2["calc"]["state"] == "ok" and f2["calc"]["open"] == 0 and "x" not in f2["data"]["items"]
+    # validation sans effet sur le Garage ; feuille imprimable
+    as_(api, CHEF)
+    v = api.post(f"/api/timesheets/forms/{f['id']}/validate").json()
+    assert v["validated"] is True and v["garage"] == {}
+    page = api.get(f"/api/timesheets/forms/{f['id']}/print").text
+    assert "Dent écaillée" in page and "545 022" in page and "BMW M3 E30" in page and "1 NOK" in page
+    assert "All OK" in api.get(f"/api/timesheets/forms/{f2['id']}/print?lang=en").text

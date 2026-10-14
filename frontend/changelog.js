@@ -1,8 +1,24 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
-  {date: 'Octobre 2026', title: 'Nouveau menu en 4 chapitres', tag: 'Application', items: [
-    'Piloter (Tableaux de bord), Planifier (Événements, Ressources), Consigner (Pointages, Roulages, Consommables), Administrer (Équipage, Connexions).',
-    'Les modules à venir sont déjà visibles (« bientôt ») et leurs droits d’accès peuvent déjà être donnés par catégorie.']},
+  {date: 'Octobre 2026', title: 'Opérer : Garage, Magasin de pièces et Roulages', tag: 'Opérer', items: [
+    'Garage : fiche de chaque voiture (photo, BU, compte Odoo, identité : châssis, moteur, boîte, livrée, n° de course), pièces avec compteurs calculés depuis les roulages et alertes aux seuils.',
+    'Magasin de pièces : modèles d’architecture (11 ensembles fixes, sous-ensembles, composants) avec, pour chacun, contrôle, vidange, révisions 1 et 2 et remplacement ; modèle de départ Toyota GR Yaris Rally2 ; un modèle s’assigne à une voiture depuis sa fiche.',
+    'Roulages : une sortie se crée une fois, puis on y associe les voitures avec leurs tours, spéciales ou kilomètres ; circuits enregistrés avec la longueur du tour.']},
+  {date: 'Octobre 2026', title: 'Documents et validités des voitures', tag: 'Opérer', items: [
+    'Certificat de conformité, assurance, contrôle technique, passeports FIA et ASN, réservoir, extincteur, harnais, siège, arceau, transpondeur : date limite, note et fichiers (PDF, photos) avec aperçu.',
+    'Alerte sur la fiche et sur l’accueil (Super User et chef d’atelier de la BU) à quelques semaines de l’échéance, et e-mail la veille de l’expiration.']},
+  {date: 'Octobre 2026', title: 'Cockpit : écran mural', tag: 'Piloter', items: [
+    'Calendrier de 5 semaines des événements (couleur de la BU, jours fériés, absents du jour, immobilisation des véhicules) et vue Atelier (jobs ouverts, présence, indicateurs de la semaine), filtrable par BU, en plein écran.',
+    'Un compte « Kiosque » ouvre directement cet écran.']},
+  {date: 'Octobre 2026', title: 'Pointages, listes de contrôle et congés', tag: 'Consigner', items: [
+    'Pointages par job (atelier, événement, tâche de fond) avec photos et mémos vocaux transcrits, listes de contrôle par modèle, validation par le chef d’atelier, rappels par e-mail.',
+    'Congés : demandes, justificatifs, validation par le chef d’atelier ou le Managing Director, création dans l’agenda Google et prise en compte dans les alertes de pointage.']},
+  {date: 'Octobre 2026', title: 'Planning, événements et ressources', tag: 'Planifier', items: [
+    'Planning par ressource ou en calendrier, semaine ou mois ; événements créés dans les agendas Google des BU (transport avec plage horaire, lieu et kilomètres) ; calendrier maison à semaine du lundi.',
+    'Ressources : staff interne (BU de ressource indépendante de l’imputation des coûts), staff externe et véhicules.']},
+  {date: 'Octobre 2026', title: 'Menu en 5 chapitres', tag: 'Application', items: [
+    'Piloter (Tableaux de bord, Cockpit), Planifier (Planning, Événements, Ressources), Consigner (Pointages, Congés), Opérer (Garage, Magasin de pièces, Roulages, Consommables), Administrer (Équipage, Connexions).',
+    'Bouton clair / sombre et indicateurs de chargement partout ; picto de l’en-tête pour suggérer une amélioration ou signaler un bug.']},
   {date: 'Octobre 2026', title: 'Filtre BU sur Vue d’ensemble et l’accueil', tag: 'Vue d’ensemble', items: [
     'Filtre à deux niveaux (ALL / XC / CARS, puis Modern Rally, Historic Racing, Historic Rally) sur l’accueil et sur les pages Vue d’ensemble ; le logo prend la couleur de la BU choisie.',
     'Créances et dettes par BU, avec rapprochement exact du total de la société ; jauges qui montrent aussi les marges négatives ; effectifs (ETP) par BU sur l’accueil.']},

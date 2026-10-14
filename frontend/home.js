@@ -29,7 +29,7 @@ async function homeDraw() {
   homeData = null;
   homeAlerts();
   const news = document.getElementById('home-news');
-  if (news) news.innerHTML = CHANGELOG.slice(0, 6).map(c => `<div class="news"><div class="news-h"><b>${esc(c.title)}</b> <span class="badge-profile">${esc(c.tag)}</span> <small class="na">${esc(c.date)}</small></div><ul>${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
+  if (news) news.innerHTML = CHANGELOG.slice(0, 8).map(c => `<div class="news"><div class="news-h"><b>${esc(c.title)}</b> <span class="badge-profile">${esc(c.tag)}</span> <small class="na">${esc(c.date)}</small></div><ul>${c.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('');
   homeRedraw();
 }
 let homeData = null;

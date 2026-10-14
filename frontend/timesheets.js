@@ -11,10 +11,10 @@ const tsSystems = () => ts.me.systems.slice().sort((a, b) => (a.id === 'autre') 
 const tsDur = m => { const h = Math.floor(m / 60), r = m % 60; return h ? (r ? `${h} h ${String(r).padStart(2, '0')}` : `${h} h`) : `${r} min`; };
 const tsPct = x => x == null ? '–' : Math.round(x * 100) + ' %';
 const tsStamp = iso => new Date(iso).toLocaleString(LOCALE(), {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
-const tsPage = () => location.hash.includes('consigner/team') ? 'team' : 'mine';
+const tsPage = () => location.hash.includes('consigner/team') ? 'team' : location.hash.includes('consigner/jobs') ? 'jobs' : 'mine';
 
 function tsBlocks(page) {
-  return [{static: `<section class="block" data-bid="ts"><div class="block-head"><h3>${page === 'team' ? 'Équipe' : 'Mes pointages'}</h3></div><div class="block-body" id="ts-view"><p class="na loading">Chargement…</p></div></section>`}];
+  return [{static: `<section class="block" data-bid="ts"><div class="block-head"><h3>${page === 'team' ? 'Équipe' : page === 'jobs' ? 'Jobs' : 'Mes pointages'}</h3></div><div class="block-body" id="ts-view"><p class="na loading">Chargement…</p></div></section>`}];
 }
 
 async function tsLoad(page) {
@@ -25,7 +25,9 @@ async function tsLoad(page) {
     if (ts.me.role) {
       const jr = await rsCall('/api/timesheets/jobs'); ts.jobs = jr.jobs; ts.recent = jr.recent || [];
       if (page === 'team') {
-        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; ts.tpls = (await rsCall('/api/timesheets/templates')).templates; ts.cockpit = await rsCall('/api/timesheets/cockpit'); }
+        if (ts.me.role === 'chef') { ts.team = await rsCall(`/api/timesheets/team?start=${ts.start}&bu=${buSel}`); ts.cockpit = await rsCall('/api/timesheets/cockpit'); }
+      } else if (page === 'jobs') {
+        if (ts.me.role === 'chef') { ts.jobsAll = (await rsCall('/api/timesheets/jobs?all=true')).jobs; ts.tpls = (await rsCall('/api/timesheets/templates')).templates; }
       } else {
         ts.week = await rsCall(`/api/timesheets/week?start=${ts.start}`);
         const dr = !ts.form && tsDraft();
@@ -122,7 +124,7 @@ function tsTeamHtml() {
   const rows = tm.rows.filter(r => inBu(r) || r.summary.count > 0).map(r => { const s = r.summary, op = ts.open.has(r.user), todo = s.count - s.validated;
     return `<tr class="ts-row" data-ts="open" data-u="${esc(r.user)}"><td><b>${op ? '▾' : '▸'} ${esc(r.name)}</b></td>${days.map(d => `<td class="num">${s.by_day[d] ? tsDur(s.by_day[d]) : ''}</td>`).join('')}<td class="num"><b>${tsDur(s.total)}</b></td><td class="num">${tsPct(s.occupancy)}</td><td class="num">${tsPct(s.billable_rate)}</td><td class="num">${todo || '✓'}</td></tr>`
       + (op ? `<tr><td colspan="${days.length + 5}"><div class="ts-detail">${r.entries.length ? r.entries.map(e => `<div class="ts-dline"><small>${esc(plFmt(e.date, {weekday: 'short', day: 'numeric', month: 'short'}))}</small>${tsEntryHtml(e, false)}</div>`).join('') + (todo ? `<div class="sdbar"><button type="button" class="okbtn" data-ts="valall" data-u="${esc(r.user)}"${tsCoarse() ? ' data-hold' : ''}>${tsCoarse() ? 'Maintenir pour valider la semaine' : 'Valider toute la semaine'}</button></div>` : '') : '<p class="na">Aucun pointage cette semaine.</p>'}</div></td></tr>` : ''); }).join('');
-  return `${tsCockpitHtml()}${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>${tsJobsHtml()}`;
+  return `${tsCockpitHtml()}${tsNav()}${ts.form ? tsFormHtml() : ''}<div class="tblwrap"><table class="sdtable ts-team"><thead>${head}</thead><tbody>${rows || '<tr><td colspan="12" class="na">Aucun membre de l’atelier pour cette BU : choisissez un rôle dans la colonne Atelier (Planifier › Ressources › Staff interne) et renseignez le compte Google.</td></tr>'}</tbody></table></div>`;
 }
 
 const tsGrp = bu => bu === 'XC' ? 'XC' : bu === 'ALL' ? 'ALL' : 'CARS';
@@ -187,7 +189,7 @@ function tsJobsHtml() {
     ${tsPreview(f) ? `<p class="na">Intitulé : <b>${esc(tsPreview(f))}</b></p>` : ''}
     <div class="sdbar"><button type="button" class="primary" data-ts="savejob">${f.id ? 'Enregistrer' : 'Créer le job'}</button><button type="button" data-ts="canceljob">Annuler</button></div></div>`;
   const list = ts.jobsAll.length ? `<table class="sdtable"><thead><tr><th>Job</th><th>Type</th><th>BU</th><th>Rattachement</th><th>Liste</th><th></th></tr></thead><tbody>${ts.jobsAll.map(j => `<tr class="${j.open ? '' : 'ts-closed'}"><td>${esc(j.title)}</td><td>${esc(TS_KIND[j.kind])}</td><td>${TS_BU[j.bu] || j.bu}</td><td>${esc((j.vehicle && j.vehicle.name) || (j.event && j.event.title) || '')}</td><td>${j.progress ? `<button type="button" data-ts="togl" data-id="${j.id}">${j.progress.done} / ${j.progress.total} ${ts.openJobs.has(j.id) ? '▾' : '▸'}</button>` : ''}</td><td class="num"><button type="button" data-ts="editjob" data-id="${j.id}">Modifier</button> <button type="button" data-ts="togjob" data-id="${j.id}">${j.open ? 'Clôturer' : 'Rouvrir'}</button> <button type="button" class="danger" data-ts="deljob" data-id="${j.id}">Supprimer</button></td></tr>${j.progress && ts.openJobs.has(j.id) ? `<tr><td colspan="6">${tsReadonlyList(j)}</td></tr>` : ''}`).join('')}</tbody></table>` : '';
-  return `${tsTemplatesHtml()}<div class="block-head"><h3>Jobs</h3></div><h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}`;
+  return `<h4 class="sub">Propositions d’après le planning</h4>${sug}<h4 class="sub">Jobs</h4>${form}${list}${tsTemplatesHtml()}`;
 }
 
 function tsDraw() {
@@ -197,8 +199,9 @@ function tsDraw() {
   if (ts.err) h = `<p class="err">${esc(ts.err)}</p>`;
   else if (!ts.me) h = '<p class="na loading">Chargement…</p>';
   else if (!ts.me.role) h = '<p class="na">Vous n’êtes pas encore inscrit à l’atelier : demandez au Super User de renseigner votre compte Google et votre rôle (Planifier › Ressources › Staff interne › Atelier).</p>';
-  else if (page === 'team' && ts.me.role !== 'chef') h = '<p class="na">Cette page est réservée au chef d’atelier.</p>';
-  else h = (ts.msg ? `<p class="ts-msg">${esc(ts.msg)}</p>` : '') + (page === 'team' ? tsTeamHtml() : tsMineHtml());
+  else if ((page === 'team' || page === 'jobs') && ts.me.role !== 'chef') h = '<p class="na">Cette page est réservée au chef d’atelier.</p>';
+  else if (page === 'jobs' && !ts.jobsAll) h = '<p class="na loading">Chargement…</p>';
+  else h = (ts.msg ? `<p class="ts-msg">${esc(ts.msg)}</p>` : '') + (page === 'team' ? tsTeamHtml() : page === 'jobs' ? tsJobsHtml() : tsMineHtml());
   v.innerHTML = h;
   if (typeof i18nNode === 'function' && LANG === 'en') i18nNode(v);
 }

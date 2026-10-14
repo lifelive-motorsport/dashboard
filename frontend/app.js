@@ -33,10 +33,10 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/wall','consigner/rides','consigner/parts','consigner/runs','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -503,6 +503,7 @@ const PAGES = {
   'planifier/planning': () => planningBlocks(),
   'consigner/timesheets': () => tsBlocks('mine'),
   'consigner/team': () => [BU_BAR()].concat(tsBlocks('team')),
+  'consigner/jobs': () => tsBlocks('jobs'),
   'consigner/leaves': () => leavesBlocks(),
   'consigner/wall': () => wallBlocks(),
   'consigner/rides': () => [BU_BAR()].concat(ridesBlocks()),
@@ -682,7 +683,7 @@ function render(force) {
   if (key === 'consigner/rides') { rdDraw(); rdLoad(); }
   if (key === 'consigner/parts') { psDraw(); psLoad(); }
   if (key === 'consigner/runs') { rnDraw(); rnLoad(); }
-  if (key === 'consigner/timesheets' || key === 'consigner/team') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : 'mine'); }
+  if (key === 'consigner/timesheets' || key === 'consigner/team' || key === 'consigner/jobs') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : key === 'consigner/jobs' ? 'jobs' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

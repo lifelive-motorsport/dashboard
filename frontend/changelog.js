@@ -11,7 +11,7 @@ const CHANGELOG = [
     'Calendrier de 5 semaines des événements (couleur de la BU, jours fériés, absents du jour, immobilisation des véhicules) et vue Atelier (jobs ouverts, présence, indicateurs de la semaine), filtrable par BU, en plein écran.',
     'Un compte « Kiosque » ouvre directement cet écran.']},
   {date: 'Octobre 2026', title: 'Pointages, listes de contrôle et congés', tag: 'Consigner', items: [
-    'Pointages par job (atelier, événement, tâche de fond) avec photos et mémos vocaux transcrits, listes de contrôle par modèle, validation par le chef d’atelier, rappels par e-mail.',
+    'Pointages par job (atelier, événement, tâche de fond) avec photos et mémos vocaux transcrits, listes de contrôle par modèle, validation par le chef d’atelier, rappels par e-mail ; sous-menu Jobs (jobs et modèles de jobs) à côté de Ma semaine et Équipe.',
     'Congés : demandes, justificatifs, validation par le chef d’atelier ou le Managing Director, création dans l’agenda Google et prise en compte dans les alertes de pointage.']},
   {date: 'Octobre 2026', title: 'Planning, événements et ressources', tag: 'Planifier', items: [
     'Planning par ressource ou en calendrier, semaine ou mois ; événements créés dans les agendas Google des BU (transport avec plage horaire, lieu et kilomètres) ; calendrier maison à semaine du lundi.',

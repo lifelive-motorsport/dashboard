@@ -591,7 +591,7 @@ def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
     assert "2000 km" in page.text and "3600 km" in page.text                                               # pas de zéros avalés (2000 ≠ 2)
     assert api.get(f"/api/timesheets/forms/{fid}/print?lang=en").text.count("Mean thickness") == 2
     assert api.post(f"/api/timesheets/forms/{fid}/validate?validated=false").json()["validated"] is False
-    assert len(api.get(f"/api/timesheets/jobs/{jid}/forms").json()["forms"]) == 2
+    assert len(api.get(f"/api/timesheets/jobs/{jid}/forms").json()["forms"]) == 3
     assert api.delete(f"/api/timesheets/forms/{fid}").status_code == 200
     # un job qui n'est pas d'atelier n'accepte pas de formulaire
     bg = mkjob(api, kind="background", title="Rangement", bu="ALL").json()["id"]

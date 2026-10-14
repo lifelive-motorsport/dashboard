@@ -36,7 +36,7 @@ function tfEditor() {
     ${d.discs[x.id].map((row, i) => `<label class="tf-pad">${esc(tx('Patin'))} ${i + 1}</label>${row.map((v, j) => `<input class="sdin num" inputmode="decimal" data-tfv="d:${x.id}:${i}:${j}" value="${esc(v ?? '')}" placeholder="mm">`).join('')}`).join('')}</div></div>`;
   const plate = p => `<div class="tf-plate"><b>${esc(tx(p.label))}</b><div class="tf-row">${d.plates[p.id].map((v, i) => `<input class="sdin num" inputmode="decimal" data-tfv="p:${p.id}:${i}" value="${esc(v ?? '')}" placeholder="${i + 1}">`).join('')}</div></div>`;
   return `<div class="ts-form"><h4>${esc(tx(s.label))}</h4>
-    <div class="sdgrid">${hf('after', 'Après (événement)')}<label class="sdfield"><span>${esc(tx('Date'))}</span>${dpField('data-tfv="h:date"', h.date)}</label>${hf('mechanic', 'Mécanicien')}${hf('mechanism', 'Mécanisme')}${hf('gearbox', 'Boîte de vitesses')}${hf('chassis', 'N° de coque / voiture')}${hf('km', 'Kilométrage (km)', 'inputmode="numeric"')}</div>
+    <div class="sdgrid">${hf('after', 'Après (événement)')}<label class="sdfield"><span>${esc(tx('Date'))}</span>${dpField('data-tfv="h:date"', h.date)}</label>${hf('mechanic', 'Mécanicien')}${hf('mechanism', 'Mécanisme')}${hf('gearbox', 'Boîte de vitesses')}<label class="sdfield"><span>${esc(tx('Voiture'))}</span><input class="sdin" value="${esc((tfJobOf().vehicle || {}).name || '')}" readonly tabindex="-1"></label>${hf('km', 'Kilométrage (km)', 'inputmode="numeric"')}</div>
     <div class="tf-discs">${s.discs.map(disc).join('')}</div>
     <h5>${esc(tx('Conicité des plateaux'))} <small class="na">${esc(tx('6 mesures par plateau (mm)'))}</small></h5><div class="tf-plates">${s.plates.map(plate).join('')}</div>
     ${s.spring_fingers ? `<label class="sdfield"><span>Spring fingers (mm)</span><input class="sdin num" inputmode="decimal" data-tfv="sf" value="${esc(d.spring_fingers ?? '')}"></label>` : ''}
@@ -66,7 +66,7 @@ document.addEventListener('click', async ev => {
   try {
     if (a === 'close') return tfClose();
     if (a === 'cancel') { tf.edit = null; tf.msg = null; return tsDraw(); }
-    if (a === 'new') { tf.edit = tfBlank(b.dataset.t); const p = ts.me && ts.me.name; if (p) tf.edit.data.header.mechanic = p; const j = tfJobOf(); tf.edit.data.header.chassis = (j.vehicle && j.vehicle.name) || ''; tf.edit.data.header.after = (j.event && j.event.title) || ''; tf.msg = null; return tsDraw(); }
+    if (a === 'new') { tf.edit = tfBlank(b.dataset.t); const p = ts.me && ts.me.name; if (p) tf.edit.data.header.mechanic = p; const j = tfJobOf(); tf.edit.data.header.after = (j.event && j.event.title) || ''; tf.msg = null; return tsDraw(); }
     if (a === 'edit') { const f = tf.forms.find(x => x.id === id); tf.edit = {id, type: f.type, data: JSON.parse(JSON.stringify(f.data))}; const s = tfType(f.type); for (const [k, rows] of Object.entries(tf.edit.data.discs)) rows.forEach(r => r.forEach((v, i) => { if (v == null) r[i] = ''; })); for (const k of Object.keys(tf.edit.data.plates)) tf.edit.data.plates[k] = tf.edit.data.plates[k].map(v => v == null ? '' : v); if (tf.edit.data.header.km == null) tf.edit.data.header.km = ''; if (tf.edit.data.spring_fingers == null) tf.edit.data.spring_fingers = ''; tf.msg = null; return tsDraw(); }
     if (a === 'save') {
       tf.busy = true; tf.msg = null; tsDraw();

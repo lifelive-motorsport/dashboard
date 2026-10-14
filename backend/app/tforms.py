@@ -137,11 +137,16 @@ def create(jid: str, ftype: str, data: dict, user: str, r: dict) -> dict:
     p = r.get("person") or {}
     h["mechanic"] = h["mechanic"] or p.get("name", "")
     h["date"] = h["date"] or date.today().isoformat()
-    h["chassis"] = h["chassis"] or ((job.get("vehicle") or {}).get("name", ""))[:120]
+    h["chassis"] = _car_name(job)
     fid = "f-" + uuid.uuid4().hex[:10]
     doc = {"id": fid, "job_id": jid, "type": ftype, "data": spec_data, "validated": False, "created_by": user.lower(), "created_at": timesheets.now().isoformat(), "updated_at": timesheets.now().isoformat()}
     forms().put(fid, doc)
     return view(doc)
+
+
+def _car_name(job: dict | None) -> str:
+    """Le champ « Voiture » n'est pas éditable : il vient toujours du véhicule lié au job."""
+    return ((job or {}).get("vehicle") or {}).get("name", "")[:120]
 
 
 def _get(fid: str) -> dict:
@@ -158,6 +163,7 @@ def update(fid: str, data: dict, user: str, r: dict) -> dict:
     if f["created_by"] != user.lower() and not timesheets.chef_for(r, timesheets.jobs().get(f["job_id"])):
         raise PermissionError("Seul son auteur ou le chef d'atelier peut le modifier")
     f["data"] = clean(f["type"], data)
+    f["data"]["header"]["chassis"] = _car_name(timesheets.jobs().get(f["job_id"]))
     f["updated_at"] = timesheets.now().isoformat()
     forms().put(fid, f)
     return view(f)
@@ -212,7 +218,7 @@ def print_page(f: dict, job: dict, lang: str = "fr") -> str:
     state = {"ok": T("OK pour la prochaine course", "OK for the next event"), "replace": T("À REMPLACER", "REPLACE"), None: "—"}[c["state"]]
     head = [(T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T("Événement / après", "Event / after"), h.get("after") or (job.get("event") or {}).get("title", "")),
             (T("Date", "Date"), h.get("date", "")), (T("Mécanicien", "Mechanic"), h.get("mechanic", "")), (T("Mécanisme", "Mechanism"), h.get("mechanism", "")),
-            (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("N° de coque", "Chassis no."), h.get("chassis", "")), (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
+            (T("Boîte de vitesses", "Gearbox"), h.get("gearbox", "")), (T("Kilométrage", "Mileage"), _n(h.get("km"), "km", 0))]
     parts = []
     for disc in spec["discs"]:
         rows = f["data"]["discs"][disc["id"]]

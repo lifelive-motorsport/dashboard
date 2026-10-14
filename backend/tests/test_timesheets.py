@@ -565,6 +565,8 @@ def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
     gb = f["calc"]["discs"]["gearbox"]
     assert gb["min"] == 4.6 and gb["state"] == "replace" and f["calc"]["state"] == "replace"
     assert f["calc"]["plates"]["pressure"]["taper"] == 0.3 and f["calc"]["taper_max"] == 0.3
+    bad = _clutch4_data(); bad["header"]["chassis"] = "Autre voiture"                                          # « Voiture » vient du job, jamais de la saisie
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": bad}).json()["data"]["header"]["chassis"] == "Porsche 992"
     # valeurs hors limites ou type inconnu : refusés
     assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": {"discs": {"motor": [[99, 1]]}}}).status_code == 422
     assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "nimporte", "data": {}}).status_code == 422

@@ -1574,7 +1574,6 @@ Object.assign(EN_T, {
   "Mécanicien": "Mechanic",
   "Mécanisme": "Mechanism",
   "Boîte de vitesses": "Gearbox",
-  "N° de coque / voiture": "Chassis / car no.",
   "Kilométrage (km)": "Mileage (km)",
   "Remarques": "Notes",
   "Supprimer ce formulaire ?": "Delete this form?",

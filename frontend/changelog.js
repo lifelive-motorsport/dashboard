@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Formulaires techniques : mesure d’embrayage', tag: 'Consigner', items: [
+    'Dans un job d’atelier, bouton « Formulaires » : mesure d’embrayage 4 ou 6 patins (épaisseurs des disques, conicité des plateaux), saisie sur tablette ou téléphone.',
+    'Calcul automatique de l’usure, de l’usure aux 1 000 km et du kilométrage restant estimé ; le chef d’atelier valide, puis le formulaire est verrouillé.',
+    'Feuille imprimable aux couleurs de Lifelive, à enregistrer en PDF.',
+  ]},
   {date: 'Octobre 2026', title: 'Accès clients', tag: 'Administrer', items: [
     'Administrer › Accès clients : on crée un client avec ses adresses e-mail et ses voitures du Garage ; il se connecte par un lien reçu par e-mail (valable 15 minutes, à usage unique).',
     'Accès clients : « 👁 Voir comme ce client » ouvre son espace en aperçu (2 h, lecture seule) ; dans Pointages, le chef d’atelier peut « Masquer pour le client » le texte d’une intervention.',

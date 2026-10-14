@@ -8,14 +8,14 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, Response as RawResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response as RawResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, clients, feedback, projection, rides, users, vdocs, wall
+from . import access, clients, feedback, projection, rides, tforms, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -1476,6 +1476,63 @@ def ts_delete_entry(eid: str, user: str = Depends(require_user)):
     except Exception as ex:
         _ts_err(ex)
     return {"deleted": eid}
+
+
+# ---- Formulaires techniques d'un job (mesure d'embrayage…) ----------------------------------------------------------------------------------
+
+class TFormIn(BaseModel):
+    type: str = ""
+    data: dict = Field(default_factory=dict)
+
+
+def _tf(fn, *a):
+    try:
+        return fn(*a)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except (LookupError, ValueError) as e:
+        raise HTTPException(404 if isinstance(e, LookupError) else 422, str(e))
+
+
+@app.get("/api/timesheets/form-types")
+def ts_form_types(user: str = Depends(require_user)):
+    _ts_ctx(user)
+    return {"types": tforms.types()}
+
+
+@app.get("/api/timesheets/jobs/{jid}/forms")
+def ts_job_forms(jid: str, user: str = Depends(require_user)):
+    _ts_ctx(user)
+    return {"forms": _tf(tforms.list_for_job, jid)}
+
+
+@app.post("/api/timesheets/jobs/{jid}/forms")
+def ts_create_form(jid: str, body: TFormIn, user: str = Depends(require_user)):
+    return _tf(tforms.create, jid, body.type, body.data, user, _ts_ctx(user))
+
+
+@app.put("/api/timesheets/forms/{fid}")
+def ts_update_form(fid: str, body: TFormIn, user: str = Depends(require_user)):
+    return _tf(tforms.update, fid, body.data, user, _ts_ctx(user))
+
+
+@app.post("/api/timesheets/forms/{fid}/validate")
+def ts_validate_form(fid: str, validated: bool = True, user: str = Depends(require_user)):
+    return _tf(tforms.validate, fid, validated, user, _ts_ctx(user))
+
+
+@app.delete("/api/timesheets/forms/{fid}")
+def ts_delete_form(fid: str, user: str = Depends(require_user)):
+    _tf(tforms.delete, fid, user, _ts_ctx(user))
+    return {"deleted": fid}
+
+
+@app.get("/api/timesheets/forms/{fid}/print")
+def ts_print_form(fid: str, lang: str = "fr", user: str = Depends(require_user)):
+    """Feuille imprimable (A4, charte Lifelive) : s'ouvre dans un onglet, « Enregistrer en PDF » depuis l'impression du navigateur."""
+    _ts_ctx(user)
+    f = _tf(tforms._get, fid)
+    return HTMLResponse(tforms.print_page(f, timesheets.jobs().get(f["job_id"]) or {}, "en" if lang == "en" else "fr"))
 
 
 @app.post("/api/timesheets/entries/{eid}/client-visibility")

@@ -541,3 +541,56 @@ def test_resource_bus_is_independent_from_cost_allocation(api, monkeypatch):
     assert julien["bus"] == ["MODERN_RALLY", "HISTORIC_RACING"]
     from app import wall
     assert not wall._person_in(julien, "xc") and wall._person_in(julien, "cars")                     # plus dans l'équipe XC
+
+
+def _clutch4_data(km=1000, top=5.6, bottom=5.4):
+    return {"header": {"km": km, "after": "Rallye test", "mechanism": "M1", "gearbox": "BV9"},
+            "discs": {"motor": [[top, bottom]] * 4, "gearbox": [[5.0, 4.6]] * 4},
+            "plates": {"pressure": [10.0, 10.1, 10.0, 10.3, 10.0, 10.1], "inter": [8, 8, 8, 8, 8, 8]}, "notes": "RAS"}
+
+
+def test_clutch_form_calculations_rights_and_locking(api, monkeypatch):
+    from app import tforms
+    monkeypatch.setattr(tforms, "_forms", None)
+    jid = mkjob(api, vehicle={"id": "1", "name": "Porsche 992"}).json()["id"]
+    as_(api, MEC)
+    types = api.get("/api/timesheets/form-types").json()["types"]
+    assert {t["id"] for t in types} == {"clutch4", "clutch6"}
+    r = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": _clutch4_data()})
+    assert r.status_code == 200
+    f = r.json()
+    assert f["data"]["header"]["mechanic"] == "Nolan Collinet" and f["data"]["header"]["chassis"] == "Porsche 992"
+    motor = f["calc"]["discs"]["motor"]
+    assert motor["mean"] == 5.5 and motor["wear"] == 0.5 and motor["wear_per_1000km"] == 0.5 and motor["remaining_km"] == 1800 and motor["state"] == "ok"
+    gb = f["calc"]["discs"]["gearbox"]
+    assert gb["min"] == 4.6 and gb["state"] == "replace" and f["calc"]["state"] == "replace"
+    assert f["calc"]["plates"]["pressure"]["taper"] == 0.3 and f["calc"]["taper_max"] == 0.3
+    # valeurs hors limites ou type inconnu : refusés
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch4", "data": {"discs": {"motor": [[99, 1]]}}}).status_code == 422
+    assert api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "nimporte", "data": {}}).status_code == 422
+    # 6 patins : une mesure par patin, ressort et trois disques
+    f6 = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "clutch6", "data": {"header": {"km": 500}, "discs": {"central": [[5.5]] * 6}, "spring_fingers": 12.5}}).json()
+    assert f6["calc"]["discs"]["central"]["mean"] == 5.5 and f6["calc"]["discs"]["motor"]["mean"] is None and f6["data"]["spring_fingers"] == 12.5
+    fid = f["id"]
+    as_(api, CHEF_XC)                                                                                       # chef d'une autre BU : ni modifier ni valider
+    assert api.put(f"/api/timesheets/forms/{fid}", json={"data": _clutch4_data()}).status_code == 403
+    assert api.post(f"/api/timesheets/forms/{fid}/validate").status_code == 403
+    as_(api, MEC)
+    assert api.post(f"/api/timesheets/forms/{fid}/validate").status_code == 403                             # le mécanicien ne valide pas
+    assert api.put(f"/api/timesheets/forms/{fid}", json={"data": _clutch4_data(km=2000)}).json()["data"]["header"]["km"] == 2000
+    as_(api, CHEF)
+    assert api.post(f"/api/timesheets/forms/{fid}/validate").json()["validated"] is True
+    as_(api, MEC)
+    assert api.put(f"/api/timesheets/forms/{fid}", json={"data": _clutch4_data()}).status_code == 403      # verrouillé après validation
+    assert api.delete(f"/api/timesheets/forms/{fid}").status_code == 403
+    as_(api, CHEF)
+    page = api.get(f"/api/timesheets/forms/{fid}/print")
+    assert page.status_code == 200 and "Mesure d&#x27;embrayage" in page.text.replace("'", "&#x27;") and "Porsche 992" in page.text and "Barlow Condensed" in page.text
+    assert "2000 km" in page.text and "3600 km" in page.text                                               # pas de zéros avalés (2000 ≠ 2)
+    assert api.get(f"/api/timesheets/forms/{fid}/print?lang=en").text.count("Mean thickness") == 2
+    assert api.post(f"/api/timesheets/forms/{fid}/validate?validated=false").json()["validated"] is False
+    assert len(api.get(f"/api/timesheets/jobs/{jid}/forms").json()["forms"]) == 2
+    assert api.delete(f"/api/timesheets/forms/{fid}").status_code == 200
+    # un job qui n'est pas d'atelier n'accepte pas de formulaire
+    bg = mkjob(api, kind="background", title="Rangement", bu="ALL").json()["id"]
+    assert api.post(f"/api/timesheets/jobs/{bg}/forms", json={"type": "clutch4", "data": {}}).status_code == 422

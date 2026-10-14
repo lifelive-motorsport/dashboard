@@ -15,13 +15,32 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, clients, feedback, projection, rides, tforms, tgarage, users, vdocs, wall
+from . import access, clients, feedback, history, projection, rides, tforms, tgarage, tmodels, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
 
 log = logging.getLogger("dashboard")
-app = FastAPI(title="Lifelive Motorsport — Logbook")
+async def _track_actor(request: Request) -> None:
+    """Pose l'auteur de la requête pour l'historique des modifications (cookie de session ou jeton Google ; jamais bloquant)."""
+    from starlette.concurrency import run_in_threadpool
+    from .auth import read_session
+    user = ""
+    try:
+        if not settings.AUTH_ENABLED:
+            user = "anonymous"
+        else:
+            s = read_session(request.cookies.get(COOKIE, ""))
+            if s:
+                user = s[0]
+            elif request.headers.get("authorization"):
+                user = await run_in_threadpool(verify_google, request.headers.get("authorization"))
+    except Exception:
+        user = ""
+    history.set_actor(user)
+
+
+app = FastAPI(title="Lifelive Motorsport — Logbook", dependencies=[Depends(_track_actor)])
 _provider = None
 _cache: dict[tuple, tuple[float, dict]] = {}
 
@@ -100,14 +119,14 @@ def open_session(request: Request, response: Response, authorization: str | None
     """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant)."""
     email = verify_google(authorization)
     if not settings.SESSION_SECRET:
-        return {"email": email, "session": False, "role": role(email), "super": users.is_super(email), **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}            # non configuré : on reste sur le jeton Google
+        return {"email": email, "session": False, "role": role(email), "super": users.is_super(email), "workshop_role": timesheets.role_of(email)["role"], **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}            # non configuré : on reste sur le jeton Google
     set_session_cookie(response, request, email)
-    return {"email": email, "session": True, "role": role(email), "super": users.is_super(email), **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}
+    return {"email": email, "session": True, "role": role(email), "super": users.is_super(email), "workshop_role": timesheets.role_of(email)["role"], **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}
 
 
 @app.get("/api/session")
 def current_session(request: Request, user: str = Depends(require_user)):
-    return {"viewing_as": getattr(request.state, "viewing_as", None), "email": user, "session": True, "role": role(user), "super": users.is_super(user), **users.identity(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
+    return {"viewing_as": getattr(request.state, "viewing_as", None), "email": user, "session": True, "role": role(user), "super": users.is_super(user), "workshop_role": timesheets.role_of(user)["role"], **users.identity(user), "pages": sorted(p) if (p := users.pages_of(user)) is not None else None}
 
 
 class ViewAsBody(BaseModel):
@@ -789,14 +808,14 @@ def _rd(fn, *a):
 
 
 @app.get("/api/rides/cars")
-def rd_cars(refresh: bool = False, _user: str = Depends(granted("consigner/rides"))):
+def rd_cars(refresh: bool = False, _user: str = Depends(granted("consigner/rides", "consigner/parts"))):
     if refresh:
         resources.vehicles(True)                                     # relit les ressources Google (nom corrigé, voiture ajoutée…)
     return {"cars": rides.cars(), "catalog": rides.get_catalog(), "circuits": rides.list_circuits(), "ensembles": rides.ENSEMBLES}
 
 
 @app.get("/api/rides/cars/{key}")
-def rd_car(key: str, _user: str = Depends(granted("consigner/rides"))):
+def rd_car(key: str, _user: str = Depends(granted("consigner/rides", "consigner/parts"))):
     return _rd(rides.car_detail, key)
 
 
@@ -894,6 +913,23 @@ def home_alerts(user: str = Depends(require_user)):
 
 
 # ---- Administrer › Accès clients (Super User) et espace client -------------------------------------------------------------------------------
+
+# ---- Administrer › Historique des modifications (Super User) ----------------------------------------------------------------------------------
+
+@app.get("/api/admin/history")
+def adm_history(days: int = 7, kind: str = "", by: str = "", q: str = "", _user: str = Depends(super_user)):
+    return {"entries": history.list_entries(days, kind, by, q), "kinds": history.TRACKED, "keep_days": history.days()}
+
+
+@app.get("/api/admin/history/{hid}")
+def adm_history_one(hid: str, _user: str = Depends(super_user)):
+    return _rd(history.detail, hid)
+
+
+@app.post("/api/admin/history/{hid}/restore")
+def adm_history_restore(hid: str, user: str = Depends(super_user)):
+    return _rd(history.restore, hid, user)
+
 
 @app.get("/api/admin/clients")
 def adm_clients(_user: str = Depends(super_user)):
@@ -1086,22 +1122,25 @@ def rd_delete_maint(mid: str, _user: str = Depends(granted("consigner/rides"))):
 
 
 @app.get("/api/rides/templates")
-def rd_templates(_user: str = Depends(granted("consigner/rides", "consigner/parts"))):
+def rd_templates(_user: str = Depends(granted("consigner/rides", "consigner/parts", "consigner/arch_models"))):
     return {"templates": rides.list_templates(), "ensembles": rides.ENSEMBLES}
 
 
 @app.post("/api/rides/templates")
-def rd_create_template(body: rides.TemplateIn, user: str = Depends(granted("consigner/parts"))):
+def rd_create_template(body: rides.TemplateIn, user: str = Depends(granted("consigner/arch_models"))):
+    _ts_models(user)
     return _rd(rides.save_template, None, body, user)
 
 
 @app.put("/api/rides/templates/{tid}")
-def rd_update_template(tid: str, body: rides.TemplateIn, user: str = Depends(granted("consigner/parts"))):
+def rd_update_template(tid: str, body: rides.TemplateIn, user: str = Depends(granted("consigner/arch_models"))):
+    _ts_models(user)
     return _rd(rides.save_template, tid, body, user)
 
 
 @app.delete("/api/rides/templates/{tid}")
-def rd_delete_template(tid: str, _user: str = Depends(granted("consigner/parts"))):
+def rd_delete_template(tid: str, user: str = Depends(granted("consigner/arch_models"))):
+    _ts_models(user)
     _rd(rides.delete_template, tid)
     return {"ok": True}
 
@@ -1271,6 +1310,14 @@ def ts_update_job(jid: str, body: timesheets.JobIn, user: str = Depends(require_
     return timesheets.job_view(doc)
 
 
+def _ts_models(user: str) -> dict:
+    """Modèles (de jobs, de formulaires, d'architecture) : chef d'atelier, ingénieur / coordinateur et Super User."""
+    r = _ts_ctx(user)
+    if r["role"] not in ("chef", "coordinator"):
+        raise HTTPException(403, "Réservé au chef d'atelier, à l'ingénieur / coordinateur et au Super User")
+    return r
+
+
 def _ts_tpl_rights(r: dict, bu: str):
     if not r["super"] and bu != "ALL" and timesheets.bu_group(bu) not in r["bus"]:
         raise HTTPException(403, f"Vous gérez les modèles de la BU {', '.join(r['bus'])}")
@@ -1278,13 +1325,13 @@ def _ts_tpl_rights(r: dict, bu: str):
 
 @app.get("/api/timesheets/templates")
 def ts_templates(user: str = Depends(require_user)):
-    _ts_chef(user)
+    _ts_models(user)
     return {"templates": timesheets.list_templates()}
 
 
 @app.post("/api/timesheets/templates")
 def ts_create_template(body: timesheets.TemplateIn, user: str = Depends(require_user)):
-    r = _ts_chef(user)
+    r = _ts_models(user)
     _ts_tpl_rights(r, body.bu)
     try:
         return timesheets.save_template(body, user)
@@ -1294,7 +1341,7 @@ def ts_create_template(body: timesheets.TemplateIn, user: str = Depends(require_
 
 @app.put("/api/timesheets/templates/{tid}")
 def ts_update_template(tid: str, body: timesheets.TemplateIn, user: str = Depends(require_user)):
-    r = _ts_chef(user)
+    r = _ts_models(user)
     old = timesheets.templates().get(tid)
     if not old:
         raise HTTPException(404, "Modèle introuvable")
@@ -1309,7 +1356,7 @@ def ts_update_template(tid: str, body: timesheets.TemplateIn, user: str = Depend
 @app.delete("/api/timesheets/templates/{tid}")
 def ts_delete_template(tid: str, user: str = Depends(require_user)):
     """Supprime le modèle ; les jobs déjà créés gardent leur copie de la liste."""
-    r = _ts_chef(user)
+    r = _ts_models(user)
     old = timesheets.templates().get(tid)
     if not old:
         raise HTTPException(404, "Modèle introuvable")
@@ -1539,6 +1586,46 @@ def ts_garage_restore(jid: str, body: GarageKey, user: str = Depends(require_use
     _, job = _garage_ctx(jid, user)
     _tf(tgarage.restore, job, body.key)
     return tgarage.proposals(job)
+
+
+# ---- Modèles de formulaires (modifiables par le chef d'atelier, l'ingénieur / coordinateur et le Super User) ----------------------------------------
+
+class FormModelIn(BaseModel):
+    label: str = Field(default="", max_length=100)
+    garage: dict | None = None
+    requests: list[dict] = Field(default_factory=list, max_length=12)
+    sections: list[dict] = Field(default_factory=list, max_length=30)
+    groups: list[dict] = Field(default_factory=list, max_length=30)
+
+
+class FormModelDup(BaseModel):
+    from_id: str = Field(max_length=60)
+    label: str = Field(default="", max_length=100)
+
+
+@app.get("/api/timesheets/form-models")
+def ts_form_models(user: str = Depends(require_user)):
+    _ts_models(user)
+    return {"models": tmodels.admin_view(), "functions": rides.FUNCTIONS, "maint": {k: rides.MAINT_LABEL[k] for k in rides.LOGGED}}
+
+
+@app.put("/api/timesheets/form-models/{mid}")
+def ts_form_model_save(mid: str, body: FormModelIn, user: str = Depends(require_user)):
+    _ts_models(user)
+    return _tf(tmodels.save, mid, body.model_dump(), user)
+
+
+@app.post("/api/timesheets/form-models")
+def ts_form_model_dup(body: FormModelDup, user: str = Depends(require_user)):
+    _ts_models(user)
+    return _tf(tmodels.duplicate, body.from_id, body.label, user)
+
+
+@app.delete("/api/timesheets/form-models/{mid}")
+def ts_form_model_delete(mid: str, user: str = Depends(require_user)):
+    _ts_models(user)
+    _tf(tmodels.delete, mid)
+    return {"deleted": mid}
 
 
 @app.get("/api/timesheets/form-types")

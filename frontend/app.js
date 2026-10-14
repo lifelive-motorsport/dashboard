@@ -9,11 +9,12 @@ const store = {get: k => { try { return localStorage.getItem(k); } catch { retur
                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 
 // Catégorie « XC » (adresses de XC_ONLY_EMAILS côté serveur) : uniquement ces pages ; le serveur refuse tout le reste
-let role = 'full', superUser = false, pagesList = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
-const allowedPage = k => k === 'home/welcome' || ((!SUPER_ONLY.has(k) || superUser) && (!GRANT_ONLY.has(k) || superUser || (pagesList && pagesList.has(k))) && (!pagesList || pagesList.has(k) || (superUser && !pagesList)));
+let role = 'full', superUser = false, pagesList = null, workshopRole = null;       // pagesList : pages de la catégorie de l'utilisateur (null = toutes)
+const workshopOk = k => !WORKSHOP_ONLY.has(k) || superUser || workshopRole === 'chef' || workshopRole === 'coordinator';
+const allowedPage = k => k === 'home/welcome' || (workshopOk(k) && (!SUPER_ONLY.has(k) || superUser) && (!GRANT_ONLY.has(k) || superUser || (pagesList && pagesList.has(k))) && (!pagesList || pagesList.has(k) || (superUser && !pagesList)));
 const homePage = () => !superUser && pagesList && pagesList.size === 1 && pagesList.has('consigner/wall') ? 'consigner/wall' : 'home/welcome';      // compte « Kiosque » : il ouvre directement l'écran atelier
 const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
-const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };
+const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; workshopRole = sj.workshop_role || null; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };
 // Bandeau « Voir comme » : toujours visible tant qu'un Super User agit avec les droits d'un autre utilisateur
 function viewAs(v) {
   let b = document.getElementById('viewas'); document.body.classList.toggle('viewing-as', !!v);
@@ -33,10 +34,10 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables']]],
-  ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs'], ['clients','Accès clients']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables'], ['job_models','Modèles de jobs'], ['form_models','Modèles de formulaires'], ['arch_models','Modèles d’architecture voiture']]],
+  ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs'], ['clients','Accès clients'], ['history','Historique']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','consigner/job_models','consigner/form_models','consigner/arch_models','others/history','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -509,6 +510,10 @@ const PAGES = {
   'consigner/wall': () => wallBlocks(),
   'consigner/rides': () => [BU_BAR()].concat(ridesBlocks()),
   'consigner/parts': () => partsBlocks(),
+  'consigner/arch_models': () => archBlocks(),
+  'consigner/job_models': () => tsBlocks('models'),
+  'consigner/form_models': () => fmBlocks(),
+  'others/history': () => historyBlocks(),
   'consigner/runs': () => runsBlocks(),
   'planifier/res_staff': () => resourcesBlocks('staff'),
   'planifier/res_ext': () => resourcesBlocks('ext'),
@@ -683,9 +688,12 @@ function render(force) {
   if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
   if (key === 'consigner/wall') wlStart();
   if (key === 'consigner/rides') { rdDraw(); rdLoad(); }
-  if (key === 'consigner/parts') { psDraw(); psLoad(); }
+  if (key === 'consigner/parts') { pvDraw(); pvLoad(); }
+  if (key === 'consigner/arch_models') { psDraw(); psLoad(); }
+  if (key === 'consigner/form_models') { fmDraw(); fmLoad(); }
+  if (key === 'others/history' && superUser) { hiDraw(); hiLoad(); }
   if (key === 'consigner/runs') { rnDraw(); rnLoad(); }
-  if (key === 'consigner/timesheets' || key === 'consigner/team' || key === 'consigner/jobs') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : key === 'consigner/jobs' ? 'jobs' : 'mine'); }
+  if (key === 'consigner/timesheets' || key === 'consigner/team' || key === 'consigner/jobs' || key === 'consigner/job_models') { tsDraw(); tsLoad(key === 'consigner/team' ? 'team' : key === 'consigner/jobs' ? 'jobs' : key === 'consigner/job_models' ? 'models' : 'mine'); }
   if (key === 'planifier/events') { peDraw(); peLoad().then(() => { peDraw(); if (window.peEditAfter) { const id = window.peEditAfter; window.peEditAfter = null; peOpenEdit(id); } }); }
   renderFooter(); store.set('lm_page', key); document.body.classList.remove('nav-open'); $('menu-btn').setAttribute('aria-expanded', 'false');
   $('app').hidden = false; $('login').hidden = true;

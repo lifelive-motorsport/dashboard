@@ -9,7 +9,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from . import rides, tcheck, timesheets, tsheet
+from . import rides, tcheck, timesheets, tmodels, tsheet
 from .timesheets import Coll
 
 CLUTCH_SET = "Embrayage"   # ensemble du Garage dont les pièces peuvent être liées à la mesure
@@ -40,11 +40,14 @@ def forms() -> Coll:
 def types() -> list[dict]:
     clutch = [{"id": k, "kind": "clutch", **{f: v[f] for f in ("label", "pads_per_measure", "measure_names", "discs", "plates", "spring_fingers")}, "ep0": EP0, "mini": MINI, "plate_points": PLATE_POINTS}
               for k, v in FORM_TYPES.items()]
-    return clutch + [{**t, "header_labels": {k: tcheck.HEADER_LABELS[k] for k in t["header"]}} for t in tcheck.types()] + tsheet.types()
+    return clutch + tmodels.effective_types()
 
 
 def label_of(ftype: str) -> str:
-    return (FORM_TYPES.get(ftype) or tcheck.TYPES.get(ftype) or tsheet.TYPES[ftype])["label"]
+    if ftype in FORM_TYPES:
+        return FORM_TYPES[ftype]["label"]
+    m = tmodels.spec_of(ftype)
+    return m[1]["label"] if m else ftype
 
 
 def is_clutch(ftype: str) -> bool:
@@ -65,8 +68,9 @@ def _num(v, lo: float, hi: float) -> float | None:
 
 def clean(ftype: str, data: dict) -> dict:
     """Normalise ce que le mécanicien a saisi : le gabarit du type fixe le nombre de disques, de patins et de mesures."""
-    if ftype in tcheck.TYPES or ftype in tsheet.TYPES:
-        out = (tcheck if ftype in tcheck.TYPES else tsheet).clean(ftype, data, _num)
+    m = tmodels.spec_of(ftype) if ftype not in FORM_TYPES else None
+    if m:
+        out = (tcheck if m[0] == "checklist" else tsheet).clean(m[1], data, _num)
         d = out["header"]["date"]
         try:
             out["header"]["date"] = date.fromisoformat(d).isoformat() if d else ""
@@ -105,10 +109,9 @@ def compute(ftype: str, data: dict) -> dict:
     """Épaisseur moyenne par disque, usure par rapport au neuf, usure aux 1 000 km, kilométrage restant avant l'épaisseur minimale, conicité des plateaux.
     Remarque : les formules des fiches Excel d'origine (somme de 6 cellules divisée par 4, patin du bas ignoré, 6,9 mm au lieu de 6 mm) étaient incohérentes ; la moyenne
     porte ici sur toutes les mesures saisies."""
-    if ftype in tcheck.TYPES:
-        return tcheck.compute(ftype, data)
-    if ftype in tsheet.TYPES:
-        return tsheet.compute(ftype, data)
+    m = tmodels.spec_of(ftype) if ftype not in FORM_TYPES else None
+    if m:
+        return (tcheck if m[0] == "checklist" else tsheet).compute(m[1], data)
     spec = FORM_TYPES[ftype]
     km = (data.get("header") or {}).get("km")
     out_d = {}
@@ -232,7 +235,8 @@ def create(jid: str, ftype: str, data: dict, part_id: str, user: str, r: dict) -
         _fill_km(spec_data, part_id, job)
     else:
         part_id = ""                                                 # révisions de boîte et de pont, setup : pas encore reliés au Garage
-        if ftype in tsheet.TYPES and tsheet.TYPES[ftype].get("weighing"):
+        m = tmodels.spec_of(ftype)
+        if m and m[0] == "sheet" and m[1].get("weighing"):
             _prefill_crew(spec_data, jid)
     fid = "f-" + uuid.uuid4().hex[:10]
     doc = {"id": fid, "job_id": jid, "type": ftype, "part_id": part_id, "data": spec_data, "validated": False, "created_by": user.lower(), "created_at": timesheets.now().isoformat(), "updated_at": timesheets.now().isoformat()}
@@ -242,7 +246,7 @@ def create(jid: str, ftype: str, data: dict, part_id: str, user: str, r: dict) -
 
 def _prefill_crew(data: dict, jid: str) -> None:
     """Relevé de setup / setdown : poids du pilote et du co-pilote repris de la demande de setup du même job (la plus récente), s'ils ne sont pas saisis."""
-    reqs = sorted((f for f in forms().all() if f["job_id"] == jid and f["type"] in ("setup_request", "setup_request_circuit")), key=lambda f: f["created_at"], reverse=True)
+    reqs = sorted((f for f in forms().all() if f["job_id"] == jid and (tmodels.spec_of(f["type"]) or ("", {}))[1].get("kind_of") == "request"), key=lambda f: f["created_at"], reverse=True)
     for f in reqs[:1]:
         for k in ("pilot_kg", "copilot_kg"):
             if "inputs" in data and data["inputs"].get(k) is None and f["data"]["inputs"].get(k) is not None:
@@ -422,7 +426,7 @@ def _print_clutch(f: dict, job: dict, lang: str = "fr") -> str:
 def _print_check(f: dict, job: dict, lang: str) -> str:
     e = html.escape
     T = (lambda fr, eng: eng if lang == "en" else fr)
-    spec = tcheck.TYPES[f["type"]]
+    spec = tmodels.spec_of(f["type"])[1]
     d = f["data"]
     h = d["header"]
     c = compute(f["type"], d)
@@ -433,7 +437,7 @@ def _print_check(f: dict, job: dict, lang: str) -> str:
     req = "".join(f"<div><span>{e(T(r['label'], r['label']))}</span>{e(d['requests'].get(r['id'], ''))}</div>" for r in spec["requests"])
     mark = {"ok": "✓", "nok": "✗", "": ""}
     secs = "".join(f"<section><h3>{e(T(s['title'], s['title']))}</h3><table class='ck'><thead><tr><th></th><th>OK</th><th>NOK</th><th>{T('Commentaire', 'Comment')}</th></tr></thead><tbody>"
-                   + "".join(f"<tr class='{d['items'][i['id']]['status']}'><th>{e(i['label'])}</th><td>{mark['ok'] if d['items'][i['id']]['status'] == 'ok' else ''}</td><td>{mark['nok'] if d['items'][i['id']]['status'] == 'nok' else ''}</td><td>{e(d['items'][i['id']]['comment'])}</td></tr>" for i in s["items"])
+                   + "".join(f"<tr class='{(d['items'].get(i['id']) or {}).get('status', '')}'><th>{e(i['label'])}</th><td>{mark['ok'] if d['items'][i['id']]['status'] == 'ok' else ''}</td><td>{mark['nok'] if d['items'][i['id']]['status'] == 'nok' else ''}</td><td>{e((d['items'].get(i['id']) or {}).get('comment', ''))}</td></tr>" for i in s["items"])
                    + "</tbody></table></section>" for s in spec["sections"])
     state = (T("%d NOK à traiter", "%d NOK to handle") % c["nok"]) if c["nok"] else (T("Tout est OK", "All OK") if c["state"] == "ok" else T("%d élément(s) non contrôlé(s)", "%d item(s) not checked") % c["open"])
     notes = f"<p class='notes'><b>{T('Commentaires', 'Comments')} :</b> {e(d.get('notes') or '')}</p>" if d.get("notes") else ""
@@ -446,6 +450,7 @@ def print_page(f: dict, job: dict, lang: str = "fr") -> str:
     """Feuille A4 aux couleurs de Lifelive (Barlow Condensed / IBM Plex, graphite, noir réservé à l'impression)."""
     if is_clutch(f["type"]):
         return _print_clutch(f, job, lang)
-    if f["type"] in tsheet.TYPES:
-        return _shell(label_of(f["type"]), lang, tsheet.print_body(f, job, lang, _d), f)
+    m = tmodels.spec_of(f["type"])
+    if m and m[0] == "sheet":
+        return _shell(label_of(f["type"]), lang, tsheet.print_body(f, job, lang, _d, m[1]), f)
     return _print_check(f, job, lang)

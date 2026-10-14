@@ -767,3 +767,71 @@ def test_coordinator_role_confirms_garage_but_does_not_validate(api):
     assert api.get(f"/api/timesheets/jobs/{jid}/garage").status_code == 200
     assert api.get("/api/timesheets/jobs?all=true").status_code == 200
     assert api.post("/api/timesheets/jobs", json={"kind": "background", "title": "Z", "bu": "ALL"}).status_code == 403            # ne gère pas les jobs
+
+
+def test_form_models_are_editable_duplicable_and_protected(api, monkeypatch):
+    from app import tforms, tmodels
+    monkeypatch.setattr(tforms, "_forms", None)
+    jid = mkjob(api, vehicle={"id": "1", "name": "BMW M3 E30"}).json()["id"]
+    as_(api, MEC)
+    assert api.get("/api/timesheets/form-models").status_code == 403                                       # le mécanicien ne voit pas les modèles
+    as_(api, CHEF)
+    models = api.get("/api/timesheets/form-models").json()["models"]
+    assert {m["id"] for m in models} >= {"clutch4", "gearbox_m3", "rear_axle", "setup_reading"} and next(m for m in models if m["id"] == "clutch4")["readonly"] is True
+    gm = next(m for m in models if m["id"] == "gearbox_m3")
+    spec = gm["spec"]
+    first = spec["sections"][0]["items"][0]
+    payload = {"label": "Révision de boîte — M3 (maison)", "garage": {"fn": "gearbox", "mt": "revision2"}, "requests": spec["requests"], "sections": [
+        {"id": spec["sections"][0]["id"], "title": spec["sections"][0]["title"], "items": [{"id": first["id"], "label": "Pignon de 1ère (renommé)"}, {"id": "", "label": "Nouvel élément"}]}]}
+    saved = api.put("/api/timesheets/form-models/gearbox_m3", json=payload).json()
+    items = saved["spec"]["sections"][0]["items"]
+    assert items[0]["id"] == first["id"] and items[0]["label"] == "Pignon de 1ère (renommé)" and items[1]["id"] not in (first["id"], "") and len(saved["spec"]["sections"]) == 1
+    # un formulaire créé avec ce modèle reflète la nouvelle liste ; le lien Garage vient du modèle
+    f = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": "gearbox_m3", "data": {"items": {first["id"]: {"status": "nok"}}}}).json()
+    assert f["calc"]["total"] == 2 and f["calc"]["nok"] == 1 and f["label"] == "Révision de boîte — M3 (maison)"
+    assert any(t["id"] == "gearbox_m3" and t["garage"]["mt"] == "revision2" for t in api.get("/api/timesheets/form-types").json()["types"])
+    # duplication : nouveau formulaire utilisable ; un modèle utilisé ou d'origine ne se supprime pas
+    dup = api.post("/api/timesheets/form-models", json={"from_id": "rear_axle", "label": "Pont avant (copie)"}).json()
+    assert dup["builtin"] is False and api.post("/api/timesheets/form-models", json={"from_id": "rear_axle", "label": "pont avant (copie)"}).status_code == 422
+    f2 = api.post(f"/api/timesheets/jobs/{jid}/forms", json={"type": dup["id"], "data": {}}).json()
+    assert f2["label"] == "Pont avant (copie)"
+    assert api.delete(f"/api/timesheets/form-models/{dup['id']}").status_code == 422                       # utilisé par un formulaire rempli
+    assert api.delete("/api/timesheets/form-models/gearbox_m3").status_code == 422                         # modèle d'origine
+    api.delete(f"/api/timesheets/forms/{f2['id']}")
+    assert api.delete(f"/api/timesheets/form-models/{dup['id']}").status_code == 200
+    # la ligne de pesée d'un relevé ne peut pas disparaître ; liste vide refusée
+    sr = next(m for m in api.get("/api/timesheets/form-models").json()["models"] if m["id"] == "setup_reading")["spec"]
+    bad = {"label": sr["label"], "groups": [g for g in sr["groups"] if g["id"] != "pesee"]}
+    assert api.put("/api/timesheets/form-models/setup_reading", json=bad).status_code == 422
+    assert api.put("/api/timesheets/form-models/gearbox_m3", json={"label": "X", "sections": []}).status_code == 422
+
+
+def test_history_records_restores_and_is_super_only(api, monkeypatch):
+    from app import history, rides, users
+    monkeypatch.setattr(history, "_coll", None)
+    monkeypatch.setattr(history, "_last_purge", 0.0)
+    monkeypatch.setattr(timesheets, "_templates", None)
+    as_(api, CHEF)
+    body = {"name": "Modèle test", "bu": "CARS", "natures": ["pre_event"], "sections": [{"title": "Moteur", "lines": [{"text": "Vidange moteur", "note": ""}]}]}
+    tid = api.post("/api/timesheets/templates", json=body).json()["id"]
+    api.put(f"/api/timesheets/templates/{tid}", json={**body, "name": "Modèle test (modifié par erreur)", "sections": [{"title": "Moteur", "lines": [{"text": "Autre chose", "note": ""}]}]})
+    monkeypatch.setattr(users, "is_super", lambda e: e == CHEF)
+    entries = api.get("/api/admin/history?days=7").json()["entries"]
+    mine = [e for e in entries if e["doc_id"] == tid]
+    assert [e["action"] for e in mine] == ["update", "create"] and mine[0]["kind"] == "Modèle de job" and "name" in mine[0]["fields"] and "sections" in mine[0]["fields"]
+    d = api.get(f"/api/admin/history/{mine[0]['id']}").json()
+    assert d["before"]["name"] == "Modèle test" and d["after"]["name"].endswith("par erreur)") and d["stale"] is False
+    # restauration : l'état d'avant revient, et la restauration est elle-même au journal
+    assert api.post(f"/api/admin/history/{mine[0]['id']}/restore").json()["restored"] == "updated"
+    assert timesheets.templates().get(tid)["name"] == "Modèle test" and timesheets.templates().get(tid)["sections"][0]["lines"][0]["text"] == "Vidange moteur"
+    assert api.get("/api/admin/history?days=7").json()["entries"][0]["restored_from"] == mine[0]["id"]
+    # suppression par erreur : restauration = recréation
+    api.delete(f"/api/timesheets/templates/{tid}")
+    gone = [e for e in api.get("/api/admin/history?days=7").json()["entries"] if e["doc_id"] == tid and e["action"] == "delete"][0]
+    assert timesheets.templates().get(tid) is None and api.post(f"/api/admin/history/{gone['id']}/restore").json()["restored"] == "recreated" and timesheets.templates().get(tid)["name"] == "Modèle test"
+    # réservé au Super User ; les écritures sans changement ne sont pas relevées
+    as_(api, MEC)
+    assert api.get("/api/admin/history").status_code == 403
+    n = len(history.coll().all())
+    timesheets.templates().put(tid, timesheets.templates().get(tid))
+    assert len(history.coll().all()) == n

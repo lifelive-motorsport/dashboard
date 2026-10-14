@@ -44,12 +44,7 @@ TYPES = {
 HEADER_LABELS = {"after": "Après (événement)", "gearbox_no": "Boîte n°", "diff_no": "Diff n°", "axle_no": "Pont n°", "km": "Kilométrage (km)"}
 
 
-def types() -> list[dict]:
-    return [{"id": k, "kind": "checklist", **v} for k, v in TYPES.items()]
-
-
-def clean(ftype: str, data: dict, num) -> dict:
-    spec = TYPES[ftype]
+def clean(spec: dict, data: dict, num) -> dict:
     h = data.get("header") or {}
     header = {k: str(h.get(k) or "").strip()[:120] for k in spec["header"] if k != "km"}
     header["km"] = num(h.get("km"), 0, 1_000_000)
@@ -69,13 +64,12 @@ def clean(ftype: str, data: dict, num) -> dict:
     return {"header": header, "requests": requests, "items": items, "notes": str(data.get("notes") or "").strip()[:1500]}
 
 
-def compute(ftype: str, data: dict) -> dict:
-    spec = TYPES[ftype]
+def compute(spec: dict, data: dict) -> dict:
     secs, tot = [], {"ok": 0, "nok": 0, "open": 0}
     for sec in spec["sections"]:
         c = {"ok": 0, "nok": 0, "open": 0}
         for it in sec["items"]:
-            st = data["items"][it["id"]]["status"]
+            st = (data["items"].get(it["id"]) or {}).get("status", "")
             c[st or "open"] += 1
         secs.append({"id": sec["id"], "title": sec["title"], **c})
         for k in tot:

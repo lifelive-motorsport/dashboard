@@ -8,7 +8,7 @@ const psLim = (l = {}) => rdLimOf(l);
 const psMkNode = (parent, group) => ({id: psId(), parent_id: parent, name: '', reference: '', fn: '', group, types: group ? [] : ['replace'], ...Object.fromEntries(PS_MAINT.map(([k]) => [k, psLim()]))});
 const psBlank = () => ({id: null, name: '', description: '', nodes: []});
 
-function partsBlocks() { return [{static: '<section class="block" data-bid="ps"><div id="ps-view"><p class="na loading">Chargement…</p></div></section>'}]; }
+function archBlocks() { return [{static: '<section class="block" data-bid="ps"><div id="ps-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function psLoad() {
   ps.loading = true; psDraw();

@@ -60,17 +60,14 @@ def input_keys(spec: dict) -> list[str]:
     return list(dict.fromkeys(ks))
 
 
-def types() -> list[dict]:
-    out = []
-    for k, v in TYPES.items():
-        out.append({"id": k, "kind": "sheet", "label": v["label"], "sheet": v["kind_of"], "header_after": v["header_after"], "weighing": bool(v.get("weighing")),
-                    "inputs": [{"id": i, "label": INPUT_LABELS[i], "text": i.endswith("_name")} for i in input_keys(v)],
-                    "groups": [{**g, "cols": [{"id": c, "label": l} for c, l in COLS[g["layout"]]]} for g in v["groups"]]})
-    return out
+def describe(k: str, v: dict) -> dict:
+    """Description d'une feuille pour l'écran : champs d'entrée, groupes et colonnes."""
+    return {"id": k, "kind": "sheet", "label": v["label"], "sheet": v["kind_of"], "header_after": v["header_after"], "weighing": bool(v.get("weighing")), "garage": v.get("garage"),
+            "inputs": [{"id": i, "label": INPUT_LABELS[i], "text": i.endswith("_name")} for i in input_keys(v)],
+            "groups": [{**g, "cols": [{"id": c, "label": l} for c, l in COLS[g["layout"]]]} for g in v["groups"]]}
 
 
-def clean(ftype: str, data: dict, num) -> dict:
-    spec = TYPES[ftype]
+def clean(spec: dict, data: dict, num) -> dict:
     h = data.get("header") or {}
     header = {"after": str(h.get("after") or "").strip()[:120], "mechanic": str(h.get("mechanic") or "").strip()[:120], "date": str(h.get("date") or "").strip()}
     inp = data.get("inputs") or {}
@@ -93,8 +90,7 @@ def _f(v) -> float | None:
         return None
 
 
-def compute(ftype: str, data: dict) -> dict:
-    spec = TYPES[ftype]
+def compute(spec: dict, data: dict) -> dict:
     filled = sum(1 for r in data["rows"].values() for v in r.values() if v)
     total_cells = sum(len(r) for r in data["rows"].values())
     out = {"filled": filled, "cells": total_cells, "state": None, "weights": None}
@@ -126,11 +122,10 @@ def _n(v, unit="") -> str:
     return f"{v:g}".replace(".", ",") + (f" {unit}" if unit else "")
 
 
-def print_body(f: dict, job: dict, lang: str, d_fmt) -> str:
+def print_body(f: dict, job: dict, lang: str, d_fmt, spec: dict) -> str:
     e = html.escape
     T = (lambda fr, eng: eng if lang == "en" else fr)
-    spec = TYPES[f["type"]]
-    d, c = f["data"], compute(f["type"], f["data"])
+    d, c = f["data"], compute(spec, f["data"])
     h = d["header"]
     head = [(T("Date", "Date"), d_fmt(h.get("date", ""))), (T("Voiture", "Car"), (job.get("vehicle") or {}).get("name", "")), (T(spec["header_after"], spec["header_after"]), h.get("after") or (job.get("event") or {}).get("title", "")),
             (T("Mécanicien", "Mechanic"), h.get("mechanic", ""))]
@@ -140,7 +135,7 @@ def print_body(f: dict, job: dict, lang: str, d_fmt) -> str:
     for g in spec["groups"]:
         cols = COLS[g["layout"]]
         th = "<th></th>" + "".join(f"<th>{e(l)}</th>" for _, l in cols if l) + ("" if any(l for _, l in cols) else "<th></th>")
-        body = "".join(f"<tr><th>{e(r['label'])}</th>" + "".join(f"<td>{e(d['rows'][r['id']].get(cid, ''))}</td>" for cid, _ in cols) + "</tr>" for r in g["rows"])
+        body = "".join(f"<tr><th>{e(r['label'])}</th>" + "".join(f"<td>{e((d['rows'].get(r['id']) or {}).get(cid, ''))}</td>" for cid, _ in cols) + "</tr>" for r in g["rows"])
         groups.append(f"<section><h3>{e(g['title'])}</h3><table class='sh'><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table></section>")
     wt = c["weights"]
     wtxt = ""

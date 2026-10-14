@@ -517,3 +517,5 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .rd-q{max-width:420px;min-width:200px;flex:1 1 260px}
 .tf-gar{margin-top:14px;padding-top:10px;border-top:1px solid var(--line)}.tf-gr{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)}.tf-gr select{max-width:320px;flex:1 1 200px}.tf-gr.done,.tf-gr.ign{opacity:.8}
 .ps-fn select{max-width:170px}
+.fm-item{display:flex;gap:8px;align-items:center;margin:4px 0}.fm-item .sdin{flex:1}.fm-ctl{display:inline-flex;gap:4px}.fm-sec{padding:8px 0;border-top:1px solid var(--line)}.fm-gar{display:flex;gap:8px;flex-wrap:wrap}.fm-gar select{flex:1 1 160px}
+.hi-pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px var(--mono, monospace);max-width:420px}

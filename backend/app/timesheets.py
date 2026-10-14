@@ -122,6 +122,7 @@ class TemplateIn(BaseModel):
 
 class Coll:
     def __init__(self, name: str):
+        self.name = name
         self._lock = threading.Lock()
         self._mem: dict[str, dict] = {}
         self._c = None
@@ -138,18 +139,31 @@ class Coll:
             return dict(d) if d else None
 
     def put(self, id_: str, doc: dict) -> None:
+        before = self._before(id_)
         if self._c is not None:
             self._c.document(id_).set(doc)
         else:
             with self._lock:
                 self._mem[id_] = dict(doc)
+        self._track(id_, before, doc)
 
     def delete(self, id_: str) -> None:
+        before = self._before(id_)
         if self._c is not None:
             self._c.document(id_).delete()
         else:
             with self._lock:
                 self._mem.pop(id_, None)
+        self._track(id_, before, None)
+
+    def _before(self, id_: str):
+        from . import history
+        return self.get(id_) if self.name in history.TRACKED else None
+
+    def _track(self, id_: str, before, after) -> None:
+        from . import history
+        if self.name in history.TRACKED:
+            history.record(self.name, id_, before, after)
 
     def all(self) -> list[dict]:
         if self._c is not None:
@@ -325,14 +339,16 @@ def _template_doc(data: TemplateIn, tid: str, user: str, created: str | None = N
 
 def ensure_templates() -> None:
     """Crée chaque modèle de départ une seule fois (marqueur « _seed:nom ») : ensuite, le chef d'atelier le modifie ou le supprime, il ne revient pas."""
+    from . import history
     from .ts_seed import SEED_TEMPLATES
     for t in SEED_TEMPLATES:
         key = "_seed:" + t["name"]
         if templates().get(key):
             continue
         tid = "t-" + uuid.uuid4().hex[:8]
-        templates().put(tid, _template_doc(TemplateIn.model_validate(t), tid, "system"))
-        templates().put(key, {"id": key})
+        with history.mute():
+            templates().put(tid, _template_doc(TemplateIn.model_validate(t), tid, "system"))
+            templates().put(key, {"id": key})
 
 
 def list_templates() -> list[dict]:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from . import rides, tforms, timesheets
+from . import rides, tforms, timesheets, tmodels
 from .timesheets import Coll
 
 _coll: Coll | None = None
@@ -16,7 +16,6 @@ _coll: Coll | None = None
 # Liens par défaut d'après le texte d'une ligne (modèles créés avant l'existence des liens) ; un lien explicite de la ligne (`fn` / `mt`) prime.
 DEFAULT_LINKS = [(re.compile(r"^vidange moteur", re.I), "engine", "fluids"), (re.compile(r"^vidange (de la )?bv|^vidange boite", re.I), "gearbox", "fluids"),
                  (re.compile(r"^vidange du pont", re.I), "rear_axle", "fluids"), (re.compile(r"^purger? les freins", re.I), "brakes", "fluids")]
-FORM_LINKS = {"gearbox_m3": ("gearbox", "revision"), "gearbox_z4": ("gearbox", "revision"), "gearbox_diff": ("gearbox", "revision"), "rear_axle": ("rear_axle", "revision")}
 
 
 def coll() -> Coll:
@@ -42,6 +41,13 @@ def _line_link(line: dict) -> tuple[str, str] | None:
         if rx.search(line.get("text", "").strip()):
             return fn, mt
     return None
+
+
+def _form_link(ftype: str) -> tuple[str, str] | None:
+    """Maintenance proposée à la validation d'un formulaire : lien porté par son modèle (modifiable dans Modèles › Modèles de formulaires)."""
+    m = tmodels.spec_of(ftype)
+    g = (m[1].get("garage") if m else None) or {}
+    return (g["fn"], g["mt"]) if g.get("fn") in rides.FUNCTIONS and g.get("mt") in rides.LOGGED else None
 
 
 def _parts_of(car_key: str) -> list[dict]:
@@ -87,8 +93,9 @@ def proposals(job: dict) -> dict:
     for f in sorted(tforms.forms().all(), key=lambda f: f["created_at"]):
         if f["job_id"] != job["id"] or not f.get("validated"):
             continue
-        if f["type"] in FORM_LINKS:
-            out.append(_item(f"form:{f['id']}", "form", tforms.label_of(f["type"]), FORM_LINKS[f["type"]], f["data"]["header"].get("date", ""), key_car, parts))
+        link = _form_link(f["type"])
+        if link:
+            out.append(_item(f"form:{f['id']}", "form", tforms.label_of(f["type"]), link, f["data"]["header"].get("date", ""), key_car, parts))
         elif tforms.is_clutch(f["type"]) and tforms.compute(f["type"], f["data"])["state"] == "replace" and f.get("part_id"):
             out.append({"key": f"replace:{f['id']}", "kind": "replace", "source": "form", "label": "Remplacer l'embrayage", "part_id": f["part_id"], "status": "pending", "fn": "clutch", "fn_label": rides.FUNCTIONS["clutch"],
                         "type": "replace", "type_label": rides.MAINT_LABEL["replace"], "date": f["data"]["header"].get("date", ""), "part_name": next((p["name"] for p in parts if p["id"] == f["part_id"]), ""), "tracked": True})

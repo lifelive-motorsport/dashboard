@@ -735,14 +735,16 @@ def delete_maint(mid: str) -> None:
 
 def _seed_templates(user: str = "logbook") -> None:
     """Crée chaque modèle de départ une seule fois (marqueur « _seed:nom ») : ensuite il se modifie ou se supprime, il ne revient pas."""
+    from . import history
     from .rides_seed import SEED_TEMPLATES
     for t in SEED_TEMPLATES:
         key = "_seed:" + t["name"]
         if templates_coll().get(key):
             continue
-        templates_coll().put(key, {"id": key})
-        if not any(x.get("name", "").lower() == t["name"].lower() for x in templates_coll().all()):
-            save_template(None, TemplateIn(**t), user)
+        with history.mute():
+            templates_coll().put(key, {"id": key})
+            if not any(x.get("name", "").lower() == t["name"].lower() for x in templates_coll().all()):
+                save_template(None, TemplateIn(**t), user)
 
 
 def list_templates() -> list[dict]:

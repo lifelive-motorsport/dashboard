@@ -2,13 +2,13 @@
 // `groups` : groupes de pages du MENU rangés dans le module ; `pages` : pages du module. Les droits d'accès (catégories d'utilisateurs) se donnent page par page.
 const CHAPTERS = [
   {id: 'piloter', n: '01', label: 'Piloter', modules: [
-    {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']},
-    {id: 'wall', label: 'Cockpit', source: 'Logbook · Google Agenda', pages: ['consigner/wall']}]},
+    {id: 'dashboards', label: 'Tableaux de bord', source: 'Odoo', groups: ['overview', 'xc', 'cars', 'staff', 'expenses', 'vehicles', 'marketing']}]},
   {id: 'planifier', n: '02', label: 'Planifier', modules: [
     {id: 'planning', label: 'Planning', source: 'Google Agenda', pages: ['planifier/planning']},
     {id: 'events', label: 'Événements', source: 'Google Agenda', pages: ['planifier/events']},
     {id: 'resources', label: 'Ressources', source: 'Google Agenda · Odoo', sub: true, pages: ['planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']}]},
   {id: 'technique', n: '03', label: 'Opérer', modules: [
+    {id: 'wall', label: 'Cockpit', source: 'Logbook · Google Agenda', pages: ['consigner/wall']},
     {id: 'timesheets', label: 'Atelier', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team', 'consigner/jobs']},
     {id: 'garage', label: 'Garage', source: 'Logbook · Odoo · Google Agenda', pages: ['consigner/rides']},
     {id: 'parts', label: 'Magasin de pièces', source: 'Logbook', pages: ['consigner/parts']},
@@ -16,7 +16,8 @@ const CHAPTERS = [
     {id: 'runs', label: 'Roulages', source: 'Logbook', pages: ['consigner/runs']},
     {id: 'models', label: 'Modèles', source: 'Logbook', sub: true, pages: ['consigner/job_models', 'consigner/form_models', 'consigner/arch_models']}]},
   {id: 'consigner', n: '04', label: 'Consigner', modules: [
-    {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']}]},
+    {id: 'leaves', label: 'Congés', source: 'Logbook · Google Agenda', pages: ['consigner/leaves']},
+    {id: 'absences', label: 'Absences', source: 'Logbook · Google Agenda', pages: ['consigner/absences']}]},
   {id: 'administrer', n: '05', label: 'Administrer', modules: [
     {id: 'crew', label: 'Équipage', source: 'Google Workspace', pages: ['others/users']},
     {id: 'clients', label: 'Accès clients', source: 'Logbook', pages: ['others/clients']},

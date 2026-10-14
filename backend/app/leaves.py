@@ -1,4 +1,9 @@
-"""Consigner › Congés : demandes de congé, soldes, validation, agenda Google « warnings » et rappel par e-mail.
+"""Consigner › Congés et Absences : demandes de congé, déclarations d'absence, soldes, validation, agenda Google « warnings » et rappel par e-mail.
+
+Deux familles : les CONGÉS (congés payés, compensation, extra-légal, récupération de jour férié, congé sans solde) se demandent à l'avance et se font approuver ; les ABSENCES justifiées
+(maladie, congé de circonstance, autre absence justifiée) se DÉCLARENT : elles prennent effet aussitôt (agenda, Planning, alertes) et le chef d'atelier ou le Managing Director « prend acte »
+(accusé de réception) ; justificatif obligatoire pour une maladie de plus d'un jour. Le motif d'une absence n'est visible que de la personne, de son validateur et du Super User : le Planning, le
+Cockpit et l'agenda partagé n'affichent que « Absent(e) ». Un congé sans solde reste un congé (demande à l'avance, approbation) mais n'entame aucun solde et n'est pas rémunéré.
 
 Une demande est approuvée par le chef d'atelier pour les mécaniciens de son équipe (même BU), par le Managing Director (Super User) pour les chefs d'atelier et le reste du personnel. Une fois
 approuvée, elle apparaît dans le Planning et dans l'agenda Google « warnings » (Google Agenda reste la référence des absences) ; elle est écrite dans Odoo plus tard (phase 4, champ odoo_id).
@@ -18,10 +23,17 @@ from .timesheets import Coll, blobs, person_of, now
 
 log = logging.getLogger("logbook")
 
-# (identifiant, libellé, a un solde, justificatif obligatoire au-delà d'un jour)
-TYPES = [("paid", "Congés payés", True, False), ("comp", "Jours de compensation", True, False), ("extra", "Congé extra-légal", True, False),
-         ("recup", "Récupération de jour férié", True, False), ("sick", "Congé maladie", False, True), ("other", "Autre congé (sans solde)", False, False)]
+# (identifiant, libellé, a un solde, justificatif obligatoire au-delà d'un jour, famille « leave » / « absence », rémunéré)
+TYPES = [("paid", "Congés payés", True, False, "leave", True), ("comp", "Jours de compensation", True, False, "leave", True), ("extra", "Congé extra-légal", True, False, "leave", True),
+         ("recup", "Récupération de jour férié", True, False, "leave", True), ("other", "Congé sans solde", False, False, "leave", False),
+         ("sick", "Maladie", False, True, "absence", True), ("circ", "Congé de circonstance", False, False, "absence", True), ("misc", "Autre absence justifiée", False, False, "absence", True)]
 T = {t[0]: t for t in TYPES}
+EFFECTIVE = ("approved", "declared", "acknowledged")                     # statuts qui comptent : agenda, Planning, alertes de pointage
+AWAIT = ("pending", "declared")                                           # en attente d'une décision (congé) ou d'une prise d'acte (absence)
+
+
+def kind_of(t: str) -> str:
+    return T[t][4]
 PROOF_MAX = 8 * 1024 * 1024
 PROOF_DAYS = 90                                                        # conservation d'un justificatif après son dépôt (règle de cycle de vie du bucket : 91 jours, préfixe leaves/)
 PROOF_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf"}
@@ -159,7 +171,7 @@ def calendar_id() -> str:
 
 
 def _event_body(req: dict, name: str) -> dict:
-    label = "Absence" if req["type"] == "sick" else T[req["type"]][1]
+    label = "Absence" if kind_of(req["type"]) == "absence" else T[req["type"]][1]                  # le motif d'une absence n'apparaît jamais dans l'agenda partagé
     half = " (après-midi)" if req["start_half"] == "pm" and req["start"] == req["end"] else " (matin)" if req["end_half"] == "am" and req["start"] == req["end"] else ""
     return {"summary": f"{name} — {label}{half}", "start": {"date": req["start"]}, "end": {"date": (date.fromisoformat(req["end"]) + timedelta(days=1)).isoformat()}, "transparency": "transparent",
             "extendedProperties": {"shared": {"logbook": "1", "kind": "leave", "lbid": req["id"]}}}
@@ -186,12 +198,12 @@ def absences(emails: set[str], d_from: date, d_to: date) -> dict[str, dict[date,
     """Journées entières de congé approuvé, pour les alertes d'oubli de pointage."""
     out: dict[str, dict[date, str]] = {}
     for r in requests().all():
-        if r["status"] != "approved" or r["user"] not in emails:
+        if r["status"] not in EFFECTIVE or r["user"] not in emails:
             continue
         p = person_of(r["user"])
         for d, v in day_values(p, date.fromisoformat(r["start"]), date.fromisoformat(r["end"]), r["start_half"], r["end_half"]).items():
             if v == 1.0 and d_from <= d <= d_to:
-                out.setdefault(r["user"], {})[d] = "Congé"
+                out.setdefault(r["user"], {})[d] = "Absence" if kind_of(r["type"]) == "absence" else "Congé"
     return out
 
 
@@ -200,7 +212,7 @@ def planning_leaves(d_from: date, d_to: date) -> list[dict]:
     from . import staff
     by_email = {(p.get("google_email") or "").lower(): "s:" + p["id"] for p in staff.store().get()["data"]["people"] if p.get("google_email")}
     return [{"rid": by_email[r["user"]], "start": r["start"], "end": r["end"], "half": r["start_half"] == "pm" or r["end_half"] == "am"} for r in requests().all()
-            if r["status"] == "approved" and r["user"] in by_email and date.fromisoformat(r["start"]) <= d_to and date.fromisoformat(r["end"]) >= d_from]
+            if r["status"] in EFFECTIVE and r["user"] in by_email and date.fromisoformat(r["start"]) <= d_to and date.fromisoformat(r["end"]) >= d_from]
 
 
 # ---- Demandes ----------------------------------------------------------------------------------------------------------------------------
@@ -211,9 +223,15 @@ def proof_expired(d: dict | None) -> bool:
 
 def view(r: dict, viewer: str, with_proofs: bool = True) -> dict:
     p = person_of(r["user"])
-    files = [{"id": i, "expired": proof_expired(proofs().get(i))} for i in r.get("proofs", [])]
-    return {**{k: v for k, v in r.items() if k != "proof_keys"}, "proof_files": files, "name": (p or {}).get("name", r["user"]), "days": days_of(p, r), "type_label": T[r["type"]][1],
-            "can_decide": r["status"] == "pending" and can_decide(viewer, r), "mine": r["user"] == viewer.lower()}
+    mine = r["user"] == viewer.lower()
+    validator = users.is_super(viewer) or can_decide(viewer, r)
+    kind = kind_of(r["type"])
+    secret = kind == "absence" and not (mine or validator)                    # le motif d'une absence ne sort pas du cercle personne / validateur / Super User
+    files = [] if secret else [{"id": i, "expired": proof_expired(proofs().get(i))} for i in r.get("proofs", [])]
+    base = {k: v for k, v in r.items() if k not in ("proof_keys", "comment", "proofs")} | ({"comment": "", "proofs": []} if secret else {"comment": r.get("comment", ""), "proofs": r.get("proofs", [])})
+    return {**base, "proof_files": files, "name": (p or {}).get("name", r["user"]), "days": days_of(p, r), "type_label": "Absence" if secret else T[r["type"]][1], "kind": kind, "paid": T[r["type"]][5],
+            "can_decide": kind == "leave" and r["status"] == "pending" and can_decide(viewer, r), "can_ack": kind == "absence" and r["status"] in AWAIT and can_decide(viewer, r), "mine": mine,
+            "can_cancel": r["status"] in ("approved", "declared", "acknowledged") and (validator or (mine and (r["status"] == "declared" or (r["status"] == "approved" and date.fromisoformat(r["start"]) > date.today()))))}
 
 
 def _mail(to: list[str], subject: str, body: str) -> None:
@@ -225,8 +243,8 @@ def _mail(to: list[str], subject: str, body: str) -> None:
             log.exception("E-mail de congé non envoyé à %s", t)
 
 
-def _link() -> str:
-    return f"\n\n{settings.PUBLIC_URL}/#/consigner/leaves" if settings.PUBLIC_URL else ""
+def _link(page: str = "leaves") -> str:
+    return f"\n\n{settings.PUBLIC_URL}/#/consigner/{page}" if settings.PUBLIC_URL else ""
 
 
 def create(data: LeaveIn, user: str) -> dict:
@@ -238,7 +256,7 @@ def create(data: LeaveIn, user: str) -> dict:
         raise ValueError("Cette période ne contient aucun jour ouvré")
     n = sum(dv.values())
     if T[data.type][3] and n > 1 and not data.proofs:
-        raise ValueError("Un justificatif (certificat médical) est obligatoire pour un congé maladie de plus d'un jour")
+        raise ValueError("Un justificatif (certificat médical) est obligatoire pour une maladie de plus d'un jour")
     keys = []
     for pid in data.proofs:
         d = proofs().get(pid)
@@ -248,9 +266,16 @@ def create(data: LeaveIn, user: str) -> dict:
     rid = "l-" + uuid.uuid4().hex[:10]
     doc = {"id": rid, "user": user.lower(), "type": data.type, "start": data.start.isoformat(), "end": data.end.isoformat(), "start_half": data.start_half, "end_half": data.end_half,
            "comment": data.comment.strip(), "proofs": keys, "status": "pending", "created_at": now().isoformat(), "event_id": None, "odoo_id": None}
+    absence = kind_of(data.type) == "absence"
+    if absence:                                                    # une absence se déclare : effective tout de suite, le validateur en prend acte
+        doc["status"] = "declared"
+        sync_calendar(doc, True)
     requests().put(rid, doc)
     to = approvers_of(doc)
-    _mail(to, f"Logbook — demande de congé de {p['name']}", f"{p['name']} demande {n:g} jour(s) de congé ({T[data.type][1]}) du {data.start.strftime('%d/%m/%Y')} au {data.end.strftime('%d/%m/%Y')}.\n\nÀ valider dans Logbook › Consigner › Congés.{_link()}")
+    if absence:
+        _mail(to, f"Logbook — absence déclarée par {p['name']}", f"{p['name']} déclare une absence de {n:g} jour(s) du {data.start.strftime('%d/%m/%Y')} au {data.end.strftime('%d/%m/%Y')}.\n\nÀ prendre en compte dans Logbook › Consigner › Absences.{_link('absences')}")
+    else:
+        _mail(to, f"Logbook — demande de congé de {p['name']}", f"{p['name']} demande {n:g} jour(s) de congé ({T[data.type][1]}) du {data.start.strftime('%d/%m/%Y')} au {data.end.strftime('%d/%m/%Y')}.\n\nÀ valider dans Logbook › Consigner › Congés.{_link()}")
     return doc
 
 
@@ -258,15 +283,20 @@ def update(rid: str, data: LeaveIn, user: str) -> dict:
     r = requests().get(rid)
     if not r:
         raise KeyError(rid)
-    if r["user"] != user.lower() or r["status"] != "pending":
-        raise PermissionError("Seule une demande en attente peut être modifiée par son auteur")
+    if r["user"] != user.lower() or r["status"] not in AWAIT:
+        raise PermissionError("Seule une demande en attente (ou une absence pas encore prise en compte) peut être modifiée par son auteur")
+    if kind_of(data.type) != kind_of(r["type"]):
+        raise ValueError("Un congé ne devient pas une absence (ni l'inverse) : supprimez la demande et refaites-la")
     p = person_of(user)
     n = sum(day_values(p, data.start, data.end, data.start_half, data.end_half).values())
     if not n:
         raise ValueError("Cette période ne contient aucun jour ouvré")
     if T[data.type][3] and n > 1 and not (data.proofs or r.get("proofs")):
-        raise ValueError("Un justificatif (certificat médical) est obligatoire pour un congé maladie de plus d'un jour")
+        raise ValueError("Un justificatif (certificat médical) est obligatoire pour une maladie de plus d'un jour")
     r.update(type=data.type, start=data.start.isoformat(), end=data.end.isoformat(), start_half=data.start_half, end_half=data.end_half, comment=data.comment.strip(), proofs=list(dict.fromkeys(r.get("proofs", []) + data.proofs)))
+    if r["status"] == "declared":                                  # absence déjà dans l'agenda : on la reporte aux nouvelles dates
+        sync_calendar(r, False)
+        sync_calendar(r, True)
     requests().put(rid, r)
     return r
 
@@ -275,6 +305,8 @@ def decide(rid: str, approve: bool, reason: str, user: str) -> dict:
     r = requests().get(rid)
     if not r:
         raise KeyError(rid)
+    if kind_of(r["type"]) == "absence":
+        raise ValueError("Une absence ne s'approuve pas : le validateur en prend acte")
     if r["status"] != "pending":
         raise ValueError("Cette demande a déjà été traitée")
     if not can_decide(user, r):
@@ -292,6 +324,25 @@ def decide(rid: str, approve: bool, reason: str, user: str) -> dict:
     return r
 
 
+def acknowledge(rid: str, user: str) -> dict:
+    """Prise d'acte d'une absence déclarée (accusé de réception du chef d'atelier ou du Managing Director) ; l'absence est déjà effective depuis sa déclaration."""
+    r = requests().get(rid)
+    if not r:
+        raise KeyError(rid)
+    if kind_of(r["type"]) != "absence":
+        raise ValueError("Seules les absences se prennent en compte ; un congé s'approuve")
+    if r["status"] not in AWAIT:
+        raise ValueError("Cette absence a déjà été prise en compte")
+    if not can_decide(user, r):
+        raise PermissionError("Vous n'êtes pas le validateur de cette absence")
+    if r["status"] == "pending":                                   # anciennes demandes de maladie en attente : l'événement n'existait pas encore
+        sync_calendar(r, True)
+    r.update(status="acknowledged", decided_by=user.lower(), decided_at=now().isoformat())
+    requests().put(rid, r)
+    _mail([r["user"]], "Logbook — absence prise en compte", f"Votre absence du {date.fromisoformat(r['start']).strftime('%d/%m/%Y')} au {date.fromisoformat(r['end']).strftime('%d/%m/%Y')} a été prise en compte.{_link('absences')}")
+    return r
+
+
 def cancel(rid: str, user: str) -> dict:
     """Annulation : en attente -> supprimée ; approuvée -> annulée (événement de l'agenda retiré, solde rendu), par son auteur avant le début, ou par un validateur."""
     r = requests().get(rid)
@@ -301,7 +352,12 @@ def cancel(rid: str, user: str) -> dict:
     if r["status"] == "pending" and own:
         requests().delete(rid)
         return {**r, "status": "deleted"}
-    if r["status"] == "approved" and ((own and date.fromisoformat(r["start"]) > date.today()) or can_decide(user, r)):
+    if r["status"] == "declared" and own:
+        sync_calendar(r, False)
+        r.update(status="cancelled", cancelled_by=user.lower(), cancelled_at=now().isoformat())
+        requests().put(rid, r)
+        return r
+    if r["status"] in ("approved", "declared", "acknowledged") and ((own and r["status"] == "approved" and date.fromisoformat(r["start"]) > date.today()) or can_decide(user, r)):
         sync_calendar(r, False)
         r.update(status="cancelled", cancelled_by=user.lower(), cancelled_at=now().isoformat())
         requests().put(rid, r)

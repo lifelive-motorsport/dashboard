@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Congés et Absences séparés', tag: 'Consigner', items: [
+    'Deux pages : « Congés » (à demander et faire approuver : congés payés, compensation, extra-légal, récupération, congé sans solde non rémunéré) et « Absences » (à déclarer : maladie, congé de circonstance, autre absence justifiée).',
+    'Une absence est effective dès sa déclaration ; le responsable en prend acte. Son motif n’est visible que de la personne, de son responsable et du Super User : le Planning et le Cockpit n’affichent que « Absent(e) ».',
+    'Le Cockpit rejoint le chapitre Opérer, en premier.',
+  ]},
   {date: 'Octobre 2026', title: 'Maintenances à prévoir dans les jobs', tag: 'Opérer', items: [
     'Dans un job d’atelier (bouton Formulaires), les maintenances de la voiture en alerte dans le Garage sont listées : « Ajouter à la liste du job » crée la ligne à cocher ; une fois faite et confirmée, le Garage se met à jour.',
     'Menu : « Consommables » passe au-dessus de « Roulages », et le chapitre « Consigner » passe après « Opérer ».',

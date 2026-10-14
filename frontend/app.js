@@ -34,10 +34,10 @@ const MENU = [
   ['vehicles', 'Véhicules de service', [['source','Données source'], ['general','Général'], ['byvehicle','Par véhicule'], ['fuel','Carburant'], ['usage','Imputation des frais véhicules']]],
   ['marketing', 'Marketing', [['site','Site internet'], ['expenses','Dépenses marketing']]],
   ['planifier', 'Planifier', [['planning','Planning'], ['events','Événements'], ['res_staff','Staff interne'], ['res_ext','Staff externe'], ['res_veh','Véhicules']]],
-  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables'], ['job_models','Modèles de jobs'], ['form_models','Modèles de formulaires'], ['arch_models','Modèles d’architecture voiture']]],
+  ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['absences','Absences'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['runs','Roulages'], ['consumables','Consommables'], ['job_models','Modèles de jobs'], ['form_models','Modèles de formulaires'], ['arch_models','Modèles d’architecture voiture']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs'], ['clients','Accès clients'], ['history','Historique']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','consigner/job_models','consigner/form_models','consigner/arch_models','others/history','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','consigner/leaves','consigner/absences','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','consigner/job_models','consigner/form_models','consigner/arch_models','others/history','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -506,7 +506,8 @@ const PAGES = {
   'consigner/timesheets': () => tsBlocks('mine'),
   'consigner/team': () => [BU_BAR()].concat(tsBlocks('team')),
   'consigner/jobs': () => tsBlocks('jobs'),
-  'consigner/leaves': () => leavesBlocks(),
+  'consigner/leaves': () => leavesBlocks('leave'),
+  'consigner/absences': () => leavesBlocks('absence'),
   'consigner/wall': () => wallBlocks(),
   'consigner/rides': () => [BU_BAR()].concat(ridesBlocks()),
   'consigner/parts': () => partsBlocks(),
@@ -685,7 +686,7 @@ function render(force) {
   if (key === 'planifier/planning') { plDraw(); plLoad(); }
   if (key === 'others/users' && superUser) { drawViewAs(); loadViewAs(); }
   if (superUser && (key === 'home/welcome' || key === 'consigner/team')) alertsBanner();
-  if (key === 'consigner/leaves') { lvDraw(); lvLoad(); }
+  if (key === 'consigner/leaves' || key === 'consigner/absences') { lvDraw(); lvLoad(); }
   if (key === 'consigner/wall') wlStart();
   if (key === 'consigner/rides') { rdDraw(); rdLoad(); }
   if (key === 'consigner/parts') { pvDraw(); pvLoad(); }

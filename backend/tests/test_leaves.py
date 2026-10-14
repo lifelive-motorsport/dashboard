@@ -124,9 +124,9 @@ def test_sick_leave_needs_proof_over_one_day_and_proof_access(api):
     assert api.get(f"/api/leaves-proofs/{pid}").status_code == 410                                         # 90 jours passés : supprimé
     assert leaves.view(leaves.requests().get(r.json()["id"]), CHEF)["proof_files"] == [{"id": pid, "expired": True}]
     as_(api, CHEF)
-    a = api.post(f"/api/leaves/{r.json()['id']}/approve").json()
+    assert api.post(f"/api/leaves/{r.json()['id']}/approve").status_code == 422                            # une absence ne s'approuve pas : on en prend acte
     ev = list(planning.backend().events[leaves.calendar_id()].values())[-1]
-    assert ev["summary"] == "Nolan Collinet — Absence"                                                     # maladie : jamais le motif dans l'agenda
+    assert ev["summary"] == "Nolan Collinet — Absence"                                                     # maladie : jamais le motif dans l'agenda, et déjà là à la déclaration
 
 
 def test_leave_feeds_planning_presence_and_edit_rules(api):
@@ -195,3 +195,47 @@ def test_events_and_resources_pages_are_grantable_with_bu_scope(monkeypatch):
         cl.delete(f"/api/events/{other}")
     finally:
         app.dependency_overrides.pop(ru, None)
+
+
+def test_absences_are_declared_acknowledged_and_their_reason_stays_private(api):
+    from app import presence
+    assert {t["id"]: t["kind"] for t in api.get("/api/leaves/me").json()["types"]} == {"paid": "leave", "comp": "leave", "extra": "leave", "recup": "leave", "other": "leave", "sick": "absence", "circ": "absence", "misc": "absence"}
+    as_(api, MEC)
+    types = {t["id"]: t for t in api.get("/api/leaves/me").json()["types"]}
+    assert types["other"]["paid"] is False and types["other"]["balance"] is False and types["circ"]["proof_over_one_day"] is False            # congé sans solde : sans solde, non rémunéré
+    d = nxt(1)
+    r = api.post("/api/leaves", json={"type": "circ", "start": d.isoformat(), "end": d.isoformat(), "comment": "Décès d'un proche"}).json()
+    assert r["status"] == "declared" and r["kind"] == "absence" and r["event_id"]                          # effective tout de suite, déjà dans l'agenda
+    assert [x["to"] for x in mailer.OUTBOX if "absence" in x["subject"].lower()] != []                    # le validateur est prévenu
+    assert leaves.absences({MEC}, d, d)[MEC][d] == "Absence" and presence.excused({MEC}, d, d).get(MEC, {}).get(d) == "Absence"
+    assert planning.planning_view(d, d)["leaves"][0]["rid"] == "s:m1"                                      # visible au Planning, sans type ni motif
+    ev = list(planning.backend().events[leaves.calendar_id()].values())[-1]
+    assert ev["summary"] == "Nolan Collinet — Absence" and "Décès" not in str(ev)
+    # le motif n'est visible que de la personne, de son validateur et du Super User ; pas d'un collègue
+    assert leaves.view(leaves.requests().get(r["id"]), MEC2)["type_label"] == "Absence" and leaves.view(leaves.requests().get(r["id"]), MEC2)["comment"] == ""
+    assert leaves.view(leaves.requests().get(r["id"]), CHEF)["type_label"] == "Congé de circonstance" and leaves.view(leaves.requests().get(r["id"]), MD)["comment"] == "Décès d'un proche"
+    # accusé de réception : le collègue ne peut pas ; le chef de l'équipe oui ; une seule fois
+    as_(api, MEC2)
+    assert api.post(f"/api/leaves/{r['id']}/acknowledge").status_code == 403
+    as_(api, CHEF)
+    me = api.get("/api/leaves/me").json()
+    assert [x["id"] for x in me["to_decide"]] == [r["id"]] and me["to_decide"][0]["can_ack"] is True
+    assert api.post(f"/api/leaves/{r['id']}/acknowledge").json()["status"] == "acknowledged"
+    assert api.post(f"/api/leaves/{r['id']}/acknowledge").status_code == 422
+    as_(api, MEC)
+    assert api.put(f"/api/leaves/{r['id']}", json={"type": "circ", "start": d.isoformat(), "end": d.isoformat()}).status_code == 403            # prise en compte : plus modifiable par l'auteur
+    # une absence encore non prise en compte se corrige (agenda reporté) ou se supprime (événement retiré)
+    d2 = nxt(2)
+    r2 = api.post("/api/leaves", json={"type": "misc", "start": d2.isoformat(), "end": d2.isoformat()}).json()
+    d3 = nxt(3)
+    moved = api.put(f"/api/leaves/{r2['id']}", json={"type": "misc", "start": d3.isoformat(), "end": d3.isoformat()}).json()
+    assert moved["start"] == d3.isoformat() and moved["status"] == "declared"
+    assert api.put(f"/api/leaves/{r2['id']}", json=req()).status_code == 422                              # un congé ne devient pas une absence
+    assert api.delete(f"/api/leaves/{r2['id']}").json()["status"] == "cancelled"
+    assert leaves.absences({MEC}, d3, d3).get(MEC, {}).get(d3) is None
+    # le congé sans solde reste un congé : demande, approbation, aucun solde
+    as_(api, MEC)
+    us = api.post("/api/leaves", json=req(type="other")).json()
+    assert us["status"] == "pending" and us["kind"] == "leave" and us["paid"] is False
+    as_(api, CHEF)
+    assert api.post(f"/api/leaves/{us['id']}/approve").json()["status"] == "approved" and api.post(f"/api/leaves/{us['id']}/acknowledge").status_code == 422

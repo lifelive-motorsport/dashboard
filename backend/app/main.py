@@ -1794,12 +1794,12 @@ def lv_me(year: int | None = None, user: str = Depends(require_user)):
     y = year or date.today().year
     p = timesheets.person_of(user)
     mine = sorted((leaves.view(r, user) for r in leaves.requests().all() if r["user"] == user.lower()), key=lambda r: r["start"], reverse=True)
-    deciding = sorted((leaves.view(r, user) for r in leaves.requests().all() if r["status"] == "pending" and leaves.can_decide(user, r)), key=lambda r: r["start"])
+    deciding = sorted((leaves.view(r, user) for r in leaves.requests().all() if r["status"] in leaves.AWAIT and leaves.can_decide(user, r)), key=lambda r: r["start"])
     today = date.today().isoformat()
     upcoming = []
     if deciding or users.is_super(user) or (timesheets.role_of(user)["role"] == "chef"):
-        upcoming = sorted((leaves.view(r, user) for r in leaves.requests().all() if r["status"] == "approved" and r["end"] >= today and leaves.can_decide(user, r)), key=lambda r: r["start"])[:30]
-    return {"year": y, "person": {"name": (p or {}).get("name", ""), "linked": bool(p)}, "types": [{"id": t[0], "label": t[1], "balance": t[2], "proof_over_one_day": t[3]} for t in leaves.TYPES],
+        upcoming = sorted((leaves.view(r, user) for r in leaves.requests().all() if r["status"] in leaves.EFFECTIVE and r["end"] >= today and leaves.can_decide(user, r)), key=lambda r: r["start"])[:30]
+    return {"year": y, "person": {"name": (p or {}).get("name", ""), "linked": bool(p)}, "types": [{"id": t[0], "label": t[1], "balance": t[2], "proof_over_one_day": t[3], "kind": t[4], "paid": t[5]} for t in leaves.TYPES],
             "balances": leaves.balances(p, user, y) if p else [], "requests": mine, "to_decide": deciding, "upcoming": upcoming}
 
 
@@ -1838,6 +1838,14 @@ def lv_cancel(rid: str, user: str = Depends(require_user)):
 def lv_approve(rid: str, user: str = Depends(require_user)):
     try:
         return leaves.view(leaves.decide(rid, True, "", user), user)
+    except Exception as e:
+        _lv_err(e)
+
+
+@app.post("/api/leaves/{rid}/acknowledge")
+def lv_acknowledge(rid: str, user: str = Depends(require_user)):
+    try:
+        return leaves.view(leaves.acknowledge(rid, user), user)
     except Exception as e:
         _lv_err(e)
 

@@ -178,3 +178,19 @@ def test_suggested_cars_only_for_numbers_present_in_the_event(api):
         rides.cars_coll().put(cs[name], {**meta, "race_number": no})
     sug = alkamel.suggest_cars({"sessions": [{"classification": [{"no": 20}, {"no": 76}]}]})
     assert sug == [{"no": 20, "key": cs["BMW M3 E30"]}]                                           # la Porsche n° 99 n'est pas engagée : non proposée
+
+
+def test_timed_session_refuses_manual_car_association_but_keeps_untimed_open(api):
+    m3 = _import_imola(api)
+    p992 = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}["Porsche 992 Rally"]
+    ses = {s["name"]: s for s in api.get("/api/rides/sessions").json()["sessions"]}
+    race, veille = ses["Imola Classic — RACE (60')"], ses["Imola Classic — Essais de la veille"]
+    r = api.post(f"/api/rides/sessions/{race['id']}/cars/{p992}", json={"laps": 12})
+    assert r.status_code == 422 and "Al Kamel" in r.json()["detail"] and race["alkamel"]
+    assert api.post(f"/api/rides/sessions/{veille['id']}/cars/{p992}", json={"laps": 6}).status_code == 200      # la session non chronométrée reste ouverte
+    # corriger la participation chronométrée garde le chronométrage
+    run = next(c for c in race["cars"] if c["key"] == m3)
+    cur = api.get(f"/api/rides/cars/{m3}").json()["runs_list"]
+    mine = next(x for x in cur if x["id"] == run["run_id"])
+    api.put(f"/api/rides/runs/{mine['id']}", json={"date": "2026-10-18", "name": "x", "laps": mine["laps"], "km": mine["km"], "drivers": ["Autre"]})
+    assert next(x for x in api.get(f"/api/rides/cars/{m3}").json()["runs_list"] if x["id"] == mine["id"])["timing"]["best"] == "2:21.000"

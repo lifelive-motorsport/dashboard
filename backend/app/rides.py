@@ -985,6 +985,8 @@ def associate(sid: str, vehicle: str, data: AssocIn, user: str) -> dict:
         raise LookupError("Roulage introuvable")
     if not car_of(vehicle):
         raise LookupError("Voiture introuvable")
+    if s.get("alkamel"):
+        raise ValueError("Roulage chronométré (Al Kamel) : les voitures viennent de l'import des PDF ; réimportez-les pour en ajouter une")
     if any(r.get("session_id") == sid and r["vehicle"] == vehicle for r in runs_coll().all()):
         raise ValueError("Cette voiture est déjà associée à ce roulage")
     stages = data.stages if data.stages is not None else [Stage(**x) for x in s.get("stages", [])]

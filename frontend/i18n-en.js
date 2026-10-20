@@ -2214,3 +2214,4 @@ Object.assign(EN_T, {
   "Km (total du set)": "Km (set total)",
 });
 Object.assign(EN_T, {"Fichiers illisibles (format inattendu) :": "Unreadable files (unexpected format):"});
+Object.assign(EN_T, {"Chronométrage Al Kamel : tours et kilomètres officiels. Pour les corriger, réimportez les PDF.": "Al Kamel timing: official laps and kilometres. To correct them, re-import the PDFs."});

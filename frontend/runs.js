@@ -21,7 +21,7 @@ function rnSessionHtml(s) {
   const cars = s.cars.length ? table(['Voiture', 'Tours', 'Km', 'Heures', 'Pilote(s)', 'Pneus', ''], s.cars.map(c => `<tr><td class="prod">${esc(c.name)}</td><td>${c.laps || ''}</td><td>${rdKm(c.km)}</td><td>${c.hours ? rdKm(c.hours) : ''}</td><td>${esc((c.drivers || []).join(', '))}</td><td>${esc(tyLabels(c.tyres))}</td>
       <td class="rd-acts"><button type="button" class="mini" data-rn="editcar" data-s="${esc(s.id)}" data-r="${esc(c.run_id)}" title="${esc(tx('Modifier la participation'))}">✎</button><button type="button" class="mini" data-rn="delcar" data-r="${esc(c.run_id)}" data-n="${esc(c.name)}" title="${esc(tx('Retirer cette voiture du roulage'))}">✕</button></td></tr>`)) : `<p class="na">${esc(tx('Aucune voiture associée.'))}</p>`;
   return `<div class="rn-card"><div class="rn-head"><div><b>${esc(s.name)}</b> <span class="rd-chip">${rnKind(s)}</span><br><small class="na">${fmtDate(s.date)}${s.cars.length ? ` · ${rdKm(s.km_total)} km ${esc(tx('au total'))}` : ''}${s.notes ? ' · ' + esc(s.notes) : ''}</small></div>
-    <div class="rd-acts"><button type="button" class="mini" data-rn="addcar" data-s="${esc(s.id)}">＋ ${esc(tx('Associer une voiture'))}</button><button type="button" class="mini" data-rn="edit" data-s="${esc(s.id)}" title="${esc(tx('Modifier le roulage'))}">✎</button><button type="button" class="mini danger" data-rn="del" data-s="${esc(s.id)}" title="${esc(tx('Supprimer le roulage'))}">🗑</button></div></div>${cars}</div>`;
+    <div class="rd-acts">${s.alkamel ? '' : `<button type="button" class="mini" data-rn="addcar" data-s="${esc(s.id)}">＋ ${esc(tx('Associer une voiture'))}</button>`}<button type="button" class="mini" data-rn="edit" data-s="${esc(s.id)}" title="${esc(tx('Modifier le roulage'))}">✎</button><button type="button" class="mini danger" data-rn="del" data-s="${esc(s.id)}" title="${esc(tx('Supprimer le roulage'))}">🗑</button></div></div>${cars}</div>`;
 }
 function rnFormHtml() {
   const f = rn.form; if (!f) return '';
@@ -62,20 +62,21 @@ function ptKm() {
   const c = rd.circuits.find(x => x.name === s.circuit); return c && pt.laps ? c.length_km * parseInt(pt.laps) : null;
 }
 function ptHtml() {
-  const s = ptSession(), p = pt;
+  const s = ptSession(), p = pt, lk = p.timed ? 'disabled' : '';
   const sessSel = p.fixedSession ? `<div class="sdfield"><span>Roulage</span><b>${esc(s ? s.name : '')}</b> <small class="na">${s ? fmtDate(s.date) : ''}</small></div>`
     : `<label class="sdfield"><span>Roulage</span><select class="sdin" data-pt-f="sid"><option value="">—</option>${p.sessions.map(x => `<option value="${esc(x.id)}" ${p.sid === x.id ? 'selected' : ''}>${fmtDate(x.date)} · ${esc(x.name)}</option>`).join('')}</select></label>`;
   const carSel = p.fixedCar ? `<div class="sdfield"><span>Voiture</span><b>${esc(p.carName)}</b></div>`
     : `<label class="sdfield"><span>Voiture</span><select class="sdin" data-pt-f="key"><option value="">—</option>${(p.cars || []).map(x => `<option value="${esc(x.key)}" ${p.key === x.key ? 'selected' : ''} ${p.taken.has(x.key) ? 'disabled' : ''}>${esc(x.name)}${p.taken.has(x.key) ? ' (' + esc(tx('déjà associée')) + ')' : ''}</option>`).join('')}</select></label>`;
   const body = !s ? '' : s.kind === 'rally' ? `${ptStagesHtml(p.stages, 'pt-s')}`
-    : `<div class="sdgrid"><div class="sdfield"><span>Circuit</span><b>${esc(s.circuit || '—')}</b>${(rd.circuits.find(x => x.name === s.circuit) || {}).length_km ? ` <small class="na">${rdKm(rd.circuits.find(x => x.name === s.circuit).length_km)} km / ${esc(tx('tour'))}</small>` : ''}</div><label class="sdfield"><span>Tours</span><input class="sdin" data-pt-f="laps" value="${esc(p.laps)}" style="max-width:100px" inputmode="numeric"></label></div>`;
+    : `<div class="sdgrid"><div class="sdfield"><span>Circuit</span><b>${esc(s.circuit || '—')}</b>${(rd.circuits.find(x => x.name === s.circuit) || {}).length_km ? ` <small class="na">${rdKm(rd.circuits.find(x => x.name === s.circuit).length_km)} km / ${esc(tx('tour'))}</small>` : ''}</div><label class="sdfield"><span>Tours</span><input class="sdin" data-pt-f="laps" ${lk} value="${esc(p.laps)}" style="max-width:100px" inputmode="numeric"></label></div>`;
   const km = s ? ptKm() : null;
   return `<div class="fb-back" data-pt="close"></div><div class="fb-box pt-box" role="dialog" aria-modal="true"><h3>${esc(tx(p.runId ? 'Modifier la participation' : 'Associer une voiture à un roulage'))}</h3>
     <div class="sdgrid">${sessSel}${carSel}</div>${body}
-    <div class="sdgrid"><label class="sdfield"><span>Kilomètres (si connus : remplace le calcul)</span><input class="sdin" data-pt-f="km" value="${esc(p.km)}" style="max-width:140px" inputmode="decimal"></label><label class="sdfield"><span>Temps de roulage (heures)</span><input class="sdin" data-pt-f="hours" value="${esc(p.hours)}" style="max-width:140px" inputmode="decimal"></label>
+    <div class="sdgrid"><label class="sdfield"><span>Kilomètres (si connus : remplace le calcul)</span><input class="sdin" data-pt-f="km" ${lk} value="${esc(p.km)}" style="max-width:140px" inputmode="decimal"></label><label class="sdfield"><span>Temps de roulage (heures)</span><input class="sdin" data-pt-f="hours" ${lk} value="${esc(p.hours)}" style="max-width:140px" inputmode="decimal"></label>
     ${tyPickerHtml('pt', p.key, p.tyres)}
     <label class="sdfield"><span>Pilote(s)</span><input class="sdin" data-pt-f="drivers" value="${esc(p.drivers)}" placeholder="${esc(tx('Séparés par des virgules'))}"></label></div>
     <label class="sdfield"><span>Notes</span><input class="sdin" data-pt-f="notes" value="${esc(p.notes)}"></label>
+    ${p.timed ? `<p class="na">🔒 ${esc(tx('Chronométrage Al Kamel : tours et kilomètres officiels. Pour les corriger, réimportez les PDF.'))}</p>` : ''}
     <p class="rd-km" id="pt-km">${km == null ? esc(tx('Kilomètres : à compléter')) : `<b>${rdKm(km)} km</b> ${esc(tx('comptés pour toutes les pièces montées'))}`}</p>
     <div class="sdbar"><button type="button" class="primary" data-pt="save" ${p.sid && p.key && !p.saving ? '' : 'disabled'}>${esc(tx(p.saving ? 'Enregistrement…' : 'Enregistrer'))}</button><button type="button" data-pt="close">${esc(tx('Annuler'))}</button>${p.err ? `<span class="neg">${esc(p.err)}</span>` : ''}</div></div>`;
 }
@@ -88,13 +89,13 @@ function ptDraw() {
 }
 // opts : {sid?, key?, carName?, run?, after}. sid fixe le roulage ; key fixe la voiture ; run = participation à modifier.
 async function ptOpen(opts) {
-  pt = {sid: opts.sid || '', key: opts.key || '', carName: opts.carName || '', runId: opts.run ? opts.run.id : null, fixedSession: !!opts.sid, fixedCar: !!opts.key, sessions: [], cars: null, taken: new Set(), tyres: (opts.run && opts.run.tyres ? opts.run.tyres.map(u => ({set_id: u.set_id, laps: u.laps ?? '', cycles: u.cycles ?? 1})) : []), laps: '', stages: [{name: '', length_km: '', passes: 1}], km: '', hours: '', drivers: '', notes: '', saving: false, err: '', after: opts.after};
+  pt = {timed: !!(opts.run && opts.run.timing), sid: opts.sid || '', key: opts.key || '', carName: opts.carName || '', runId: opts.run ? opts.run.id : null, fixedSession: !!opts.sid, fixedCar: !!opts.key, sessions: [], cars: null, taken: new Set(), tyres: (opts.run && opts.run.tyres ? opts.run.tyres.map(u => ({set_id: u.set_id, laps: u.laps ?? '', cycles: u.cycles ?? 1})) : []), laps: '', stages: [{name: '', length_km: '', passes: 1}], km: '', hours: '', drivers: '', notes: '', saving: false, err: '', after: opts.after};
   ptDraw();
   try {
     await tyLoadOpts(true);
     const j = await rsCall('/api/rides/sessions'); rd.circuits = j.circuits;
     pt.allSessions = j.sessions;
-    pt.sessions = opts.key ? j.sessions.filter(s => !s.cars.some(c => c.key === opts.key) || (opts.run && s.id === opts.run.session_id)) : j.sessions;
+    pt.sessions = (opts.key ? j.sessions.filter(s => !s.cars.some(c => c.key === opts.key) || (opts.run && s.id === opts.run.session_id)) : j.sessions).filter(s => !s.alkamel || (opts.run && s.id === opts.run.session_id));      // un roulage chronométré reçoit ses voitures de l'import des PDF
     if (!opts.key) { pt.cars = (rn.cars || (rn.cars = (await rsCall('/api/rides/cars')).cars)).filter(c => !c.archived); }
     const s = ptSession();
     if (s && !opts.run) pt.taken = new Set(s.cars.map(c => c.key));

@@ -184,7 +184,7 @@ def parse_analysis(pages: list[list[list[tuple[float, str]]]]) -> dict[int, dict
     """Analyse des secteurs : deux voitures côte à côte sur chaque page, chaque colonne se lit indépendamment et continue sur la page suivante.
     Retourne {n° de course: {car, drivers, laps: [{n, d, time, s1, s2, s3, top, elapsed, flags}]}}."""
     cars: dict[int, dict] = {}
-    cur: dict[int, dict | None] = {0: None, 1: None}                 # voiture en cours dans chaque colonne (suit les changements de page)
+    cur: dict[int, dict | None] = {0: None}                          # une seule voiture « en cours » : la lecture suit la colonne de gauche, puis celle de droite, puis la page suivante
     for rows in pages:
         mid = 310.0
         for col in (0, 1):
@@ -194,27 +194,27 @@ def parse_analysis(pages: list[list[list[tuple[float, str]]]]) -> dict[int, dict
                 toks = [w for _, w in r]
                 body = [w for w in toks if w != "B"]
                 flags = ["pit"] if "B" in toks else []
-                if len(body) >= 6 and body[0].isdigit() and body[1].isdigit() and LAPTIME.match(body[2]) and cur[col] is not None:
-                    prev = cur[col]["laps"][-1]["n"] if cur[col]["laps"] else 0
+                if len(body) >= 6 and body[0].isdigit() and body[1].isdigit() and LAPTIME.match(body[2]) and cur[0] is not None:
+                    prev = cur[0]["laps"][-1]["n"] if cur[0]["laps"] else 0
                     if int(body[0]) <= prev:                         # numérotation qui recule : ligne d'une autre voiture, on détache la colonne
-                        cur[col] = None
+                        cur[0] = None
                         continue
                     elapsed = body[-1]
                     mids = body[3:-1]
                     top = None
                     if len(mids) >= 4:
                         top = _num(mids[3])
-                    cur[col]["laps"].append({"n": int(body[0]), "d": int(body[1]), "time": body[2], "s1": mids[0] if len(mids) > 0 else "", "s2": mids[1] if len(mids) > 1 else "", "s3": mids[2] if len(mids) > 2 else "",
+                    cur[0]["laps"].append({"n": int(body[0]), "d": int(body[1]), "time": body[2], "s1": mids[0] if len(mids) > 0 else "", "s2": mids[1] if len(mids) > 1 else "", "s3": mids[2] if len(mids) > 2 else "",
                                              "top": top, "elapsed": elapsed, "flags": flags})
                     continue
                 m = re.match(r"^(\d+) (.+)$", _text(r))
                 if m and len(r) >= 3 and r[0][1].isdigit() and r[1][0] - r[0][0] > 10 and not LAPTIME.match(r[1][1]) and not r[1][1].isdigit():
                     no = int(m.group(1))
-                    cur[col] = cars.setdefault(no, {"no": no, "car": re.sub(r"\s+[+-]\d?L$", "", m.group(2)).strip(), "drivers": [], "laps": []})
+                    cur[0] = cars.setdefault(no, {"no": no, "car": re.sub(r"\s+[+-]\d?L$", "", m.group(2)).strip(), "drivers": [], "laps": []})
                     continue
                 m = re.match(r"^(\d)\.\s*(.+?)(?:\s+[+-]\d?L)?$", _text(r))
-                if m and cur[col] is not None and not cur[col]["laps"]:
-                    cur[col]["drivers"].append(m.group(2).strip())
+                if m and cur[0] is not None and not cur[0]["laps"]:
+                    cur[0]["drivers"].append(m.group(2).strip())
     return cars
 
 
@@ -372,7 +372,7 @@ def import_batch(body: dict, user: str) -> dict:
             c = by_no.get(no)
             if not c or not rides.car_of(key):
                 continue
-            laps = max(int(c.get("laps") or 0), len(c.get("lap_list") or []))
+            laps = max(int(c.get("laps") or 0), max((x["n"] for x in c.get("lap_list") or []), default=0))
             for old in [r for r in rides.runs_coll().all() if r.get("session_id") == sid and r["vehicle"] == key]:
                 rides.runs_coll().delete(old["id"])                  # ré-import : la participation est remplacée
             rin = rides.RunIn(date=d, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], notes="")

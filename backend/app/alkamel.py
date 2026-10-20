@@ -571,13 +571,14 @@ def import_batch(body: dict, user: str) -> dict:
 
 
 def suggest_cars(parsed: dict) -> list[dict]:
-    """Voitures du Garage proposées pour chaque numéro de course : le n° de course enregistré dans la fiche, sinon rien (choix manuel)."""
+    """Voitures du Garage proposées pour chaque numéro de course de l'épreuve : le n° de course enregistré dans la fiche (s'il figure dans les PDF), sinon rien (choix manuel)."""
     by_no: dict[int, str] = {}
     for c in rides.race_cars():
         rn = (rides.cars_coll().get(c["key"]) or {}).get("race_number")
         if rn and str(rn).strip().isdigit():
             by_no[int(str(rn).strip())] = c["key"]
-    return [{"no": no, "key": key} for no, key in by_no.items()]
+    present = {c["no"] for s in parsed.get("sessions", []) for c in s["classification"]}                 # seulement les numéros réellement engagés dans l'épreuve
+    return [{"no": no, "key": key} for no, key in by_no.items() if no in present]
 
 
 def now_iso() -> str:

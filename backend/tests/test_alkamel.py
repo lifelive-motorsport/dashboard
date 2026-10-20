@@ -169,3 +169,12 @@ def test_unexpected_pdf_does_not_crash_the_import():
     assert r["event"] and isinstance(r["sessions"], list) and isinstance(r["errors"], list)
     with pytest.raises(ValueError):
         alkamel.parse_files([("x.pdf", b"pas un pdf")])
+
+
+def test_suggested_cars_only_for_numbers_present_in_the_event(api):
+    cs = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}
+    for name, no in (("BMW M3 E30", "20"), ("Porsche 992 Rally", "99")):
+        meta = rides.cars_coll().get(cs[name]) or {"id": cs[name]}
+        rides.cars_coll().put(cs[name], {**meta, "race_number": no})
+    sug = alkamel.suggest_cars({"sessions": [{"classification": [{"no": 20}, {"no": 76}]}]})
+    assert sug == [{"no": 20, "key": cs["BMW M3 E30"]}]                                           # la Porsche n° 99 n'est pas engagée : non proposée

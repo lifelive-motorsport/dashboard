@@ -18,7 +18,8 @@ function akCarSelect(attr, cur) {
 }
 
 function akTyresHtml(i) {
-  const keys = [...new Set(Object.values(ak.map).filter(Boolean))];
+  const sess = ak.data && ak.data.sessions[i]; const nos = new Set(sess ? sess.classification.map(c => String(c.no)) : []);       // seules les voitures engagées dans CETTE session
+  const keys = [...new Set(Object.entries(ak.map).filter(([no, k]) => k && nos.has(String(no))).map(([, k]) => k))];
   const rows = keys.map(k => { const car = (rn.cars || []).find(c => c.key === k); const list = ((ak.tyres[i] = ak.tyres[i] || {})[k] = ak.tyres[i][k] || []); return `<div class="ak-ty"><b>${esc(car ? car.name : k)}</b>${tyPickerHtml(`ak|${i}|${k}`, k, list)}</div>`; }).join('');
   return rows ? `<div class="ak-tys">${rows}</div>` : '';
 }

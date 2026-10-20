@@ -194,3 +194,20 @@ def test_timed_session_refuses_manual_car_association_but_keeps_untimed_open(api
     mine = next(x for x in cur if x["id"] == run["run_id"])
     api.put(f"/api/rides/runs/{mine['id']}", json={"date": "2026-10-18", "name": "x", "laps": mine["laps"], "km": mine["km"], "drivers": ["Autre"]})
     assert next(x for x in api.get(f"/api/rides/cars/{m3}").json()["runs_list"] if x["id"] == mine["id"])["timing"]["best"] == "2:21.000"
+
+
+def test_year_spill_hours_and_pit_laps():
+    rows = [row((20, "Nr."), (60, "Drivers"), (200, "Car"), (400, "Class"), (440, "Driver 1")),
+            row((10, "1"), (30, "127"), (60, "Pantelis CHRISTOFOROU"), (200, "Ford Escort I RS 1600"), (402, "1972"), (420, "+2L"), (450, "2:20.000"), (500, "8"), (520, "2:20.000"), (570, "+1.000"))]
+    cl = alkamel.parse_classification(rows, "qualifying")
+    assert cl[0]["laps"] == 8 and cl[0]["car"].endswith("1972") and cl[0]["class"] == "+2L" and cl[0]["best"] == "2:20.000"
+    laps = [{"n": i, "time": "2:20.000", "flags": []} for i in (1, 2, 3)] + [{"n": 4, "time": "6:00.000", "flags": ["pit"]}, {"n": 5, "time": "2:20.000", "flags": []}]
+    assert alkamel.run_hours(laps, 5) == round(5 * 140 / 3600, 2)                      # le tour avec arrêt compte pour un tour moyen, pas pour 6 minutes
+    assert alkamel.run_hours(laps, 7) == round(7 * 140 / 3600, 2)                      # les tours absents de l'analyse aussi
+    assert alkamel.run_hours([], 5) is None
+
+
+def test_import_stores_hours(api):
+    m3 = _import_imola(api)
+    race = next(s for s in api.get("/api/rides/sessions").json()["sessions"] if s["name"].endswith("RACE (60')"))
+    assert race["cars"][0]["hours"] > 0

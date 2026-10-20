@@ -133,6 +133,8 @@ def parse_classification(rows: list[list[tuple[float, str]]], kind: str) -> list
         drivers = " ".join(w for x, w in r if dx <= x < cx)
         car = " ".join(w for x, w in r if cx <= x < kx)
         rest = [w for x, w in r if x >= kx]
+        while rest and re.fullmatch(r"(19|20)\d\d", rest[0]):          # l'année de la voiture (« … RS 1600 1972 ») déborde parfois dans la colonne suivante : elle reste dans le nom
+            car += " " + rest.pop(0)
         if not drivers or not car or not rest:
             continue
         e: dict[str, Any] = {"pos": pos, "no": no, "drivers": _drivers(drivers), "car": car, "class": rest[0], "classified": pos is not None}
@@ -216,6 +218,19 @@ def parse_analysis(pages: list[list[list[tuple[float, str]]]]) -> dict[int, dict
                 if m and cur[0] is not None and not cur[0]["laps"]:
                     cur[0]["drivers"].append(m.group(2).strip())
     return cars
+
+
+def run_hours(lap_list: list[dict], laps: int) -> float | None:
+    """Temps de roulage (heures) = somme des temps au tour. Un tour avec passage par les stands (« B ») dure plus que la normale (arrêt) : il compte pour un tour moyen
+    (médiane des autres tours), l'arrêt lui-même est exclu ; les tours absents de l'analyse comptent aussi pour un tour moyen."""
+    normal = [t for t in (secs(x["time"]) for x in lap_list if "pit" not in x.get("flags", [])) if t]
+    if not normal:
+        return None
+    med = statistics.median(normal)
+    total = sum(normal) + med * sum(1 for x in lap_list if "pit" in x.get("flags", []))
+    known = len(lap_list)
+    total += med * max(laps - known, 0)
+    return round(total / 3600, 2)
 
 
 def best_summary(laps: list[dict], official_best: str = "") -> dict:
@@ -521,11 +536,14 @@ def import_batch(body: dict, user: str) -> dict:
             c = by_no.get(no)
             if not c or not rides.car_of(key):
                 continue
-            laps = max(int(c.get("laps") or 0), max((x["n"] for x in c.get("lap_list") or []), default=0))
+            last = max((x["n"] for x in c.get("lap_list") or []), default=0)
+            official = int(c.get("laps") or 0)
+            laps = last if last and official > 3 * last + 5 else max(official, last)               # un total aberrant du classement (mauvaise colonne) est écarté au profit de l'analyse
             for old in [r for r in rides.runs_coll().all() if r.get("session_id") == sid and r["vehicle"] == key]:
                 rides.runs_coll().delete(old["id"])                  # ré-import : la participation est remplacée
             uses = [rides.TyreUse(**{k: u[k] for k in ("set_id", "laps", "cycles") if k in u and u[k] not in (None, "")}) for u in ((s.get("tyres") or {}).get(key) or []) if u.get("set_id")]
-            rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], tyres=uses, notes="")
+            hours = run_hours(c.get("lap_list") or [], laps)
+            rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, hours=hours, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], tyres=uses, notes="")
             run = rides._run_doc(key, rin, "r-" + uuid.uuid4().hex[:10], user, source="alkamel", session_id=sid)
             run["timing"] = {"no": no, "class": c.get("class", ""), "pos": c.get("pos"), "laps": c.get("laps"), "total_time": c.get("total_time", ""), "gap": c.get("gap", ""), "kph": c.get("kph"), "best": c.get("best", ""), "best_lap_no": c.get("best_lap_no"),
                              "summary": c.get("summary") or {}, "pace5": c.get("pace5", ""), "grid": c.get("grid"), "story": c.get("story"), "lap_list": (c.get("lap_list") or [])[:400]}

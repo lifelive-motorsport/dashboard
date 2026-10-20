@@ -2223,3 +2223,7 @@ Object.assign(EN_T, {
   "Aucune personne (staff interne ou externe) sur l’événement du Planning": "No person (internal or external staff) on the Planning event",
   "ajoutez-les comme ressources dans Planifier › Événements.": "add them as resources in Plan › Events.",
 });
+Object.assign(EN_T, {
+  "Prévenir les personnes par Google Agenda": "Notify people through Google Calendar",
+  "(invitation aux personnes ajoutées, mise à jour aux autres ; à décocher pour régulariser un événement passé sans envoyer d’e-mail)": "(invitation for added people, update for the others; untick to regularise a past event without sending any e-mail)",
+});

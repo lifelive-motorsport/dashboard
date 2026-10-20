@@ -1,6 +1,6 @@
 // Planifier › Événements : création et suivi des événements dans les agendas Google des BU (Super User). S'appuie sur les ressources de resources.js. Chargé après resources.js.
 const PE_BU_SYM = {XC: 'xc', MODERN_RALLY: 'mr', HISTORIC_RALLY: 'hrl', HISTORIC_RACING: 'hrc', OTHERS: 'lifelive'};
-const peBlank = () => ({id: null, title: '', bu: '', confirmed: false, transport: false, start_time: '', end_time: '', start: '', end: '', immo_start: '', immo_end: '', before: 1, after: 1, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
+const peBlank = () => ({notify: true, id: null, title: '', bu: '', confirmed: false, transport: false, start_time: '', end_time: '', start: '', end: '', immo_start: '', immo_end: '', before: 1, after: 1, place: null, origin: null, route: null, notes: '', staff: [], externals: [], vehicles: []});
 let pe = {loaded: false, error: null, cfg: null, events: [], unavailable: null, form: peBlank(), orig: null, open: false, msg: null, msgOk: false, saving: false, q: {dest: '', origin: ''}, sugg: {dest: [], origin: []}, suggMsg: {dest: null, origin: null}, originEdit: false, searching: {dest: false, origin: false}, busy: {}, busyMsg: null, vcat: 'all', showAll: false};
 const peDay = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const peToday = () => new Date().toISOString().slice(0, 10);
@@ -88,6 +88,7 @@ function peFormHtml() {
     <h4 class="sub">Staff interne</h4><div class="chkgrid">${staff || `<small class="na">${f.bu ? 'Aucun staff actif imputé à cette BU.' : 'Choisissez d’abord une BU.'}</small>`}</div>
     <h4 class="sub">Staff externe</h4><div class="chkgrid">${exts || `<small class="na">${f.bu ? 'Aucun prestataire rattaché à cette BU : cochez ses BU dans Ressources.' : 'Choisissez d’abord une BU.'}</small>`}</div>
     <h4 class="sub">Véhicules</h4>${cats.length ? `<div class="bu-filter">${vcat('all', 'Tous')}${cats.map(k => vcat(k.id, k.label)).join('')}</div>` : ''}<div class="chkgrid">${vlist || '<small class="na">Aucun véhicule.</small>'}</div>${pe.busyMsg ? `<small class="neg">${esc(pe.busyMsg)}</small>` : ''}
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="pe-notify" ${f.notify ? 'checked' : ''}> Prévenir les personnes par Google Agenda <small class="na">(invitation aux personnes ajoutées, mise à jour aux autres ; à décocher pour régulariser un événement passé sans envoyer d’e-mail)</small></label>
     <div class="sdbar" style="margin-top:12px"><button type="button" class="primary" id="pe-save" ${ok && !pe.saving ? '' : 'disabled'}>${pe.saving ? 'Enregistrement…' : f.id ? 'Enregistrer' : 'Créer l’événement'}</button><button type="button" id="pe-cancel">Annuler</button>${pe.msg ? `<span class="${pe.msgOk ? 'na' : 'neg'}">${esc(pe.msg)}</span>` : ''}</div>
     ${ok ? '' : `<small class="na">À compléter : ${peMissing().join(', ')}.</small>`}</div>`;
 }
@@ -130,7 +131,7 @@ function peOpenNew() { pe.form = peBlank(); pe.form.before = pe.form.after = pe.
 function peOpenEdit(id) {
   const e = pe.events.find(x => x.id === id); if (!e) return;
   const sEmails = new Set(rs.staff.map(p => p.email).filter(Boolean)), att = e.staff_and_external;
-  pe.form = {id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, transport: !!e.transport, start_time: e.start_time || '', end_time: e.end_time || '', start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, before: Math.max(0, peDiff(e.immo_start, e.start)), after: Math.max(0, peDiff(e.end, e.immo_end)),
+  pe.form = {notify: e.end >= rdToday(), id: e.id, title: e.title, bu: e.bu, confirmed: e.confirmed, transport: !!e.transport, start_time: e.start_time || '', end_time: e.end_time || '', start: e.start, end: e.end, immo_start: e.immo_start, immo_end: e.immo_end, before: Math.max(0, peDiff(e.immo_start, e.start)), after: Math.max(0, peDiff(e.end, e.immo_end)),
     place: e.place.id ? {id: e.place.id, name: '', address: e.place.address, lat: null, lng: null, country: ''} : null, origin: e.origin ? {id: e.origin.id, name: '', address: e.origin.address, lat: null, lng: null, country: ''} : null, route: e.km != null ? {km: e.km, minutes: 0, alerts: (e.via || []).map(v => `L’itinéraire depuis le départ passe par ${v === 'CH' ? 'la Suisse' : 'le Royaume-Uni'}.`)} : null,
     notes: e.notes, staff: att.filter(m => sEmails.has(m)), externals: att.filter(m => !sEmails.has(m)).concat(e.externals_pending), vehicles: e.vehicles.slice()};
   pe.orig = {immo_start: e.immo_start, immo_end: e.immo_end, vehicles: e.vehicles.slice()};
@@ -189,6 +190,7 @@ document.addEventListener('change', e => {
     peWiden();
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
+  else if (t.id === 'pe-notify') { f.notify = t.checked; }
   else if (t.id === 'pe-transport') { f.transport = t.checked; peDraw(); }
   else if (t.classList.contains('pe-t')) { f[t.dataset.t] = peTime(t.value); peDraw(); }
   else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }
@@ -219,7 +221,7 @@ document.addEventListener('click', async e => {
     peDraw();
   } else if (t.id === 'pe-save') {
     pe.saving = true; pe.msg = null; peDraw();
-    const body = {title: f.title.trim(), bu: f.bu, confirmed: f.confirmed, transport: f.transport, start_time: f.transport ? f.start_time : '', end_time: f.transport ? f.end_time : '', start: f.start, end: f.end, immo_start: f.immo_start, immo_end: f.immo_end, notes: f.notes,
+    const body = {notify: f.notify !== false, title: f.title.trim(), bu: f.bu, confirmed: f.confirmed, transport: f.transport, start_time: f.transport ? f.start_time : '', end_time: f.transport ? f.end_time : '', start: f.start, end: f.end, immo_start: f.immo_start, immo_end: f.immo_end, notes: f.notes,
       place: {id: f.place.id, name: f.place.name || '', address: f.place.address || '', lat: f.place.lat, lng: f.place.lng, country: f.place.country || ''},
       origin: f.origin ? {id: f.origin.id, name: f.origin.name || '', address: f.origin.address || '', lat: f.origin.lat, lng: f.origin.lng, country: f.origin.country || ''} : null, staff: f.staff, externals: f.externals, vehicles: f.vehicles};
     try {

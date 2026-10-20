@@ -805,3 +805,18 @@ def test_adjustment_measure_costs_is_accepted(monkeypatch):
     from app import adjustments
     m = adjustments.Adjustment.model_validate({"id": "x1", "label": "Imola", "bu": "HISTORIC_RACING", "kind": "meeting", "enabled": True, "sel": [{"id": 1, "name": "Imola"}], "measure": "costs"})
     assert m.measure == "costs"
+
+
+def test_event_notification_choice():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import planning
+    c = TestClient(app)
+    lbid = c.post("/api/events", json=_ev(title="Passé", start="2026-01-10", end="2026-01-11", immo_start="2026-01-10", immo_end="2026-01-11", notify=False)).json()["id"]
+    sent = planning.backend().sent
+    assert [x for x in sent if x[0] == "insert"][-1][2] is False                                    # pas d'invitation à la création si on décoche
+    assert c.put(f"/api/events/{lbid}", json=_ev(title="Passé", start="2026-01-10", end="2026-01-11", immo_start="2026-01-10", immo_end="2026-01-11", staff=["a@lifelive-motorsport.com", "b@lifelive-motorsport.com"], notify=False)).status_code == 200
+    assert [x for x in sent if x[0] == "patch"][-1][2] is False
+    assert c.put(f"/api/events/{lbid}", json=_ev(title="Passé", start="2026-01-10", end="2026-01-11", immo_start="2026-01-10", immo_end="2026-01-11")).status_code == 200
+    assert [x for x in sent if x[0] == "patch"][-1][2] is True                                      # par défaut on prévient
+    c.delete(f"/api/events/{lbid}")

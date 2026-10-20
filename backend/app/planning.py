@@ -48,6 +48,7 @@ class EventIn(BaseModel):
     place: Place
     origin: Place | None = None                                        # lieu de départ (sinon Lifelive, LIFELIVE_ORIGIN)
     notes: str = Field(default="", max_length=2000)
+    notify: bool = True                                                # prévenir les invités par Google Agenda (invitation ou mise à jour) ; non conservé
     staff: list[str] = Field(default_factory=list, max_length=60)
     externals: list[str] = Field(default_factory=list, max_length=60)
     vehicles: list[str] = Field(default_factory=list, max_length=30)
@@ -321,7 +322,7 @@ def create(e: EventIn, lbid: str | None = None) -> dict:
     lbid = lbid or uuid.uuid4().hex[:12]
     route = _route(e.place, e.origin)
     main = build_main(e, lbid, route)
-    backend().insert(cal, main, notify=bool(main["attendees"]))
+    backend().insert(cal, main, notify=e.notify and bool(main["attendees"]))
     if wants_vehicle_event(e):
         backend().insert(cal, build_vehicles(e, lbid), notify=False)
     return {"id": lbid, "route": route}
@@ -344,7 +345,7 @@ def update(lbid: str, e: EventIn) -> dict:
     body = build_main(e, lbid, route)
     for k in ("start", "end"):  # patch fusionne : on efface l'autre forme (date / dateTime) sinon Google refuse « Invalid start time »
         body[k] = {**body[k], **({"date": None} if "dateTime" in body[k] else {"dateTime": None, "timeZone": None})}
-    backend().patch(cal_main, main["id"], body, notify=True)
+    backend().patch(cal_main, main["id"], body, notify=e.notify)
     if wants_vehicle_event(e):
         vb = build_vehicles(e, lbid)
         if veh:

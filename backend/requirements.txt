@@ -7,3 +7,4 @@ pytest>=8.0
 google-cloud-firestore>=2.16
 google-cloud-storage>=2.16
 pypdf>=4.0
+pymupdf>=1.24

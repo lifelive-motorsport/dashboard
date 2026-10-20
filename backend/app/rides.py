@@ -916,7 +916,9 @@ def delete_run(rid: str) -> None:
 
 def _session_view(s: dict, runs: list[dict], names: dict[str, str]) -> dict:
     mine = sorted((r for r in runs if r.get("session_id") == s["id"]), key=lambda r: names.get(r["vehicle"], r["vehicle"]).lower())
-    return {**s, "cars": [{"run_id": r["id"], "key": r["vehicle"], "name": names.get(r["vehicle"], r["vehicle"]), "km": r.get("km"), "hours": r.get("hours"), "laps": r.get("laps", 0), "drivers": r.get("drivers", []), "notes": r.get("notes", "")} for r in mine],
+    alk = s.get("alkamel")
+    s = {**s, "alkamel": {"session": alk.get("session"), "conditions": alk.get("conditions", {}), "cars": len(alk.get("classification", []))} if alk else None}
+    return {**s, "cars": [{"run_id": r["id"], "key": r["vehicle"], "name": names.get(r["vehicle"], r["vehicle"]), "km": r.get("km"), "hours": r.get("hours"), "laps": r.get("laps", 0), "drivers": r.get("drivers", []), "notes": r.get("notes", ""), "timing": ({"best": r["timing"].get("best"), "pos": r["timing"].get("pos"), "no": r["timing"].get("no")} if r.get("timing") else None)} for r in mine],
             "km_total": round(sum(r.get("km") or 0 for r in mine), 1)}
 
 

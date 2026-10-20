@@ -1195,6 +1195,41 @@ def rd_associate(sid: str, key: str, body: rides.AssocIn, user: str = Depends(gr
     return _rd(rides.associate, sid, key, body, user)
 
 
+class AlkamelFile(BaseModel):
+    name: str = Field(max_length=200)
+    data: str                                                        # PDF en base64
+
+
+class AlkamelParse(BaseModel):
+    files: list[AlkamelFile] = Field(min_length=1, max_length=40)
+
+
+@app.post("/api/rides/alkamel/parse")
+def rd_alkamel_parse(body: AlkamelParse, _user: str = Depends(granted("consigner/runs"))):
+    import base64
+    from . import alkamel
+    files = []
+    for f in body.files:
+        try:
+            files.append((f.name, base64.b64decode(f.data, validate=True)))
+        except Exception:
+            raise HTTPException(422, f"{f.name} : fichier illisible")
+    try:
+        parsed = alkamel.parse_files(files)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": rides.list_circuits()}
+
+
+@app.post("/api/rides/alkamel/import")
+def rd_alkamel_import(body: dict, user: str = Depends(granted("consigner/runs"))):
+    from . import alkamel
+    try:
+        return alkamel.import_batch(body, user)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @app.post("/api/rides/circuits")
 def rd_save_circuit(body: rides.CircuitIn, _user: str = Depends(granted("consigner/rides", "consigner/runs"))):
     return _rd(rides.save_circuit, body)

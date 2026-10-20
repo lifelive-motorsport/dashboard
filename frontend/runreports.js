@@ -1,6 +1,6 @@
 // Opérer › Run reports : le rapport remis au client après un meeting (une épreuve, une voiture). Chiffres Al Kamel repris des roulages ; l'ingénieur complète
 // par run (objectifs, setup, pressions, observations, retour pilote), puis les pneus et les actions. Validation par le chef d'atelier / l'ingénieur / le Super User.
-const rr = {meetings: null, loading: false, view: null, form: null, msg: null, ok: false, saving: false};
+const rr = {other: {}, meetings: null, loading: false, view: null, form: null, msg: null, ok: false, saving: false};
 const rrKinds = {practice: 'Essais libres', qualifying: 'Qualifications', race: 'Course'};
 const rrBlank4 = () => ['', '', '', ''];
 
@@ -56,11 +56,20 @@ function rrEditorHtml() {
   const dis = v.status === 'validated' ? 'disabled' : '';
   const canVal = superUser || workshopRole === 'chef' || workshopRole === 'coordinator';
   const days = table(['Jour', 'Meilleur tour', 'Runs', 'Tours', 'Km', 'Carburant'], v.days.map(d => `<tr><td>${fmtDate(d.date)}</td><td>${esc(d.best || '–')}</td><td>${d.runs}</td><td>${d.laps}</td><td>${rdKm(d.km)}</td><td>${d.fuel == null ? '' : rdKm(d.fuel) + ' L'}</td></tr>`));
-  const hdr = [['type_of_event', 'Type d’épreuve'], ['driver', 'Pilote (D1)'], ['codriver', 'Co-pilote (D2)'], ['car_chief', 'Chef mécanicien'], ['engineer', 'Ingénieur']];
+  const peopleSel = (k, label) => {
+    const names = (v.people || []).map(p => p.name), cur = f.header[k] || '', other = rr.other[k] || (cur && !names.includes(cur));
+    return `<label class="sdfield"><span>${esc(tx(label))}</span><select class="sdin" data-rr-p="${k}" ${dis}><option value="">—</option>${(v.people || []).map(p => `<option value="${esc(p.name)}" ${cur === p.name && !other ? 'selected' : ''}>${esc(p.name)}${p.function ? ' · ' + esc(p.function) : ''}</option>`).join('')}<option value="__other" ${other ? 'selected' : ''}>${esc(tx('Autre (saisie libre)'))}</option></select>${other ? rrInp('header.' + k, cur, tx('Nom'), dis) : ''}</label>`;
+  };
+  const evNote = !v.event_id ? `<p class="na">${esc(tx('Roulage non rattaché à un événement du Planning : réimportez les PDF en choisissant l’événement pour proposer ses personnes.'))}</p>`
+    : !(v.people || []).length ? `<p class="na">${esc(tx('Aucune personne (staff interne ou externe) sur l’événement du Planning'))} « ${esc(v.event_title)} » : ${esc(tx('ajoutez-les comme ressources dans Planifier › Événements.'))}</p>` : '';
+  const dl = `<datalist id="rr-drivers">${(v.drivers_seen || []).map(d => `<option value="${esc(d)}">`).join('')}</datalist>`;
   const sets = f.tyre_sets.map((t, i) => `<div class="sdgrid">${rrInp(`tyre_sets.${i}.set`, t.set, 'Set', dis, 'max-width:110px')}${rrInp(`tyre_sets.${i}.model`, t.model, tx('Modèle'), dis)}${rrInp(`tyre_sets.${i}.laps`, t.laps, tx('Tours'), dis, 'max-width:90px')}${rrInp(`tyre_sets.${i}.km`, t.km, 'Km', dis, 'max-width:100px')}${dis ? '' : `<button type="button" class="mini danger" data-rr="delset" data-i="${i}">✕</button>`}</div>`).join('');
   const url = l => `/api/rides/reports/${encodeURIComponent(v.meeting)}/${encodeURIComponent(v.car)}/print?lang=${l}`;
   return `<div class="note rd-form"><div class="sdbar"><button type="button" data-rr="back">← ${esc(tx('Épreuves'))}</button><b>${esc(v.event)} — ${esc(v.car_name)}${v.race_number ? ' #' + esc(v.race_number) : ''}</b> ${rrChip(v.status)}<small class="na">${rrDates(v)} · ${rdKm(v.km_total)} km${v.validated_by ? ' · ' + esc(tx('validé par')) + ' ' + esc(v.validated_by) : ''}</small></div>
-    <div class="sdgrid">${hdr.map(([k, l]) => `<label class="sdfield"><span>${esc(tx(l))}</span>${rrInp('header.' + k, f.header[k] || '', '', dis)}</label>`).join('')}</div>
+    ${dl}<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Type d’épreuve'))}</span>${rrInp('header.type_of_event', f.header.type_of_event || '', 'Peter Auto, Heritage Touring Cup…', dis)}</label>
+    <label class="sdfield"><span>${esc(tx('Pilote (D1)'))}</span><input class="sdin" list="rr-drivers" data-rr-f="header.driver" value="${esc(f.header.driver || '')}" ${dis}></label>
+    <label class="sdfield"><span>${esc(tx('Co-pilote (D2)'))}</span><input class="sdin" list="rr-drivers" data-rr-f="header.codriver" value="${esc(f.header.codriver || '')}" ${dis}></label>
+    ${peopleSel('car_chief', 'Chef mécanicien')}${peopleSel('engineer', 'Ingénieur')}</div>${evNote}
     <p><b>1. ${esc(tx('Synthèse générale'))}</b> <small class="na">${esc(tx('calculée d’après les roulages'))}</small></p>${days}
     <p><b>2. ${esc(tx('Observations générales'))}</b></p>${rrArea('general', f.general, dis, 4)}
     <p><b>3. ${esc(tx('Détail par run'))}</b></p>${v.entries.map(e => rrEntryHtml(e, v, f, dis)).join('')}
@@ -87,12 +96,18 @@ function rrSet(path, value) {
   o[parts[parts.length - 1]] = value;
 }
 
+document.addEventListener('change', e => {
+  const t = e.target; if (!t.dataset || t.dataset.rrP === undefined || !rr.form) return;
+  const k = t.dataset.rrP;
+  if (t.value === '__other') { rr.other[k] = true; rr.form.header[k] = ''; } else { rr.other[k] = false; rr.form.header[k] = t.value; }
+  rrDraw();
+});
 document.addEventListener('input', e => { const t = e.target; if (t.dataset && t.dataset.rrF !== undefined && rr.form) rrSet(t.dataset.rrF, t.value); });
 document.addEventListener('click', async e => {
   const b = e.target.closest && e.target.closest('[data-rr]'); if (!b || !document.getElementById('rr-view')) return;
   const a = b.dataset.rr;
   try {
-    if (a === 'open') { rr.msg = null; rr.view = await rsCall(`/api/rides/reports/${encodeURIComponent(b.dataset.m)}/${encodeURIComponent(b.dataset.c)}`); rr.form = rrFormOf(rr.view); return rrDraw(); }
+    if (a === 'open') { rr.msg = null; rr.other = {}; rr.view = await rsCall(`/api/rides/reports/${encodeURIComponent(b.dataset.m)}/${encodeURIComponent(b.dataset.c)}`); rr.form = rrFormOf(rr.view); return rrDraw(); }
     if (a === 'back') { rr.view = rr.form = null; rr.msg = null; rrDraw(); return rrLoad(); }
     if (a === 'addset') { rr.form.tyre_sets.push({set: '', model: '', laps: '', km: ''}); return rrDraw(); }
     if (a === 'delset') { rr.form.tyre_sets.splice(+b.dataset.i, 1); return rrDraw(); }

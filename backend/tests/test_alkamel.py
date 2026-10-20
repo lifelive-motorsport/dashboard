@@ -60,6 +60,9 @@ def api(monkeypatch):
     for n in ("_cars", "_parts", "_runs", "_circuits", "_catalog", "_maint", "_templates", "_sessions"):
         monkeypatch.setattr(rides, n, None)
     monkeypatch.setattr(timesheets, "_blobs", None)
+    from app import runreport, tyres
+    monkeypatch.setattr(runreport, "_coll", None)
+    monkeypatch.setattr(tyres, "_coll", None)
     monkeypatch.setattr(users, "is_super", lambda e: True)
     app.dependency_overrides[require_user] = lambda: "chef@lifelive-motorsport.com"
     yield TestClient(app)
@@ -211,3 +214,28 @@ def test_import_stores_hours(api):
     m3 = _import_imola(api)
     race = next(s for s in api.get("/api/rides/sessions").json()["sessions"] if s["name"].endswith("RACE (60')"))
     assert race["cars"][0]["hours"] > 0
+
+
+def test_report_people_come_from_the_linked_planning_event(api, monkeypatch):
+    from app import planning, staff
+    cur = staff.store().get()
+    people = [{"id": "pp1", "name": "Nolan Collinet", "kind": "salarie", "function": "Ingénieur", "google_email": "nolan@lifelive-motorsport.com", "alloc": {"HISTORIC_RACING": 100}},
+              {"id": "pp2", "name": "Alain Neuville", "kind": "salarie", "google_email": "alain@lifelive-motorsport.com", "all_bus": True}]
+    staff.store().put({"params": cur["data"]["params"], "people": people}, "t", cur["updated_at"])
+    ev = {"title": "Imola Classic", "bu": "HISTORIC_RACING", "confirmed": True, "start": "2026-10-16", "end": "2026-10-18", "immo_start": "2026-10-15", "immo_end": "2026-10-19",
+          "place": {"id": "demo-imola", "name": "Autodromo di Imola", "address": "Imola", "country": "IT"}, "notes": "", "staff": ["nolan@lifelive-motorsport.com"], "externals": [], "vehicles": []}
+    lbid = api.post("/api/events", json=ev).json()["id"]
+    events = [{"id": e["id"], "title": e["title"], "start": e["start"], "end": e["end"], "place": e["place"]} for e in planning.listing(__import__("datetime").date(2026, 10, 10), __import__("datetime").date(2026, 10, 25))]
+    assert alkamel.suggest_event(events, "Imola Classic", "Imola") == lbid and alkamel.suggest_event(events, "Autre", "Ailleurs") == lbid          # seul événement de la période
+    assert alkamel.suggest_event(events + [{"id": "x", "title": "Zandvoort", "start": "", "end": "", "place": {}}], "Autre", "Ailleurs") == ""
+    m3 = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}["BMW M3 E30"]
+    cl = [{"pos": 1, "no": 20, "drivers": ["R. de BORMAN", "T. NEUVILLE"], "car": "Mustang", "class": "+2L", "classified": True, "laps": 5, "best": "2:18.000"}]
+    body = {"series": "HERITAGE TOURING CUP 1", "event": "Imola Classic", "date": "2026-10-18", "circuit": "Imola", "circuit_km": 4.909, "event_id": lbid,
+            "sessions": [{"date": "2026-10-18", "session": "RACE", "kind": "race", "classification": cl, "cars": {"20": m3}}]}
+    assert api.post("/api/rides/alkamel/import", json=body).status_code == 200
+    mid = api.get("/api/rides/reports").json()["meetings"][0]["meeting"]
+    v = api.get(f"/api/rides/reports/{mid}/{m3}").json()
+    assert v["event_id"] == lbid and [p["name"] for p in v["people"]] == ["Nolan Collinet"] and v["event_title"] == "Imola Classic"
+    assert (v["header"]["driver"], v["header"]["codriver"]) == ("R. de BORMAN", "T. NEUVILLE")              # D1 puis D2, pas les deux dans D1
+    assert v["header"]["type_of_event"] == "Heritage Touring Cup 1" and v["drivers_seen"] == ["R. de BORMAN", "T. NEUVILLE"]
+    api.delete(f"/api/events/{lbid}")

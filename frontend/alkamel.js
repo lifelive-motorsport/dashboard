@@ -1,11 +1,11 @@
 // Opérer › Roulages › « Roulage Al Kamel » : dépôt des PDF du chronométreur (classements, analyse des secteurs), création d'un roulage par session,
 // rattachement de nos voitures par numéro de course, et sessions non chronométrées saisies à la main (essais de la veille, shakedown).
-const ak = {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false};
+const ak = {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', eventId: '', events: [], map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false};
 const akDayBefore = iso => { if (!iso) return ''; const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
 const akBlankManual = () => ({date: akDayBefore(ak.date) || rdToday(), name: 'Essais non chronométrés', cars: (() => { const ks = [...new Set(Object.values(ak.map).filter(Boolean))]; return ks.length ? ks.map(k => ({key: k, fixed: true, laps: '', drivers: '', tyres: []})) : [{key: '', laps: '', drivers: ''}]; })()});
 const akKinds = {race: 'Course', qualifying: 'Qualifications', practice: 'Essais'};
 
-function akReset() { Object.assign(ak, {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false}); }
+function akReset() { Object.assign(ak, {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', eventId: '', events: [], map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false}); }
 
 function akNumbers() {                                      // numéros de course rencontrés dans les sessions choisies, une seule fois chacun
   const seen = new Map();
@@ -41,7 +41,9 @@ function akHtml() {
   }
   const circs = `<label class="sdfield"><span>Circuit</span><select class="sdin" data-ak-f="circuit"><option value="">—</option>${(rn.circuits || []).map(c => `<option value="${esc(c.name)}" ${ak.circuit === c.name ? 'selected' : ''}>${esc(c.name)} · ${rdKm(c.length_km)} km</option>`).join('')}<option value="__new" ${ak.circuit === '__new' ? 'selected' : ''}>＋ ${esc(tx('Nouveau circuit'))}</option></select></label>`;
   const newc = ak.circuit === '__new' ? `<label class="sdfield"><span>${esc(tx('Nom du circuit'))}</span><input class="sdin" data-ak-f="newCircuit" value="${esc(ak.newCircuit)}"></label><label class="sdfield"><span>${esc(tx('Longueur du tour (km)'))}</span><input class="sdin" data-ak-f="circuitKm" value="${esc(ak.circuitKm)}" inputmode="decimal"></label>${d && d.circuit_km ? `<small class="na">${esc(tx('Longueur estimée d’après le classement de course (vitesse moyenne × durée ÷ tours) :'))} ${rdKm(d.circuit_km)} km</small>` : ''}` : '';
-  const head = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Épreuve'))}</span><input class="sdin" data-ak-f="event" value="${esc(ak.event)}" placeholder="Imola Classic"></label><label class="sdfield"><span>${esc(tx('Premier jour'))}</span>${dpField('data-ak-f="date"', ak.date)}</label>${circs}${newc}</div>`;
+  const evsel = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Événement du Planning'))}</span><select class="sdin" data-ak-f="eventId" style="min-width:320px"><option value="">—</option>${(ak.events || []).map(e => `<option value="${esc(e.id)}" ${ak.eventId === e.id ? 'selected' : ''}>${fmtDate(e.start)}${e.end !== e.start ? ' → ' + fmtDate(e.end) : ''} · ${esc(e.title)}</option>`).join('')}</select></label>
+    <small class="na" style="align-self:end">${esc(tx('Les personnes invitées à cet événement (ingénieur, chef mécanicien) seront proposées dans le run report.'))}</small></div>`;
+  const head = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Épreuve'))}</span><input class="sdin" data-ak-f="event" value="${esc(ak.event)}" placeholder="Imola Classic"></label><label class="sdfield"><span>${esc(tx('Premier jour'))}</span>${dpField('data-ak-f="date"', ak.date)}</label>${circs}${newc}</div>${evsel}`;
   const manual = ak.manual.map((m, i) => `<div class="rn-card"><div class="sdgrid"><label class="sdfield"><span>Date</span>${dpField(`data-ak-m="date" data-i="${i}"`, m.date)}</label><label class="sdfield"><span>${esc(tx('Nom'))}</span><input class="sdin" data-ak-m="name" data-i="${i}" value="${esc(m.name)}"></label><button type="button" class="mini danger" data-ak="delm" data-i="${i}" title="${esc(tx('Retirer cette session'))}">✕</button></div>
     ${m.cars.map((c, j) => `<div class="sdgrid">${c.fixed ? `<b style="min-width:230px;padding-top:8px">${esc(((rn.cars || []).find(x => x.key === c.key) || {}).name || c.key)}</b>` : akCarSelect(`data-ak-mc="key" data-i="${i}" data-j="${j}"`, c.key)}<input class="sdin" data-ak-mc="laps" data-i="${i}" data-j="${j}" value="${esc(c.laps)}" placeholder="${esc(tx('Tours'))}" inputmode="numeric" style="max-width:90px"><input class="sdin" data-ak-mc="drivers" data-i="${i}" data-j="${j}" value="${esc(c.drivers)}" placeholder="${esc(tx('Pilote(s)'))}"></div>${c.key ? tyPickerHtml(`akm|${i}|${j}`, c.key, c.tyres || []) : ''}`).join('')}
     <button type="button" class="mini" data-ak="addmc" data-i="${i}">＋ ${esc(tx('Autre voiture'))}</button></div>`).join('');
@@ -76,6 +78,7 @@ async function akParse(list) {
     if (!ak.date && d.date) ak.date = d.date;
     if (d.circuit_km && !ak.circuitKm) ak.circuitKm = String(d.circuit_km);
     d.sessions.forEach((s, i) => { ak.pick[i] = true; ak.sdate[i] = s.date || (s.conditions && s.conditions.date) || d.date || ''; });
+    ak.events = d.events || []; if (!ak.eventId && d.event_suggest) ak.eventId = d.event_suggest;
     if (!ak.circuit && d.circuit_suggest && d.circuit_suggest.name) { if (d.circuit_suggest.existing) ak.circuit = d.circuit_suggest.name; else { ak.circuit = '__new'; ak.newCircuit = d.circuit_suggest.name; } }
     for (const s of d.suggest || []) if (!ak.map[s.no]) ak.map[s.no] = s.key;
   } catch (e) { ak.msg = e.message; ak.ok = false; }
@@ -90,6 +93,7 @@ document.addEventListener('change', e => {
   if (t.dataset.akSd !== undefined && t.classList.contains('dp-h')) { ak.sdate[+t.dataset.akSd] = t.value; return; }
   if (t.dataset.akCar !== undefined) { ak.map[t.dataset.akCar] = t.value; return akDraw(); }
   if (t.dataset.akF === 'circuit') { ak.circuit = t.value; return akDraw(); }
+  if (t.dataset.akF === 'eventId') { ak.eventId = t.value; return; }
   if (t.dataset.akF === 'date' && t.classList.contains('dp-h')) { ak.date = t.value; return akDraw(); }
   if (t.dataset.akM === 'date' && t.classList.contains('dp-h')) { ak.manual[+t.dataset.i].date = t.value; return; }
   if (t.dataset.akMc === 'key') { ak.manual[+t.dataset.i].cars[+t.dataset.j].key = t.value; return akDraw(); }
@@ -113,7 +117,7 @@ document.addEventListener('click', async e => {
     try {
       const d = ak.data, mapped = {};
       for (const [no, key] of Object.entries(ak.map)) if (key) mapped[no] = key;
-      const body = {series: d ? d.series : '', event: ak.event.trim(), date: ak.date, circuit: ak.circuit === '__new' ? ak.newCircuit.trim() : ak.circuit, circuit_km: rdNum(ak.circuitKm) || 0,
+      const body = {series: d ? d.series : '', event: ak.event.trim(), date: ak.date, circuit: ak.circuit === '__new' ? ak.newCircuit.trim() : ak.circuit, circuit_km: rdNum(ak.circuitKm) || 0, event_id: ak.eventId || '',
         sessions: d ? d.sessions.map((s, i) => ({s, i})).filter(x => ak.pick[x.i]).map(({s, i}) => ({date: ak.sdate[i] || ak.date, session: s.session, kind: s.kind, conditions: s.conditions, classification: s.classification, cars: mapped, tyres: Object.fromEntries(Object.entries(ak.tyres[i] || {}).map(([k, l]) => [k, tyUsesBody(l)]).filter(([, l]) => l.length))})) : [],
         manual: ak.manual.map(m => ({date: m.date, name: m.name, cars: m.cars.filter(c => c.key && parseInt(c.laps) > 0).map(c => ({key: c.key, tyres: tyUsesBody(c.tyres), laps: parseInt(c.laps) || 0, drivers: String(c.drivers).split(',').map(x => x.trim()).filter(Boolean)}))}))};
       const r = await rsCall('/api/rides/alkamel/import', {method: 'POST', body: JSON.stringify(body)});

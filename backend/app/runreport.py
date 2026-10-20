@@ -130,6 +130,26 @@ def _days(entries: list[dict], notes: dict) -> list[dict]:
     return [{**d, "best": alkamel.fmt(d["best"]) if d["best"] else "", "fuel": round(d["fuel"], 1) if d["fuel_known"] else None} for d in sorted(days.values(), key=lambda x: x["date"])]
 
 
+def _event_people(event_id: str, d_from: str, d_to: str) -> tuple[list[dict], str]:
+    """Personnes (staff interne et externe) invitées à l'événement du Planning auquel le roulage est rattaché : {name, kind, function}."""
+    from datetime import timedelta
+    from . import planning
+    try:
+        v = planning.planning_view(date.fromisoformat(d_from) - timedelta(days=5), date.fromisoformat(d_to) + timedelta(days=5))
+    except Exception:
+        return [], ""
+    ev = next((e for e in v["events"] if e["id"] == event_id), None)
+    if not ev:
+        return [], ""
+    res = {r["id"]: r for r in v["resources"]}
+    out = []
+    for p in ev["people"]:
+        r = res.get(p["rid"])
+        if r and r["kind"] in ("staff", "external"):
+            out.append({"name": r["name"], "kind": r["kind"], "function": r.get("function") or r.get("company") or ""})
+    return sorted(out, key=lambda x: x["name"].lower()), ev["title"]
+
+
 def view(meeting: str, car: str) -> dict:
     c = rides.car_of(car)
     if not c:
@@ -146,7 +166,10 @@ def view(meeting: str, car: str) -> dict:
         for d in e["drivers"]:
             if d not in drivers:
                 drivers.append(d)
-    header = {"type_of_event": "", "car_chief": "", "engineer": "", "driver": ", ".join(drivers[:2]), "codriver": ""} | (doc.get("header") or {})
+    series = alkamel.title_case(((first.get("alkamel") or {}).get("series") or "").strip())
+    header = {"type_of_event": series, "car_chief": "", "engineer": "", "driver": drivers[0] if drivers else "", "codriver": drivers[1] if len(drivers) > 1 else ""} | (doc.get("header") or {})
+    ev_id = next((s.get("event_id") for s in sessions if s.get("event_id")), "")
+    people, ev_title = _event_people(ev_id, min(e["date"] for e in entries), max(e["date"] for e in entries)) if ev_id else ([], "")
     notes = doc.get("runs") or {}
     circ = rides.circuits_coll().get(rides.circuit_id(first.get("circuit", ""))) if first.get("circuit") else None
     return {"id": rid(meeting, car), "meeting": meeting, "car": car, "car_name": c["name"], "race_number": meta.get("race_number", ""), "chassis": meta.get("chassis", ""),
@@ -155,7 +178,7 @@ def view(meeting: str, car: str) -> dict:
             "general": doc.get("general", ""), "runs": notes, "tyre_sets": doc.get("tyre_sets", []), "pressure_base": doc.get("pressure_base", ""),
             "actions_car": doc.get("actions_car", ""), "actions_logistics": doc.get("actions_logistics", ""),
             "status": doc.get("status", "draft") if doc else "draft", "validated_by": doc.get("validated_by", ""), "validated_at": doc.get("validated_at", ""),
-            "entries": entries, "tyres_auto": tyres.for_meeting(meeting, car), "days": _days(entries, notes), "km_total": round(sum(e["km"] or 0 for e in entries), 1)}
+            "drivers_seen": drivers, "event_id": ev_id, "event_title": ev_title, "people": people, "entries": entries, "tyres_auto": tyres.for_meeting(meeting, car), "days": _days(entries, notes), "km_total": round(sum(e["km"] or 0 for e in entries), 1)}
 
 
 # ---- Enregistrement -----------------------------------------------------------------------------------------------------------------------

@@ -472,6 +472,18 @@ def suggest_circuit(event: str, circuits: list[dict]) -> dict:
     return {"name": " ".join(words) or event, "existing": False}
 
 
+def suggest_event(events: list[dict], event: str, circuit: str) -> str:
+    """Événement du Planning correspondant à l'épreuve : celui dont le titre ou le lieu contient le circuit ou un mot de l'épreuve ; à défaut le seul événement de la période."""
+    import unicodedata
+    norm = lambda x: re.sub(r"[^a-z0-9 ]", "", unicodedata.normalize("NFD", (x or "").lower()).encode("ascii", "ignore").decode())
+    keys = [w for w in norm(circuit).split() + norm(event).split() if len(w) > 3 and w not in _EVENT_WORDS]
+    for e in events:
+        hay = norm(e.get("title", "")) + " " + norm((e.get("place") or {}).get("address", ""))
+        if any(k in hay for k in keys):
+            return e["id"]
+    return events[0]["id"] if len(events) == 1 else ""
+
+
 def estimate_length(sessions: list[dict]) -> float | None:
     """Longueur du tour = vitesse moyenne × durée / nombre de tours (classement de course ; médiane sur les voitures qui ont fini à plein tour)."""
     est = []
@@ -499,6 +511,7 @@ def import_batch(body: dict, user: str) -> dict:
         raise ValueError("Date de l'épreuve invalide")
     event = str(body.get("event") or "").strip()[:100]
     circuit = str(body.get("circuit") or "").strip()[:80]
+    event_id = str(body.get("event_id") or "").strip()[:40]
     length = body.get("circuit_km")
     if not event:
         raise ValueError("Indiquez le nom de l'épreuve")
@@ -523,7 +536,7 @@ def import_batch(body: dict, user: str) -> dict:
             sd = date.fromisoformat(str(s.get("date") or "")) if s.get("date") else d      # chaque session a son jour (essais, qualifications, course)
         except ValueError:
             raise ValueError("Date invalide pour une session")
-        sin = rides.SessionIn(date=sd, name=name, kind="circuit", circuit=circuit, notes=str(s.get("notes") or "")[:1000])
+        sin = rides.SessionIn(date=sd, name=name, kind="circuit", circuit=circuit, event_id=event_id, notes=str(s.get("notes") or "")[:1000])
         # un roulage Al Kamel est retrouvé s'il existe déjà (même date, nom, circuit) : on le complète au lieu de le doubler
         sdoc = next((x for x in rides.sessions_coll().all() if rides._session_key(x) == rides._session_key({**sin.model_dump(mode="json")})), None)
         sid = sdoc["id"] if sdoc else "s-" + uuid.uuid4().hex[:10]
@@ -567,7 +580,7 @@ def import_batch(body: dict, user: str) -> dict:
         if not cars:
             continue
         sname = f"{event} — {mname}"[:120]
-        sin = rides.SessionIn(date=md, name=sname, kind="circuit", circuit=circuit, notes=str(m.get("notes") or "")[:1000])
+        sin = rides.SessionIn(date=md, name=sname, kind="circuit", circuit=circuit, event_id=event_id, notes=str(m.get("notes") or "")[:1000])
         sdoc = next((x for x in rides.sessions_coll().all() if rides._session_key(x) == rides._session_key({**sin.model_dump(mode="json")})), None)
         sid = sdoc["id"] if sdoc else "s-" + uuid.uuid4().hex[:10]
         rides.sessions_coll().put(sid, {**(sdoc or {}), "id": sid, **sin.model_dump(mode="json"), "stages": [], "meeting": meeting, "untimed": True,

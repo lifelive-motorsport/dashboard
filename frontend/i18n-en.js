@@ -2215,3 +2215,11 @@ Object.assign(EN_T, {
 });
 Object.assign(EN_T, {"Fichiers illisibles (format inattendu) :": "Unreadable files (unexpected format):"});
 Object.assign(EN_T, {"Chronométrage Al Kamel : tours et kilomètres officiels. Pour les corriger, réimportez les PDF.": "Al Kamel timing: official laps and kilometres. To correct them, re-import the PDFs."});
+Object.assign(EN_T, {
+  "Événement du Planning": "Planning event",
+  "Les personnes invitées à cet événement (ingénieur, chef mécanicien) seront proposées dans le run report.": "The people invited to this event (engineer, car chief) will be offered in the run report.",
+  "Autre (saisie libre)": "Other (free text)",
+  "Roulage non rattaché à un événement du Planning : réimportez les PDF en choisissant l’événement pour proposer ses personnes.": "Run not linked to a Planning event: re-import the PDFs choosing the event to offer its people.",
+  "Aucune personne (staff interne ou externe) sur l’événement du Planning": "No person (internal or external staff) on the Planning event",
+  "ajoutez-les comme ressources dans Planifier › Événements.": "add them as resources in Plan › Events.",
+});

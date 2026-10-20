@@ -1237,7 +1237,17 @@ def rd_alkamel_parse(body: AlkamelParse, _user: str = Depends(granted("consigner
         logging.getLogger("logbook").exception("Al Kamel : analyse impossible")
         raise HTTPException(422, "Ces PDF n'ont pas pu être analysés (format inattendu). Envoyez-les à l'équipe technique via le picto « Suggestions et bugs ».")
     circuits = rides.list_circuits()
-    return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": circuits, "circuit_suggest": alkamel.suggest_circuit(parsed["event"], circuits)}
+    cs = alkamel.suggest_circuit(parsed["event"], circuits)
+    events = []
+    if parsed.get("date"):                                                               # événements du Planning autour de l'épreuve (pour y rattacher le roulage et ses personnes)
+        try:
+            from datetime import date as _d, timedelta as _td
+            events = [{"id": e["id"], "title": e["title"], "start": e["start"], "end": e["end"], "place": e.get("place") or {}}
+                      for e in planning.listing(_d.fromisoformat(parsed["date"]) - _td(days=3), _d.fromisoformat(parsed.get("date_to") or parsed["date"]) + _td(days=3))]
+        except Exception:
+            events = []
+    return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": circuits, "circuit_suggest": cs, "events": [{k: v for k, v in e.items() if k != "place"} for e in events],
+            "event_suggest": alkamel.suggest_event(events, parsed["event"], cs["name"])}
 
 
 @app.post("/api/rides/alkamel/import")

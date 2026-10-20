@@ -334,56 +334,69 @@ def race_story(c: dict, chart: dict[int, list]) -> dict | None:
 
 # ---- Lecture d'un lot de fichiers ---------------------------------------------------------------------------------------------------------
 
+def _read_file(name: str, data: bytes, sessions: dict, ignored: list) -> None:
+    """Lit un PDF et l'ajoute à sa session ; lève ValueError pour un fichier inutilisable."""
+    if len(data) > MAX_BYTES:
+        raise ValueError(f"{name} : fichier trop volumineux")
+    if not data.startswith(b"%PDF"):
+        raise ValueError(f"{name} : ce n'est pas un PDF")
+    try:
+        pages = _pages(data)
+    except Exception:
+        raise ValueError(f"{name} : PDF illisible")
+    prow = [_rows(p) for p in pages]
+    if not prow or not prow[0]:
+        ignored.append(name)
+        return
+    head = parse_head(prow[0], name)
+    full = "\n".join(_text(r) for p in prow for r in p)
+    low = full.lower()
+    if not head["kind"]:
+        ignored.append(name)
+        return
+    key = head["kind"] + "|" + re.sub(r"\s*\(.*?\)\s*", "", head["session"]).upper()
+    s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": [], "grid": {}, "lapchart": {}, "dates": {}})
+    s["files"].append(name)
+    role = "lapchart" if "lap chart" in low[:200] else "grid" if "starting grid" in low[:200] else "analysis" if "sector analysis" in low else "weather" if "weather report" in low else "sectors" if "best sector" in low else "speed" if "best top speed" in low else "classification"
+    fdate = parse_conditions(full).get("date")
+    if fdate:
+        s["dates"].setdefault(role, fdate)
+    if "lap chart" in low[:200]:
+        s["lapchart"] = parse_lapchart([r for p in prow for r in p])
+        return
+    if "starting grid" in low[:200]:
+        s["grid"] = parse_grid([r for p in prow for r in p])
+        return
+    if "sector analysis" in low:
+        for no, c in parse_analysis(prow).items():
+            if no not in s["analysis"] or len(c["laps"]) > len(s["analysis"][no]["laps"]):
+                s["analysis"][no] = c
+        return
+    cl = parse_classification([r for p in prow for r in p], head["kind"])
+    if not cl:
+        ignored.append(name)
+        return
+    if not s["classification"] or "revised" in low or len(cl) > len(s["classification"]):
+        s["classification"] = cl
+    s["conditions"].update({k: v for k, v in parse_conditions(full).items() if v})
+
+
 def parse_files(files: list[tuple[str, bytes]]) -> dict:
     """Classements + analyses regroupés par session. Retourne {series, event, date, sessions: [...]} ; les fichiers inutilisés sont listés dans `ignored`."""
     if len(files) > MAX_FILES:
         raise ValueError("Trop de fichiers")
     sessions: dict[str, dict] = {}
     ignored: list[str] = []
+    errors: list[str] = []
     for name, data in files:
-        if len(data) > MAX_BYTES:
-            raise ValueError(f"{name} : fichier trop volumineux")
-        if not data.startswith(b"%PDF"):
-            raise ValueError(f"{name} : ce n'est pas un PDF")
         try:
-            pages = _pages(data)
-        except Exception:
-            raise ValueError(f"{name} : PDF illisible")
-        prow = [_rows(p) for p in pages]
-        if not prow or not prow[0]:
-            ignored.append(name)
-            continue
-        head = parse_head(prow[0], name)
-        full = "\n".join(_text(r) for p in prow for r in p)
-        low = full.lower()
-        if not head["kind"]:
-            ignored.append(name)
-            continue
-        key = head["kind"] + "|" + re.sub(r"\s*\(.*?\)\s*", "", head["session"]).upper()
-        s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": [], "grid": {}, "lapchart": {}, "dates": {}})
-        s["files"].append(name)
-        role = "lapchart" if "lap chart" in low[:200] else "grid" if "starting grid" in low[:200] else "analysis" if "sector analysis" in low else "weather" if "weather report" in low else "sectors" if "best sector" in low else "speed" if "best top speed" in low else "classification"
-        fdate = parse_conditions(full).get("date")
-        if fdate:
-            s["dates"].setdefault(role, fdate)
-        if "lap chart" in low[:200]:
-            s["lapchart"] = parse_lapchart([r for p in prow for r in p])
-            continue
-        if "starting grid" in low[:200]:
-            s["grid"] = parse_grid([r for p in prow for r in p])
-            continue
-        if "sector analysis" in low:
-            for no, c in parse_analysis(prow).items():
-                if no not in s["analysis"] or len(c["laps"]) > len(s["analysis"][no]["laps"]):
-                    s["analysis"][no] = c
-            continue
-        cl = parse_classification([r for p in prow for r in p], head["kind"])
-        if not cl:
-            ignored.append(name)
-            continue
-        if not s["classification"] or "revised" in low or len(cl) > len(s["classification"]):
-            s["classification"] = cl
-        s["conditions"].update({k: v for k, v in parse_conditions(full).items() if v})
+            _read_file(name, data, sessions, ignored)
+        except ValueError:
+            raise
+        except Exception:                                            # un PDF d'un format inattendu ne fait pas échouer tout l'import
+            import logging
+            logging.getLogger("logbook").exception("Al Kamel : lecture impossible de %s", name)
+            errors.append(name)
     out_sessions = []
     for s in sessions.values():
         ana = s.pop("analysis")
@@ -421,7 +434,7 @@ def parse_files(files: list[tuple[str, bytes]]) -> dict:
     out_sessions.sort(key=lambda s: (order.get(s["kind"], 9), s["session"]))
     first = out_sessions[0] if out_sessions else {}
     d = min((s["date"] for s in out_sessions if s.get("date")), default="")
-    return {"series": first.get("series", ""), "event": title_case(first.get("event", "")), "date": d, "date_to": max((s["date"] for s in out_sessions if s.get("date")), default=""), "sessions": out_sessions, "ignored": ignored,
+    return {"series": first.get("series", ""), "event": title_case(first.get("event", "")), "date": d, "date_to": max((s["date"] for s in out_sessions if s.get("date")), default=""), "sessions": out_sessions, "ignored": ignored, "errors": errors,
             "circuit_km": estimate_length(out_sessions)}
 
 

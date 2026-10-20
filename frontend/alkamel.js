@@ -35,7 +35,7 @@ function akHtml() {
     }).join('');
     const nums = akNumbers();
     const cars = table(['N°', 'Pilote(s)', 'Voiture', 'Notre voiture'], nums.map(c => `<tr><td>${c.no}</td><td>${esc((c.drivers || []).join(' / '))}</td><td>${esc(c.car)}</td><td>${akCarSelect(`data-ak-car="${c.no}"`, ak.map[c.no] || '')}</td></tr>`));
-    body = `<p class="na">${esc(d.series)}${d.date ? ` · ${esc(tx('Du'))} ${fmtDate(d.date)} ${esc(tx('au'))} ${fmtDate(d.date_to || d.date)}` : ''}${d.ignored && d.ignored.length ? ` · ${d.ignored.length} ${esc(tx('PDF ignorés'))}` : ''}</p><div class="rn-card">${sess}</div>
+    body = `<p class="na">${esc(d.series)}${d.date ? ` · ${esc(tx('Du'))} ${fmtDate(d.date)} ${esc(tx('au'))} ${fmtDate(d.date_to || d.date)}` : ''}${d.ignored && d.ignored.length ? ` · ${d.ignored.length} ${esc(tx('PDF ignorés'))}` : ''}</p>${d.errors && d.errors.length ? `<p class="neg">${esc(tx('Fichiers illisibles (format inattendu) :'))} ${esc(d.errors.join(', '))}</p>` : ''}<div class="rn-card">${sess}</div>
       <p><b>${esc(tx('Nos voitures'))}</b> <small class="na">${esc(tx('associez chaque voiture du Garage à son numéro de course ; les autres numéros ne sont pas importés.'))}</small></p>${cars}`;
   }
   const circs = `<label class="sdfield"><span>Circuit</span><select class="sdin" data-ak-f="circuit"><option value="">—</option>${(rn.circuits || []).map(c => `<option value="${esc(c.name)}" ${ak.circuit === c.name ? 'selected' : ''}>${esc(c.name)} · ${rdKm(c.length_km)} km</option>`).join('')}<option value="__new" ${ak.circuit === '__new' ? 'selected' : ''}>＋ ${esc(tx('Nouveau circuit'))}</option></select></label>`;

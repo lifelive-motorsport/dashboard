@@ -1232,6 +1232,10 @@ def rd_alkamel_parse(body: AlkamelParse, _user: str = Depends(granted("consigner
         parsed = alkamel.parse_files(files)
     except ValueError as e:
         raise HTTPException(422, str(e))
+    except Exception:
+        import logging
+        logging.getLogger("logbook").exception("Al Kamel : analyse impossible")
+        raise HTTPException(422, "Ces PDF n'ont pas pu être analysés (format inattendu). Envoyez-les à l'équipe technique via le picto « Suggestions et bugs ».")
     circuits = rides.list_circuits()
     return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": circuits, "circuit_suggest": alkamel.suggest_circuit(parsed["event"], circuits)}
 

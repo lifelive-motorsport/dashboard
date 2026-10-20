@@ -154,3 +154,18 @@ def test_circuit_suggestion_and_title_case():
     assert alkamel.suggest_circuit("Imola Classic", [{"name": "Imola", "length_km": 4.9}]) == {"name": "Imola", "existing": True}
     assert alkamel.suggest_circuit("Imola Classic", []) == {"name": "Imola", "existing": False}
     assert alkamel.suggest_circuit("Dijon Historic Festival", [{"name": "Spa", "length_km": 7}])["name"] == "Dijon"
+
+
+def test_unexpected_pdf_does_not_crash_the_import():
+    import pymupdf
+    def pdf(lines):
+        d = pymupdf.open(); p = d.new_page()
+        for i, ln in enumerate(lines):
+            p.insert_text((60, 80 + i * 16), ln)
+        return d.tobytes()
+    odd = pdf(["SERIE X", "EVENT Y", "RACE", "Final Classification", "Nr. Drivers Car 1 2 3"])           # en-tête sans colonne « Class » : plantait avec une KeyError
+    ok = pdf(["SERIE X", "EVENT Y", "RACE", "Sector Analysis"])
+    r = alkamel.parse_files([("03_Classification_RACE.PDF", odd), ("23_Analysis_RACE.PDF", ok)])
+    assert r["event"] and isinstance(r["sessions"], list) and isinstance(r["errors"], list)
+    with pytest.raises(ValueError):
+        alkamel.parse_files([("x.pdf", b"pas un pdf")])

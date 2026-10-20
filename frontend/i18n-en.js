@@ -2213,3 +2213,4 @@ Object.assign(EN_T, {
   "Km (meeting)": "Km (meeting)",
   "Km (total du set)": "Km (set total)",
 });
+Object.assign(EN_T, {"Fichiers illisibles (format inattendu) :": "Unreadable files (unexpected format):"});

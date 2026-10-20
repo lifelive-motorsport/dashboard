@@ -758,6 +758,14 @@ def test_transport_time_range():
     assert ev["start"]["dateTime"] == "2027-04-12T08:00:00" and ev["end"]["dateTime"] == "2027-04-12T12:30:00"
     got = c.get("/api/events", params={"from": "2027-04-01", "to": "2027-04-30"}).json()["events"][0]
     assert (got["start_time"], got["end_time"], got["end"]) == ("08:00", "12:30", "2027-04-12")
+    # passage journée entière -> plage horaire à la modification : le patch fusionne, l'ancienne forme doit être effacée
+    c.delete(f"/api/events/{got['id']}")
+    r = c.post("/api/events", json=_ev(**{**base, "transport": False}))
+    assert r.status_code == 200
+    got = c.get("/api/events", params={"from": "2027-04-01", "to": "2027-04-30"}).json()["events"][0]
+    assert c.put(f"/api/events/{got['id']}", json=_ev(**base, start_time="06:00", end_time="10:00")).status_code == 200
+    ev = list(planning.backend().events[planning.calendars_by_bu()["OTHERS"]].values())[-1]
+    assert "date" not in ev["start"] and ev["start"]["dateTime"] == "2027-04-12T06:00:00"
     c.delete(f"/api/events/{got['id']}")
     r = c.post("/api/events", json=_ev(**{**base, "transport": False}, start_time="08:00", end_time="12:30"))   # hors transport : heures ignorées
     assert r.status_code == 200

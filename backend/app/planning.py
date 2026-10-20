@@ -174,7 +174,11 @@ class Memory:
     def patch(self, cal, eid, body, notify):
         with self._lock:
             e = self.events[cal][eid]
-            e.update(body)
+            for k, v in body.items():  # comme Google : fusion, et null efface la clé
+                if isinstance(v, dict) and isinstance(e.get(k), dict):
+                    e[k] = {a: b for a, b in {**e[k], **v}.items() if b is not None}
+                else:
+                    e[k] = v
             self.sent.append(("patch", eid, notify))
             return e
 
@@ -338,6 +342,8 @@ def update(lbid: str, e: EventIn) -> dict:
         return create(e, lbid)
     route = _route(e.place, e.origin)
     body = build_main(e, lbid, route)
+    for k in ("start", "end"):  # patch fusionne : on efface l'autre forme (date / dateTime) sinon Google refuse « Invalid start time »
+        body[k] = {**body[k], **({"date": None} if "dateTime" in body[k] else {"dateTime": None, "timeZone": None})}
     backend().patch(cal_main, main["id"], body, notify=True)
     if wants_vehicle_event(e):
         vb = build_vehicles(e, lbid)

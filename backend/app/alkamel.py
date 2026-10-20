@@ -242,6 +242,96 @@ def pace(laps: list[dict], n: int = 5) -> str:
     return fmt(round(statistics.mean(v), 3)) if v else ""
 
 
+
+# ---- Grille de départ, lap chart, rangs sur le plateau -------------------------------------------------------------------------------------
+
+def parse_grid(rows: list[list[tuple[float, str]]]) -> dict[int, int]:
+    """Grille de départ : sous la ligne des numéros, « -N- » au centre ; la voiture de droite est en position 2N-1 et celle de gauche en 2N."""
+    out: dict[int, int] = {}
+    for i, r in enumerate(rows):
+        t = [w for _, w in r]
+        if i == 0 or len(t) != 3 or t[0] != "-" or t[2] != "-" or not t[1].isdigit():
+            continue
+        n, mid = int(t[1]), r[1][0]
+        nums = [(x, int(w)) for x, w in rows[i - 1] if w.isdigit() and len(w) <= 3]
+        left = [no for x, no in nums if x < mid]
+        right = [no for x, no in nums if x > mid]
+        if right:
+            out[right[0]] = 2 * n - 1
+        if left:
+            out[left[-1]] = 2 * n
+    return out
+
+
+def parse_lapchart(rows: list[list[tuple[float, str]]]) -> dict[int, list[int | None]]:
+    """Lap chart : une ligne par position (n° de position à gauche), une colonne par tour ; retourne {n° de voiture: [position à la grille, après le tour 1, 2, …]}."""
+    heads = sorted((x, int(w)) for r in rows for x, w in r if w.isdigit() and 100 < x < 520 and any(t == "Grid" for _, t in r) is False and False)
+    del heads
+    lapx: dict[int, float] = {}
+    grid_x = None
+    for r in rows:
+        if any(w == "Grid" for _, w in r):
+            grid_x = next(x for x, w in r if w == "Grid")
+        if any(w in ("Nr", "Pos") for _, w in r) and grid_x is not None:
+            for x, w in r:
+                if w.isdigit():
+                    lapx[int(w)] = x
+        elif grid_x is not None and r and all(w.isdigit() for _, w in r) and all(x > 105 for x, _ in r) and r[0][1] == "1" and not lapx.get(1):
+            for x, w in r:
+                lapx[int(w)] = x
+    if not lapx or grid_x is None:
+        return {}
+    lapx = dict(sorted(lapx.items()))
+    cols = [(grid_x, 0)] + [(x, n) for n, x in lapx.items()]
+    out: dict[int, dict[int, int]] = {}
+    for r in rows:
+        lab = next(((x, int(w)) for x, w in r if 78 <= x <= 95 and w.isdigit()), None)
+        if lab is None:
+            continue
+        pos = lab[1]
+        for x, w in r:
+            if x < 100 or not w.isdigit():
+                continue
+            cx, n = min(cols, key=lambda c: abs(c[0] - x))
+            if abs(cx - x) <= 7:
+                out.setdefault(int(w), {})[n] = pos
+    nmax = max(lapx) if lapx else 0
+    return {no: [d.get(n) for n in range(0, nmax + 1)] for no, d in out.items()}
+
+
+def add_field_ranks(classification: list[dict]) -> None:
+    """Rang de chaque voiture sur le plateau (meilleurs secteurs, vitesse de pointe, meilleur tour théorique) et écart au meilleur du plateau."""
+    cars = [c for c in classification if c.get("summary")]
+    for key in ("s1", "s2", "s3"):
+        vals = {c["no"]: secs(c["summary"]["sectors"].get(key)) for c in cars}
+        vals = {no: v for no, v in vals.items() if v}
+        order = sorted(vals, key=lambda no: vals[no])
+        best = vals[order[0]] if order else None
+        for c in cars:
+            if c["no"] in vals:
+                c["summary"].setdefault("rank", {})[key] = order.index(c["no"]) + 1
+                c["summary"].setdefault("gap", {})[key] = round(vals[c["no"]] - best, 3)
+    for key, get, rev in (("top", lambda c: c["summary"].get("top_speed"), True), ("ideal", lambda c: secs(c["summary"].get("ideal")), False)):
+        vals = {c["no"]: get(c) for c in cars if get(c)}
+        order = sorted(vals, key=lambda no: vals[no], reverse=rev)
+        for c in cars:
+            if c["no"] in vals:
+                c["summary"].setdefault("rank", {})[key] = order.index(c["no"]) + 1
+    for c in cars:
+        c["summary"]["field"] = len(cars)
+
+
+def race_story(c: dict, chart: dict[int, list]) -> dict | None:
+    """Départ -> arrivée, meilleure position, tours en tête, d'après le lap chart."""
+    ps = chart.get(c["no"])
+    if not ps:
+        return None
+    laps = [p for p in ps[1:] if p]
+    if not laps:
+        return None
+    return {"start": ps[0], "finish": laps[-1], "best": min(laps), "led": sum(1 for p in laps if p == 1), "positions": ps[1:]}
+
+
 # ---- Lecture d'un lot de fichiers ---------------------------------------------------------------------------------------------------------
 
 def parse_files(files: list[tuple[str, bytes]]) -> dict:
@@ -270,8 +360,14 @@ def parse_files(files: list[tuple[str, bytes]]) -> dict:
             ignored.append(name)
             continue
         key = head["kind"] + "|" + re.sub(r"\s*\(.*?\)\s*", "", head["session"]).upper()
-        s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": []})
+        s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": [], "grid": {}, "lapchart": {}})
         s["files"].append(name)
+        if "lap chart" in low[:200]:
+            s["lapchart"] = parse_lapchart([r for p in prow for r in p])
+            continue
+        if "starting grid" in low[:200]:
+            s["grid"] = parse_grid([r for p in prow for r in p])
+            continue
         if "sector analysis" in low:
             for no, c in parse_analysis(prow).items():
                 if no not in s["analysis"] or len(c["laps"]) > len(s["analysis"][no]["laps"]):
@@ -302,6 +398,16 @@ def parse_files(files: list[tuple[str, bytes]]) -> dict:
                     c["laps"] = len(a["laps"])
         if not s["classification"] and ana:                          # pas de classement fourni : une entrée par voiture de l'analyse
             s["classification"] = [{"pos": None, "no": no, "drivers": a["drivers"], "car": a["car"], "class": "", "classified": True, "laps": len(a["laps"]), "best": a["summary"].get("best", ""), "summary": a["summary"], "pace5": a["pace5"], "lap_list": a["laps"]} for no, a in sorted(ana.items())]
+        grid, chart = s.pop("grid", {}), s.pop("lapchart", {})
+        for c in s["classification"]:
+            if c["no"] in grid:
+                c["grid"] = grid[c["no"]]
+            if s["kind"] == "race":
+                st = race_story(c, chart)
+                if st:
+                    c["story"] = st
+                    c.setdefault("grid", st["start"])
+        add_field_ranks(s["classification"])
         s["laps_max"] = max((c.get("laps") or 0 for c in s["classification"]), default=0)
         out_sessions.append(s)
     order = {"practice": 0, "qualifying": 1, "race": 2}
@@ -327,7 +433,7 @@ def estimate_length(sessions: list[dict]) -> float | None:
 
 def _slim(c: dict) -> dict:
     """Classement conservé dans le roulage : une ligne par voiture, sans le détail des tours (gardé seulement pour nos voitures)."""
-    keep = ("pos", "no", "drivers", "car", "class", "classified", "laps", "total_time", "gap", "kph", "best", "best_lap_no", "best_kph", "driver_times", "average", "summary", "pace5")
+    keep = ("pos", "no", "drivers", "car", "class", "classified", "laps", "total_time", "gap", "kph", "best", "best_lap_no", "best_kph", "driver_times", "average", "summary", "pace5", "grid", "story")
     return {k: c[k] for k in keep if k in c}
 
 
@@ -382,7 +488,7 @@ def import_batch(body: dict, user: str) -> dict:
             rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], notes="")
             run = rides._run_doc(key, rin, "r-" + uuid.uuid4().hex[:10], user, source="alkamel", session_id=sid)
             run["timing"] = {"no": no, "class": c.get("class", ""), "pos": c.get("pos"), "laps": c.get("laps"), "total_time": c.get("total_time", ""), "gap": c.get("gap", ""), "kph": c.get("kph"), "best": c.get("best", ""), "best_lap_no": c.get("best_lap_no"),
-                             "summary": c.get("summary") or {}, "pace5": c.get("pace5", ""), "lap_list": (c.get("lap_list") or [])[:400]}
+                             "summary": c.get("summary") or {}, "pace5": c.get("pace5", ""), "grid": c.get("grid"), "story": c.get("story"), "lap_list": (c.get("lap_list") or [])[:400]}
             rides.runs_coll().put(run["id"], run)
             runs_n += 1
         created.append({"id": sid, "name": name})

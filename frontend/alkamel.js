@@ -20,7 +20,7 @@ function akCarSelect(attr, cur) {
 function akHtml() {
   if (!ak.open) return '';
   const d = ak.data;
-  const files = `<div class="sdbar"><label class="primary ak-file">${esc(tx(ak.parsing ? 'Lecture…' : 'Choisir les PDF Al Kamel'))}<input type="file" id="ak-files" accept="application/pdf,.pdf" multiple hidden></label><small class="na">${esc(tx('Classements et analyses des secteurs (Classification, Analysis) ; les autres PDF sont ignorés.'))}</small></div>`;
+  const files = `<label class="ak-drop${ak.parsing ? ' busy' : ''}" id="ak-drop"><span class="ak-ico">⬆</span><b>${esc(tx(ak.parsing ? 'Lecture des PDF…' : d ? 'Choisir d’autres PDF (remplace les précédents)' : 'Déposez ici les PDF Al Kamel de l’épreuve'))}</b><small>${esc(tx('Glissez-les dans ce cadre ou cliquez pour les choisir (tous d’un coup). Classements, analyses des secteurs, grille et lap chart sont lus ; les autres PDF sont ignorés.'))}</small><input type="file" id="ak-files" accept="application/pdf,.pdf" multiple hidden></label>`;
   let body = '';
   if (d) {
     const sess = d.sessions.map((s, i) => {
@@ -114,4 +114,13 @@ document.addEventListener('click', async e => {
       akReset(); rn.msg = `${n} ${tx('roulage(s) créé(s)')}, ${m} ${tx('participation(s) de voitures.')}`; rn.ok = true; rn.cars = null; akDraw(); return rnLoad();
     } catch (err) { ak.saving = false; ak.msg = err.message; ak.ok = false; akDraw(); }
   }
+});
+
+['dragover', 'dragenter'].forEach(ev => document.addEventListener(ev, e => { const z = e.target.closest && e.target.closest('#ak-drop'); if (z) { e.preventDefault(); z.classList.add('over'); } }));
+document.addEventListener('dragleave', e => { const z = e.target.closest && e.target.closest('#ak-drop'); if (z) z.classList.remove('over'); });
+document.addEventListener('drop', e => {
+  const z = e.target.closest && e.target.closest('#ak-drop'); if (!z) return;
+  e.preventDefault(); z.classList.remove('over');
+  const list = [...(e.dataTransfer.files || [])].filter(f => /\.pdf$/i.test(f.name));
+  if (list.length) akParse(list);
 });

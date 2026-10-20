@@ -519,3 +519,7 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .ps-fn select{max-width:170px}
 .fm-item{display:flex;gap:8px;align-items:center;margin:4px 0}.fm-item .sdin{flex:1}.fm-ctl{display:inline-flex;gap:4px}.fm-sec{padding:8px 0;border-top:1px solid var(--line)}.fm-gar{display:flex;gap:8px;flex-wrap:wrap}.fm-gar select{flex:1 1 160px}
 .hi-pre{margin:0;white-space:pre-wrap;word-break:break-word;font:12px var(--mono, monospace);max-width:420px}
+
+.ak-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 16px;margin:8px 0 14px;border:2px dashed var(--line,#666);border-radius:12px;cursor:pointer;text-align:center;transition:background .15s,border-color .15s}
+.ak-drop:hover,.ak-drop.over{background:color-mix(in srgb,var(--red) 8%,transparent);border-color:var(--red)}
+.ak-drop .ak-ico{font-size:26px;line-height:1}.ak-drop b{font-size:15px}.ak-drop small{opacity:.75;max-width:640px}.ak-drop.busy{opacity:.6;pointer-events:none}

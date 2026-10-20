@@ -88,3 +88,21 @@ def test_import_creates_one_run_per_session_with_manual_session(api):
     assert api.post("/api/rides/alkamel/import", json=bad).status_code == 422                # aucune voiture associée
     assert api.post("/api/rides/alkamel/import", json={**body, "circuit": ""}).status_code == 422
     assert api.post("/api/rides/alkamel/parse", json={"files": [{"name": "x.pdf", "data": "bm90IGEgcGRm"}]}).status_code == 422
+
+
+def test_grid_lapchart_and_field_ranks():
+    grid = alkamel.parse_grid([row((262, "246"), (336, "112")), row((300, "-"), (306, "7"), (313, "-")),
+                               row((72, "2:15.403"), (268, "76"), (336, "179"), (438, "1965")), row((300, "-"), (306, "1"), (313, "-"))])
+    assert grid == {246: 14, 112: 13, 76: 2, 179: 1}
+    rows = [row((103, "Grid")), row((64, "Nr"), (81, "Pos"), (239, "10")), row((118, "1"), (131, "2"), (145, "3")),
+            row((64, "179"), (85, "1"), (102, "179"), (118, "76"), (130, "179"), (144, "179")),
+            row((66, "76"), (85, "2"), (104, "76"), (116, "179"), (132, "76"), (145, "76"))]
+    chart = alkamel.parse_lapchart(rows)
+    assert chart[179][:4] == [1, 2, 1, 1] and chart[76][:4] == [2, 1, 2, 2]
+    st = alkamel.race_story({"no": 179}, chart)
+    assert (st["start"], st["finish"], st["best"], st["led"]) == (1, 1, 1, 2)
+    cl = [{"no": 1, "summary": {"sectors": {"s1": "28.000", "s2": "45.000", "s3": "1:03.000"}, "top_speed": 200.0, "ideal": "2:16.000"}},
+          {"no": 2, "summary": {"sectors": {"s1": "27.500", "s2": "46.000", "s3": "1:03.500"}, "top_speed": 210.0, "ideal": "2:17.000"}}]
+    alkamel.add_field_ranks(cl)
+    a, b = cl[0]["summary"], cl[1]["summary"]
+    assert a["rank"] == {"s1": 2, "s2": 1, "s3": 1, "top": 2, "ideal": 1} and b["rank"]["top"] == 1 and a["gap"]["s1"] == 0.5 and b["gap"]["s2"] == 1.0 and a["field"] == 2

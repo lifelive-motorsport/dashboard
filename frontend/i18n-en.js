@@ -2104,3 +2104,9 @@ Object.assign(EN_T, {
   "participation(s) de voitures.": "car participation(s).",
   "Essais non chronométrés": "Untimed practice",
 });
+Object.assign(EN_T, {
+  "Lecture des PDF…": "Reading the PDFs…",
+  "Choisir d’autres PDF (remplace les précédents)": "Choose other PDFs (replaces the previous ones)",
+  "Déposez ici les PDF Al Kamel de l’épreuve": "Drop the event's Al Kamel PDFs here",
+  "Glissez-les dans ce cadre ou cliquez pour les choisir (tous d’un coup). Classements, analyses des secteurs, grille et lap chart sont lus ; les autres PDF sont ignorés.": "Drag them into this frame or click to choose them (all at once). Classifications, sector analyses, grid and lap chart are read; other PDFs are ignored.",
+});

@@ -77,7 +77,7 @@ function peFormHtml() {
     <div class="sdfield"><span>BU</span><div class="bu-filter">${bus}</div></div>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-conf" ${f.confirmed ? 'checked' : ''}> Confirmé <small class="na">${f.confirmed ? '' : '(sinon « [TBC] » est ajouté au début du titre ; les prestataires sont invités à la confirmation)'}</small></label>
     <label class="chk" style="margin:8px 0"><input type="checkbox" id="pe-transport" ${f.transport ? 'checked' : ''}> Transport <small class="na">(mission logistique, pas un événement : « [transport] » est ajouté au début du titre et aucun job n’est proposé dans les pointages)</small></label>
-    ${f.transport ? `<div class="pe-times"><label>Heure de début<input type="time" class="sdin pe-t" data-t="start_time" value="${esc(f.start_time)}"></label><label>Heure de fin<input type="time" class="sdin pe-t" data-t="end_time" value="${esc(f.end_time)}"></label><small class="na">(sans heure : journées entières)</small></div>` : ''}
+    ${f.transport ? `<div class="pe-times"><label>Heure de début<input type="text" inputmode="numeric" maxlength="5" placeholder="hh:mm" autocomplete="off" class="sdin pe-t" data-t="start_time" value="${esc(f.start_time)}"></label><label>Heure de fin<input type="text" inputmode="numeric" maxlength="5" placeholder="hh:mm" autocomplete="off" class="sdin pe-t" data-t="end_time" value="${esc(f.end_time)}"></label><small class="na">(sans heure : journées entières)</small></div>` : ''}
     <div class="sdgrid"><label class="sdfield"><span>Début de l’événement</span>${peDate('start', f.start)}</label><label class="sdfield"><span>Fin de l’événement</span>${peDate('end', f.end, f.start)}</label>
     <label class="sdfield"><span>Début d’immobilisation des véhicules</span>${peDate('immo_start', f.immo_start, '', f.start)}${peStep('before', f.before)}</label><label class="sdfield"><span>Fin d’immobilisation des véhicules</span>${peDate('immo_end', f.immo_end, f.end)}${peStep('after', f.after)}</label></div>
     <small class="na">L’immobilisation reprend les dates de l’événement élargies de jours de trajet : ajustez-les avec + et − (ou saisissez directement les dates). Ces jours restent les mêmes si vous déplacez l’événement. Elle ne change que la réservation des véhicules.</small>
@@ -92,6 +92,7 @@ function peFormHtml() {
     ${ok ? '' : `<small class="na">À compléter : ${peMissing().join(', ')}.</small>`}</div>`;
 }
 
+const peTime = v => { v = String(v).trim(); if (!v) return ''; let h, m; if (/[:hH.]/.test(v)) { [h, m = '0'] = v.split(/[:hH.]/); } else { const d = v.replace(/\D/g, '').slice(0, 4); if (d.length <= 2) { h = d; m = '0'; } else { h = d.slice(0, d.length - 2); m = d.slice(-2); } } h = +h; m = +m; if (isNaN(h) || isNaN(m)) return ''; return String(Math.min(h, 23)).padStart(2, '0') + ':' + String(Math.min(m, 59)).padStart(2, '0'); };
 const peMissing = () => { const f = pe.form, m = []; if (!f.title.trim()) m.push('titre'); if (!f.bu) m.push('BU'); if (!f.start || !f.end) m.push('dates'); if (f.transport && !!f.start_time !== !!f.end_time) m.push('heure de début et de fin'); if (f.transport && f.start_time && f.end_time && f.start === f.end && f.end_time <= f.start_time) m.push('une heure de fin après l’heure de début'); if (!f.place) m.push('lieu'); return m; };
 const peValid = () => !peMissing().length && pe.form.end >= pe.form.start && pe.form.immo_start && pe.form.immo_end;
 
@@ -189,7 +190,7 @@ document.addEventListener('change', e => {
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
   else if (t.id === 'pe-transport') { f.transport = t.checked; peDraw(); }
-  else if (t.classList.contains('pe-t')) { f[t.dataset.t] = t.value; peDraw(); }
+  else if (t.classList.contains('pe-t')) { f[t.dataset.t] = peTime(t.value); peDraw(); }
   else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }
   else if (t.classList.contains('pe-staff') || t.classList.contains('pe-ext') || t.classList.contains('pe-veh')) {
     const k = t.classList.contains('pe-staff') ? 'staff' : t.classList.contains('pe-ext') ? 'externals' : 'vehicles', m = t.dataset.e;

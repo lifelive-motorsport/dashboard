@@ -2227,3 +2227,8 @@ Object.assign(EN_T, {
   "Prévenir les personnes par Google Agenda": "Notify people through Google Calendar",
   "(invitation aux personnes ajoutées, mise à jour aux autres ; à décocher pour régulariser un événement passé sans envoyer d’e-mail)": "(invitation for added people, update for the others; untick to regularise a past event without sending any e-mail)",
 });
+Object.assign(EN_T, {
+  "✉ Prévenir les personnes par Google Agenda": "✉ Notify people through Google Calendar",
+  "Les personnes ajoutées recevront une invitation, les autres une mise à jour.": "Added people will receive an invitation, the others an update.",
+  "Aucun e-mail ne sera envoyé (pratique pour régulariser un événement passé).": "No e-mail will be sent (handy to regularise a past event).",
+});

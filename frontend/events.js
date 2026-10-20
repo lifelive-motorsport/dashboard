@@ -88,12 +88,13 @@ function peFormHtml() {
     <h4 class="sub">Staff interne</h4><div class="chkgrid">${staff || `<small class="na">${f.bu ? 'Aucun staff actif imputé à cette BU.' : 'Choisissez d’abord une BU.'}</small>`}</div>
     <h4 class="sub">Staff externe</h4><div class="chkgrid">${exts || `<small class="na">${f.bu ? 'Aucun prestataire rattaché à cette BU : cochez ses BU dans Ressources.' : 'Choisissez d’abord une BU.'}</small>`}</div>
     <h4 class="sub">Véhicules</h4>${cats.length ? `<div class="bu-filter">${vcat('all', 'Tous')}${cats.map(k => vcat(k.id, k.label)).join('')}</div>` : ''}<div class="chkgrid">${vlist || '<small class="na">Aucun véhicule.</small>'}</div>${pe.busyMsg ? `<small class="neg">${esc(pe.busyMsg)}</small>` : ''}
-    <label class="chk" style="margin-top:12px"><input type="checkbox" id="pe-notify" ${f.notify ? 'checked' : ''}> Prévenir les personnes par Google Agenda <small class="na">(invitation aux personnes ajoutées, mise à jour aux autres ; à décocher pour régulariser un événement passé sans envoyer d’e-mail)</small></label>
+    <div class="pe-notify ${f.notify ? 'on' : 'off'}" id="pe-notify-box"><label class="chk"><input type="checkbox" id="pe-notify" ${f.notify ? 'checked' : ''}> <b>✉ Prévenir les personnes par Google Agenda</b></label><small id="pe-notify-txt">${peNotifyText(f.notify)}</small></div>
     <div class="sdbar" style="margin-top:12px"><button type="button" class="primary" id="pe-save" ${ok && !pe.saving ? '' : 'disabled'}>${pe.saving ? 'Enregistrement…' : f.id ? 'Enregistrer' : 'Créer l’événement'}</button><button type="button" id="pe-cancel">Annuler</button>${pe.msg ? `<span class="${pe.msgOk ? 'na' : 'neg'}">${esc(pe.msg)}</span>` : ''}</div>
     ${ok ? '' : `<small class="na">À compléter : ${peMissing().join(', ')}.</small>`}</div>`;
 }
 
 const peTime = v => { v = String(v).trim(); if (!v) return ''; let h, m; if (/[:hH.]/.test(v)) { [h, m = '0'] = v.split(/[:hH.]/); } else { const d = v.replace(/\D/g, '').slice(0, 4); if (d.length <= 2) { h = d; m = '0'; } else { h = d.slice(0, d.length - 2); m = d.slice(-2); } } h = +h; m = +m; if (isNaN(h) || isNaN(m)) return ''; return String(Math.min(h, 23)).padStart(2, '0') + ':' + String(Math.min(m, 59)).padStart(2, '0'); };
+const peNotifyText = on => on ? 'Les personnes ajoutées recevront une invitation, les autres une mise à jour.' : 'Aucun e-mail ne sera envoyé (pratique pour régulariser un événement passé).';
 const peMissing = () => { const f = pe.form, m = []; if (!f.title.trim()) m.push('titre'); if (!f.bu) m.push('BU'); if (!f.start || !f.end) m.push('dates'); if (f.transport && !!f.start_time !== !!f.end_time) m.push('heure de début et de fin'); if (f.transport && f.start_time && f.end_time && f.start === f.end && f.end_time <= f.start_time) m.push('une heure de fin après l’heure de début'); if (!f.place) m.push('lieu'); return m; };
 const peValid = () => !peMissing().length && pe.form.end >= pe.form.start && pe.form.immo_start && pe.form.immo_end;
 
@@ -190,7 +191,7 @@ document.addEventListener('change', e => {
     peWiden();
     peDraw(); peCheckBusy();
   } else if (t.id === 'pe-conf') { f.confirmed = t.checked; peDraw(); }
-  else if (t.id === 'pe-notify') { f.notify = t.checked; }
+  else if (t.id === 'pe-notify') { f.notify = t.checked; const bx = document.getElementById('pe-notify-box'), tx_ = document.getElementById('pe-notify-txt'); if (bx) bx.className = 'pe-notify ' + (f.notify ? 'on' : 'off'); if (tx_) tx_.textContent = tx(peNotifyText(f.notify)); }
   else if (t.id === 'pe-transport') { f.transport = t.checked; peDraw(); }
   else if (t.classList.contains('pe-t')) { f[t.dataset.t] = peTime(t.value); peDraw(); }
   else if (t.id === 'pe-all') { pe.showAll = t.checked; peDraw(); }

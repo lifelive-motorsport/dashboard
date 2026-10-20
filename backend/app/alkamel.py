@@ -360,8 +360,12 @@ def parse_files(files: list[tuple[str, bytes]]) -> dict:
             ignored.append(name)
             continue
         key = head["kind"] + "|" + re.sub(r"\s*\(.*?\)\s*", "", head["session"]).upper()
-        s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": [], "grid": {}, "lapchart": {}})
+        s = sessions.setdefault(key, {**head, "classification": [], "analysis": {}, "conditions": {}, "files": [], "grid": {}, "lapchart": {}, "dates": {}})
         s["files"].append(name)
+        role = "lapchart" if "lap chart" in low[:200] else "grid" if "starting grid" in low[:200] else "analysis" if "sector analysis" in low else "weather" if "weather report" in low else "sectors" if "best sector" in low else "speed" if "best top speed" in low else "classification"
+        fdate = parse_conditions(full).get("date")
+        if fdate:
+            s["dates"].setdefault(role, fdate)
         if "lap chart" in low[:200]:
             s["lapchart"] = parse_lapchart([r for p in prow for r in p])
             continue
@@ -408,14 +412,36 @@ def parse_files(files: list[tuple[str, bytes]]) -> dict:
                     c["story"] = st
                     c.setdefault("grid", st["start"])
         add_field_ranks(s["classification"])
+        # jour de la session : la date des fichiers propres à la session (analyse, météo, secteurs, vitesses, lap chart) ; le classement est parfois republié le lendemain, la grille la veille
+        dates = s.pop("dates", {})
+        s["date"] = next((dates[r] for r in ("analysis", "weather", "sectors", "speed", "lapchart", "classification", "grid") if dates.get(r)), "")
         s["laps_max"] = max((c.get("laps") or 0 for c in s["classification"]), default=0)
         out_sessions.append(s)
     order = {"practice": 0, "qualifying": 1, "race": 2}
     out_sessions.sort(key=lambda s: (order.get(s["kind"], 9), s["session"]))
     first = out_sessions[0] if out_sessions else {}
-    d = next((s["conditions"].get("date") for s in out_sessions if s["conditions"].get("date")), "")
-    return {"series": first.get("series", ""), "event": first.get("event", ""), "date": d, "sessions": out_sessions, "ignored": ignored,
+    d = min((s["date"] for s in out_sessions if s.get("date")), default="")
+    return {"series": first.get("series", ""), "event": title_case(first.get("event", "")), "date": d, "date_to": max((s["date"] for s in out_sessions if s.get("date")), default=""), "sessions": out_sessions, "ignored": ignored,
             "circuit_km": estimate_length(out_sessions)}
+
+
+def title_case(t: str) -> str:
+    return " ".join(w.capitalize() if w.isupper() and len(w) > 2 else w for w in t.split()) if t and t.upper() == t else t
+
+
+_EVENT_WORDS = {"classic", "historic", "festival", "trophy", "revival", "meeting", "series", "cup", "challenge", "grand", "prix", "gp", "international", "historique", "days", "legends", "endurance"}
+
+
+def suggest_circuit(event: str, circuits: list[dict]) -> dict:
+    """Circuit proposé d'après le nom de l'épreuve : un circuit enregistré dont le nom figure dans l'épreuve, sinon le nom de l'épreuve dépouillé de « Classic », « Historic »…"""
+    import unicodedata
+    norm = lambda x: re.sub(r"[^a-z0-9 ]", "", unicodedata.normalize("NFD", x.lower()).encode("ascii", "ignore").decode()).strip()
+    ev = norm(event)
+    for c in sorted(circuits, key=lambda c: -len(c["name"])):
+        if norm(c["name"]) and norm(c["name"]) in ev:
+            return {"name": c["name"], "existing": True}
+    words = [w for w in event.split() if norm(w) not in _EVENT_WORDS]
+    return {"name": " ".join(words) or event, "existing": False}
 
 
 def estimate_length(sessions: list[dict]) -> float | None:

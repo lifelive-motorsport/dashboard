@@ -147,3 +147,10 @@ def test_run_report_flow_print_and_client_privacy(api):
     assert "Essayer les R8" in cl_html and "Setdown" in cl_html and "Acheter un chronomètre" not in cl_html and "Rapport validé" in cl_html   # la logistique reste interne
     assert api.post(f"/api/rides/reports/{mid}/{m3}/reopen").json()["status"] == "draft"
     assert api.get(f"/api/rides/reports/{mid}/zzz").status_code == 404
+
+
+def test_circuit_suggestion_and_title_case():
+    assert alkamel.title_case("IMOLA CLASSIC") == "Imola Classic" and alkamel.title_case("Imola Classic") == "Imola Classic"
+    assert alkamel.suggest_circuit("Imola Classic", [{"name": "Imola", "length_km": 4.9}]) == {"name": "Imola", "existing": True}
+    assert alkamel.suggest_circuit("Imola Classic", []) == {"name": "Imola", "existing": False}
+    assert alkamel.suggest_circuit("Dijon Historic Festival", [{"name": "Spa", "length_km": 7}])["name"] == "Dijon"

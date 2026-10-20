@@ -1232,7 +1232,8 @@ def rd_alkamel_parse(body: AlkamelParse, _user: str = Depends(granted("consigner
         parsed = alkamel.parse_files(files)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": rides.list_circuits()}
+    circuits = rides.list_circuits()
+    return {**parsed, "suggest": alkamel.suggest_cars(parsed), "circuits": circuits, "circuit_suggest": alkamel.suggest_circuit(parsed["event"], circuits)}
 
 
 @app.post("/api/rides/alkamel/import")

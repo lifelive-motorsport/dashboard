@@ -30,12 +30,12 @@ function akHtml() {
     }).join('');
     const nums = akNumbers();
     const cars = table(['N°', 'Pilote(s)', 'Voiture', 'Notre voiture'], nums.map(c => `<tr><td>${c.no}</td><td>${esc((c.drivers || []).join(' / '))}</td><td>${esc(c.car)}</td><td>${akCarSelect(`data-ak-car="${c.no}"`, ak.map[c.no] || '')}</td></tr>`));
-    body = `<p class="na">${esc(d.series)}${d.ignored && d.ignored.length ? ` · ${d.ignored.length} ${esc(tx('PDF ignorés'))}` : ''}</p><div class="rn-card">${sess}</div>
+    body = `<p class="na">${esc(d.series)}${d.date ? ` · ${esc(tx('Du'))} ${fmtDate(d.date)} ${esc(tx('au'))} ${fmtDate(d.date_to || d.date)}` : ''}${d.ignored && d.ignored.length ? ` · ${d.ignored.length} ${esc(tx('PDF ignorés'))}` : ''}</p><div class="rn-card">${sess}</div>
       <p><b>${esc(tx('Nos voitures'))}</b> <small class="na">${esc(tx('associez chaque voiture du Garage à son numéro de course ; les autres numéros ne sont pas importés.'))}</small></p>${cars}`;
   }
   const circs = `<label class="sdfield"><span>Circuit</span><select class="sdin" data-ak-f="circuit"><option value="">—</option>${(rn.circuits || []).map(c => `<option value="${esc(c.name)}" ${ak.circuit === c.name ? 'selected' : ''}>${esc(c.name)} · ${rdKm(c.length_km)} km</option>`).join('')}<option value="__new" ${ak.circuit === '__new' ? 'selected' : ''}>＋ ${esc(tx('Nouveau circuit'))}</option></select></label>`;
   const newc = ak.circuit === '__new' ? `<label class="sdfield"><span>${esc(tx('Nom du circuit'))}</span><input class="sdin" data-ak-f="newCircuit" value="${esc(ak.newCircuit)}"></label><label class="sdfield"><span>${esc(tx('Longueur du tour (km)'))}</span><input class="sdin" data-ak-f="circuitKm" value="${esc(ak.circuitKm)}" inputmode="decimal"></label>${d && d.circuit_km ? `<small class="na">${esc(tx('Longueur estimée d’après le classement de course (vitesse moyenne × durée ÷ tours) :'))} ${rdKm(d.circuit_km)} km</small>` : ''}` : '';
-  const head = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Épreuve'))}</span><input class="sdin" data-ak-f="event" value="${esc(ak.event)}" placeholder="Imola Classic"></label><label class="sdfield"><span>Date</span>${dpField('data-ak-f="date"', ak.date)}</label>${circs}${newc}</div>`;
+  const head = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Épreuve'))}</span><input class="sdin" data-ak-f="event" value="${esc(ak.event)}" placeholder="Imola Classic"></label><label class="sdfield"><span>${esc(tx('Premier jour'))}</span>${dpField('data-ak-f="date"', ak.date)}</label>${circs}${newc}</div>`;
   const manual = ak.manual.map((m, i) => `<div class="rn-card"><div class="sdgrid"><label class="sdfield"><span>Date</span>${dpField(`data-ak-m="date" data-i="${i}"`, m.date)}</label><label class="sdfield"><span>${esc(tx('Nom'))}</span><input class="sdin" data-ak-m="name" data-i="${i}" value="${esc(m.name)}"></label><button type="button" class="mini danger" data-ak="delm" data-i="${i}" title="${esc(tx('Retirer cette session'))}">✕</button></div>
     ${m.cars.map((c, j) => `<div class="sdgrid">${akCarSelect(`data-ak-mc="key" data-i="${i}" data-j="${j}"`, c.key)}<input class="sdin" data-ak-mc="laps" data-i="${i}" data-j="${j}" value="${esc(c.laps)}" placeholder="${esc(tx('Tours'))}" inputmode="numeric" style="max-width:90px"><input class="sdin" data-ak-mc="drivers" data-i="${i}" data-j="${j}" value="${esc(c.drivers)}" placeholder="${esc(tx('Pilote(s)'))}"></div>`).join('')}
     <button type="button" class="mini" data-ak="addmc" data-i="${i}">＋ ${esc(tx('Autre voiture'))}</button></div>`).join('');
@@ -69,7 +69,8 @@ async function akParse(list) {
     if (!ak.event) ak.event = (d.event || '').replace(/\b\w/g, c => c).trim();
     if (!ak.date && d.date) ak.date = d.date;
     if (d.circuit_km && !ak.circuitKm) ak.circuitKm = String(d.circuit_km);
-    d.sessions.forEach((s, i) => { ak.pick[i] = true; ak.sdate[i] = (s.conditions && s.conditions.date) || d.date || ''; });
+    d.sessions.forEach((s, i) => { ak.pick[i] = true; ak.sdate[i] = s.date || (s.conditions && s.conditions.date) || d.date || ''; });
+    if (!ak.circuit && d.circuit_suggest && d.circuit_suggest.name) { if (d.circuit_suggest.existing) ak.circuit = d.circuit_suggest.name; else { ak.circuit = '__new'; ak.newCircuit = d.circuit_suggest.name; } }
     for (const s of d.suggest || []) if (!ak.map[s.no]) ak.map[s.no] = s.key;
   } catch (e) { ak.msg = e.message; ak.ok = false; }
   ak.parsing = false; akDraw();

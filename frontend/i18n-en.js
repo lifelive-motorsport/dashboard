@@ -2164,3 +2164,8 @@ Object.assign(EN_T, {
   "Rapport": "Report",
   "Run reports": "Run reports",
 });
+Object.assign(EN_T, {
+  "Premier jour": "First day",
+  "Du": "From",
+  "au": "to",
+});

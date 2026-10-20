@@ -26,7 +26,7 @@ function akTyresHtml(i) {
 function akHtml() {
   if (!ak.open) return '';
   const d = ak.data;
-  const files = `<label class="ak-drop${ak.parsing ? ' busy' : ''}" id="ak-drop"><span class="ak-ico">⬆</span><b>${esc(tx(ak.parsing ? 'Lecture des PDF…' : d ? 'Choisir d’autres PDF (remplace les précédents)' : 'Déposez ici les PDF Al Kamel de l’épreuve'))}</b><small>${esc(tx('Glissez-les dans ce cadre ou cliquez pour les choisir (tous d’un coup). Classements, analyses des secteurs, grille et lap chart sont lus ; les autres PDF sont ignorés.'))}</small><input type="file" id="ak-files" accept="application/pdf,.pdf" multiple hidden></label>`;
+  const files = `<label class="ak-drop${ak.parsing ? ' busy' : ''}" id="ak-drop">${ak.parsing ? '' : '<span class="ak-ico">⬆</span>'}<b class="${ak.parsing ? 'loading' : ''}">${esc(tx(ak.parsing ? 'Lecture des PDF…' : d ? 'Choisir d’autres PDF (remplace les précédents)' : 'Déposez ici les PDF Al Kamel de l’épreuve'))}</b><small>${esc(tx('Glissez-les dans ce cadre ou cliquez pour les choisir (tous d’un coup). Classements, analyses des secteurs, grille et lap chart sont lus ; les autres PDF sont ignorés.'))}</small><input type="file" id="ak-files" accept="application/pdf,.pdf" multiple hidden></label>`;
   let body = '';
   if (d) {
     const sess = d.sessions.map((s, i) => {
@@ -51,7 +51,7 @@ function akHtml() {
   return `<div class="note rd-form"><b>${esc(tx('Roulage Al Kamel'))}</b>${files}${body}${head}
     <p><b>${esc(tx('Sessions non chronométrées'))}</b> <small class="na">${esc(tx('essais de la veille, shakedown… : sans temps officiels, avec les tours et les pilotes.'))}</small></p>${manual}
     <div class="sdbar"><button type="button" data-ak="addm">＋ ${esc(tx('Ajouter une session manuelle'))}</button></div>
-    <div class="sdbar"><button type="button" class="primary" data-ak="import" ${ready ? '' : 'disabled'}>${esc(tx(ak.saving ? 'Enregistrement…' : 'Créer les roulages'))}</button><button type="button" data-ak="cancel">${esc(tx('Annuler'))}</button>${ak.msg ? `<span class="${ak.ok ? 'na' : 'neg'}">${esc(ak.msg)}</span>` : ''}</div></div>`;
+    <div class="sdbar"><button type="button" class="primary${ak.saving ? ' loading' : ''}" data-ak="import" ${ready ? '' : 'disabled'}>${esc(tx(ak.saving ? 'Enregistrement…' : 'Créer les roulages'))}</button><button type="button" data-ak="cancel">${esc(tx('Annuler'))}</button>${ak.msg ? `<span class="${ak.ok ? 'na' : 'neg'}">${esc(ak.msg)}</span>` : ''}</div></div>`;
 }
 
 function akDraw() {

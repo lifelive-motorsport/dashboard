@@ -526,3 +526,4 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 
 .ty-bar{height:6px;background:var(--line,#ddd);border-radius:3px;overflow:hidden;min-width:70px}.ty-bar i{display:block;height:100%}
 .ty-pick .ty-row{margin:2px 0}.ak-tys{margin:2px 0 8px 26px}.ak-ty{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:2px 0}.ak-ty>b{min-width:140px;padding-top:8px;font-weight:500}
+.ak-drop.busy b.loading{font-size:15px}.ak-drop.busy small::after{content:""}

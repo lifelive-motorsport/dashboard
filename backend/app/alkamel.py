@@ -359,7 +359,11 @@ def import_batch(body: dict, user: str) -> dict:
         if not mapping:
             continue
         name = f"{event} — {str(s.get('session') or s.get('kind') or '').strip()}"[:120]
-        sin = rides.SessionIn(date=d, name=name, kind="circuit", circuit=circuit, notes=str(s.get("notes") or "")[:1000])
+        try:
+            sd = date.fromisoformat(str(s.get("date") or "")) if s.get("date") else d      # chaque session a son jour (essais, qualifications, course)
+        except ValueError:
+            raise ValueError("Date invalide pour une session")
+        sin = rides.SessionIn(date=sd, name=name, kind="circuit", circuit=circuit, notes=str(s.get("notes") or "")[:1000])
         # un roulage Al Kamel est retrouvé s'il existe déjà (même date, nom, circuit) : on le complète au lieu de le doubler
         sdoc = next((x for x in rides.sessions_coll().all() if rides._session_key(x) == rides._session_key({**sin.model_dump(mode="json")})), None)
         sid = sdoc["id"] if sdoc else "s-" + uuid.uuid4().hex[:10]
@@ -375,7 +379,7 @@ def import_batch(body: dict, user: str) -> dict:
             laps = max(int(c.get("laps") or 0), max((x["n"] for x in c.get("lap_list") or []), default=0))
             for old in [r for r in rides.runs_coll().all() if r.get("session_id") == sid and r["vehicle"] == key]:
                 rides.runs_coll().delete(old["id"])                  # ré-import : la participation est remplacée
-            rin = rides.RunIn(date=d, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], notes="")
+            rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], notes="")
             run = rides._run_doc(key, rin, "r-" + uuid.uuid4().hex[:10], user, source="alkamel", session_id=sid)
             run["timing"] = {"no": no, "class": c.get("class", ""), "pos": c.get("pos"), "laps": c.get("laps"), "total_time": c.get("total_time", ""), "gap": c.get("gap", ""), "kph": c.get("kph"), "best": c.get("best", ""), "best_lap_no": c.get("best_lap_no"),
                              "summary": c.get("summary") or {}, "pace5": c.get("pace5", ""), "lap_list": (c.get("lap_list") or [])[:400]}

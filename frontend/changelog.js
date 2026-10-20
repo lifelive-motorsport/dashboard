@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Roulage Al Kamel', tag: 'Opérer', items: [
+    'Roulages › « Roulage Al Kamel » : on dépose les PDF du chronométreur (classements, analyse des secteurs) ; un roulage est créé par session (essais, qualifications, course) avec temps, tours, meilleurs secteurs, vitesse de pointe et météo.',
+    'On choisit quelles voitures (numéros de course) importer et la voiture du Garage correspondante ; la longueur du circuit est estimée d’après le classement de course.',
+    'Les sessions non chronométrées (essais de la veille, shakedown) s’ajoutent à la main dans le même écran. Le run report client viendra ensuite.',
+  ]},
   {date: 'Octobre 2026', title: 'Congés et Absences séparés', tag: 'Consigner', items: [
     'Deux pages : « Congés » (à demander et faire approuver : congés payés, compensation, extra-légal, récupération, congé sans solde non rémunéré) et « Absences » (à déclarer : maladie, congé de circonstance, autre absence justifiée).',
     'Une absence est effective dès sa déclaration ; le responsable en prend acte. Son motif n’est visible que de la personne, de son responsable et du Super User : le Planning et le Cockpit n’affichent que « Absent(e) ».',

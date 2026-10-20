@@ -3,7 +3,7 @@
 const rn = {sessions: null, circuits: [], cars: null, form: null, circ: {name: '', length_km: ''}, showCirc: false, msg: null, ok: false, loading: false, saving: false};
 const rnBlank = () => ({id: null, date: rdToday(), name: '', kind: 'circuit', circuit: '', stages: [{name: '', length_km: '', passes: 1}], notes: ''});
 
-function runsBlocks() { return [{static: '<section class="block" data-bid="rn"><div id="rn-view"><p class="na loading">Chargement…</p></div></section>'}]; }
+function runsBlocks() { return [{static: '<section class="block" data-bid="rn"><div id="ak-view"></div><div id="rn-view"><p class="na loading">Chargement…</p></div></section>'}]; }
 
 async function rnLoad() {
   rn.loading = true; rnDraw();
@@ -44,7 +44,7 @@ function rnDraw() {
   const msg = rn.msg && rn.ok ? `<p class="na">${esc(rn.msg)}</p>` : rn.msg && !rn.form ? `<p class="neg">${esc(rn.msg)}</p>` : '';
   const list = rn.sessions == null ? `<p class="na loading">${esc(tx('Chargement…'))}</p>` : rn.sessions.length ? rn.sessions.map(rnSessionHtml).join('') : `<p class="na">${esc(tx('Aucun roulage : créez-en un, puis associez-y les voitures qui ont roulé.'))}</p>`;
   const sav = [window.scrollX, window.scrollY];
-  el.innerHTML = `<div class="sdbar"><button type="button" class="primary" data-rn="new">＋ ${esc(tx('Nouveau roulage'))}</button><button type="button" data-rn="circuits">${esc(tx(rn.showCirc ? 'Fermer les circuits' : '⚙ Circuits'))}</button>${rn.loading && rn.sessions ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rnCircHtml()}${rnFormHtml()}<div class="rn-list">${list}</div>`;
+  el.innerHTML = `<div class="sdbar"><button type="button" class="primary" data-rn="new">＋ ${esc(tx('Nouveau roulage'))}</button><button type="button" data-ak="open">${esc(tx('Roulage Al Kamel'))}</button><button type="button" data-rn="circuits">${esc(tx(rn.showCirc ? 'Fermer les circuits' : '⚙ Circuits'))}</button>${rn.loading && rn.sessions ? '<small class="na loading">Chargement…</small>' : ''}</div>${msg}${rnCircHtml()}${rnFormHtml()}<div class="rn-list">${list}</div>`;
   window.scrollTo(...sav);
 }
 

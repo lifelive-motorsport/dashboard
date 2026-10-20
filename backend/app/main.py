@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, clients, feedback, history, projection, rides, runreport, tforms, tgarage, tmodels, users, vdocs, wall
+from . import access, clients, feedback, history, projection, rides, runreport, tforms, tyres, tgarage, tmodels, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -1243,6 +1243,34 @@ def rd_alkamel_import(body: dict, user: str = Depends(granted("consigner/runs"))
         return alkamel.import_batch(body, user)
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+# ---- Pneus (stock de trains par voiture) -------------------------------------------------------------------------------------------------
+
+@app.get("/api/rides/tyres")
+def ty_list(_user: str = Depends(granted("consigner/tyres"))):
+    return {"cars": rides.race_cars(), "sets": tyres.view()}
+
+
+@app.get("/api/rides/tyres/options")
+def ty_options(_user: str = Depends(granted("consigner/tyres", "consigner/runs", "consigner/rides"))):
+    return {"options": tyres.options()}
+
+
+@app.post("/api/rides/tyres")
+def ty_add(body: tyres.TyreIn, user: str = Depends(granted("consigner/tyres"))):
+    return _rd(tyres.save, None, body, user)
+
+
+@app.put("/api/rides/tyres/{tid}")
+def ty_update(tid: str, body: tyres.TyreIn, user: str = Depends(granted("consigner/tyres"))):
+    return _rd(tyres.save, tid, body, user)
+
+
+@app.delete("/api/rides/tyres/{tid}")
+def ty_delete(tid: str, _user: str = Depends(granted("consigner/tyres"))):
+    _rd(tyres.delete, tid)
+    return {"ok": True}
 
 
 # ---- Run reports (rapport remis au client après un meeting) ----------------------------------------------------------------------------------

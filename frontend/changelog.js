@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Stock de pneus', tag: 'Opérer', items: [
+    'Nouvelle page « Pneus » : les trains de pneus de chaque voiture (référence, marque, modèle, dimensions, gomme, état, limites de vie).',
+    'On indique le train utilisé quand on associe une voiture à un roulage ou à l’import Al Kamel : kilomètres, tours et cycles de chauffe du train se calculent tout seuls, avec alerte en fin de vie.',
+    'Le run report reprend les trains utilisés pendant l’épreuve avec leur kilométrage.',
+  ]},
   {date: 'Octobre 2026', title: 'Run reports', tag: 'Opérer', items: [
     'Nouvelle page « Run reports » : pour chaque épreuve et chaque voiture, synthèse par jour, détail par run (chronométrage Al Kamel, rangs sur le plateau, graphique des temps au tour) et saisie de l’ingénieur (objectifs, setup, pressions, observations, retour pilote, pneus, actions).',
     'Feuille A4 aux couleurs de Lifelive en français ou en anglais ; une fois validé, le rapport apparaît dans l’onglet « Rapports » de l’accès client (sans la rubrique logistique, interne).',

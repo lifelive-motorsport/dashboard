@@ -12,6 +12,7 @@ const CHAPTERS = [
     {id: 'timesheets', label: 'Atelier', source: 'Logbook · Odoo', sub: true, pages: ['consigner/timesheets', 'consigner/team', 'consigner/jobs']},
     {id: 'garage', label: 'Garage', source: 'Logbook · Odoo · Google Agenda', pages: ['consigner/rides']},
     {id: 'parts', label: 'Magasin de pièces', source: 'Logbook', pages: ['consigner/parts']},
+    {id: 'tyres', label: 'Pneus', source: 'Logbook', pages: ['consigner/tyres']},
     {id: 'consumables', label: 'Consommables', source: 'Odoo (stock)', pages: ['consigner/consumables']},
     {id: 'runs', label: 'Roulages', source: 'Logbook', pages: ['consigner/runs']},
     {id: 'runreports', label: 'Run reports', source: 'Logbook', pages: ['consigner/runreports']},
@@ -30,7 +31,7 @@ const SUPER_ONLY = new Set(['others/users', 'others/clients', 'others/history'])
 // Pages « Modèles » : réservées au chef d'atelier, à l'ingénieur / coordinateur et au Super User (en plus de la case cochée pour la catégorie) ; le serveur refuse aussi les autres
 const WORKSHOP_ONLY = new Set(['consigner/job_models', 'consigner/form_models', 'consigner/arch_models']);
 // Pages que seul le Super User ou une catégorie qui les a cochées ouvre (ni « Administrateur » ni les autres)
-const GRANT_ONLY = new Set(['consigner/wall', 'consigner/rides', 'consigner/parts', 'consigner/runs', 'consigner/runreports', 'consigner/job_models', 'consigner/form_models', 'consigner/arch_models', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
+const GRANT_ONLY = new Set(['consigner/wall', 'consigner/rides', 'consigner/parts', 'consigner/runs', 'consigner/runreports', 'consigner/tyres', 'consigner/job_models', 'consigner/form_models', 'consigner/arch_models', 'planifier/events', 'planifier/res_staff', 'planifier/res_ext', 'planifier/res_veh']);
 // Toutes les pages d'un module, dans l'ordre : [clé, libellé]
 function modulePages(mod) {
   const out = [];

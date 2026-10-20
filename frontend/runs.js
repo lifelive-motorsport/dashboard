@@ -10,6 +10,7 @@ async function rnLoad() {
   try {
     const j = await rsCall('/api/rides/sessions'); rn.sessions = j.sessions; rn.circuits = j.circuits; rd.circuits = j.circuits;
     if (!rn.cars) rn.cars = (await rsCall('/api/rides/cars')).cars;
+    await tyLoadOpts(true);
     rn.msg = rn.msg && rn.ok ? rn.msg : null;
   } catch (e) { rn.msg = e.message; rn.ok = false; rn.sessions = rn.sessions || []; }
   rn.loading = false; rnDraw();
@@ -17,7 +18,7 @@ async function rnLoad() {
 
 const rnKind = s => s.kind === 'rally' ? `Rallye${s.stages.length ? ` · ${s.stages.length} spéciale${s.stages.length > 1 ? 's' : ''}` : ''}` : esc(s.circuit || 'Circuit');
 function rnSessionHtml(s) {
-  const cars = s.cars.length ? table(['Voiture', 'Tours', 'Km', 'Heures', 'Pilote(s)', ''], s.cars.map(c => `<tr><td class="prod">${esc(c.name)}</td><td>${c.laps || ''}</td><td>${rdKm(c.km)}</td><td>${c.hours ? rdKm(c.hours) : ''}</td><td>${esc((c.drivers || []).join(', '))}</td>
+  const cars = s.cars.length ? table(['Voiture', 'Tours', 'Km', 'Heures', 'Pilote(s)', 'Pneus', ''], s.cars.map(c => `<tr><td class="prod">${esc(c.name)}</td><td>${c.laps || ''}</td><td>${rdKm(c.km)}</td><td>${c.hours ? rdKm(c.hours) : ''}</td><td>${esc((c.drivers || []).join(', '))}</td><td>${esc(tyLabels(c.tyres))}</td>
       <td class="rd-acts"><button type="button" class="mini" data-rn="editcar" data-s="${esc(s.id)}" data-r="${esc(c.run_id)}" title="${esc(tx('Modifier la participation'))}">✎</button><button type="button" class="mini" data-rn="delcar" data-r="${esc(c.run_id)}" data-n="${esc(c.name)}" title="${esc(tx('Retirer cette voiture du roulage'))}">✕</button></td></tr>`)) : `<p class="na">${esc(tx('Aucune voiture associée.'))}</p>`;
   return `<div class="rn-card"><div class="rn-head"><div><b>${esc(s.name)}</b> <span class="rd-chip">${rnKind(s)}</span><br><small class="na">${fmtDate(s.date)}${s.cars.length ? ` · ${rdKm(s.km_total)} km ${esc(tx('au total'))}` : ''}${s.notes ? ' · ' + esc(s.notes) : ''}</small></div>
     <div class="rd-acts"><button type="button" class="mini" data-rn="addcar" data-s="${esc(s.id)}">＋ ${esc(tx('Associer une voiture'))}</button><button type="button" class="mini" data-rn="edit" data-s="${esc(s.id)}" title="${esc(tx('Modifier le roulage'))}">✎</button><button type="button" class="mini danger" data-rn="del" data-s="${esc(s.id)}" title="${esc(tx('Supprimer le roulage'))}">🗑</button></div></div>${cars}</div>`;
@@ -72,6 +73,7 @@ function ptHtml() {
   return `<div class="fb-back" data-pt="close"></div><div class="fb-box pt-box" role="dialog" aria-modal="true"><h3>${esc(tx(p.runId ? 'Modifier la participation' : 'Associer une voiture à un roulage'))}</h3>
     <div class="sdgrid">${sessSel}${carSel}</div>${body}
     <div class="sdgrid"><label class="sdfield"><span>Kilomètres (si connus : remplace le calcul)</span><input class="sdin" data-pt-f="km" value="${esc(p.km)}" style="max-width:140px" inputmode="decimal"></label><label class="sdfield"><span>Temps de roulage (heures)</span><input class="sdin" data-pt-f="hours" value="${esc(p.hours)}" style="max-width:140px" inputmode="decimal"></label>
+    ${tyPickerHtml('pt', p.key, p.tyres)}
     <label class="sdfield"><span>Pilote(s)</span><input class="sdin" data-pt-f="drivers" value="${esc(p.drivers)}" placeholder="${esc(tx('Séparés par des virgules'))}"></label></div>
     <label class="sdfield"><span>Notes</span><input class="sdin" data-pt-f="notes" value="${esc(p.notes)}"></label>
     <p class="rd-km" id="pt-km">${km == null ? esc(tx('Kilomètres : à compléter')) : `<b>${rdKm(km)} km</b> ${esc(tx('comptés pour toutes les pièces montées'))}`}</p>
@@ -86,9 +88,10 @@ function ptDraw() {
 }
 // opts : {sid?, key?, carName?, run?, after}. sid fixe le roulage ; key fixe la voiture ; run = participation à modifier.
 async function ptOpen(opts) {
-  pt = {sid: opts.sid || '', key: opts.key || '', carName: opts.carName || '', runId: opts.run ? opts.run.id : null, fixedSession: !!opts.sid, fixedCar: !!opts.key, sessions: [], cars: null, taken: new Set(), laps: '', stages: [{name: '', length_km: '', passes: 1}], km: '', hours: '', drivers: '', notes: '', saving: false, err: '', after: opts.after};
+  pt = {sid: opts.sid || '', key: opts.key || '', carName: opts.carName || '', runId: opts.run ? opts.run.id : null, fixedSession: !!opts.sid, fixedCar: !!opts.key, sessions: [], cars: null, taken: new Set(), tyres: (opts.run && opts.run.tyres ? opts.run.tyres.map(u => ({set_id: u.set_id, laps: u.laps ?? '', cycles: u.cycles ?? 1})) : []), laps: '', stages: [{name: '', length_km: '', passes: 1}], km: '', hours: '', drivers: '', notes: '', saving: false, err: '', after: opts.after};
   ptDraw();
   try {
+    await tyLoadOpts(true);
     const j = await rsCall('/api/rides/sessions'); rd.circuits = j.circuits;
     pt.allSessions = j.sessions;
     pt.sessions = opts.key ? j.sessions.filter(s => !s.cars.some(c => c.key === opts.key) || (opts.run && s.id === opts.run.session_id)) : j.sessions;
@@ -121,7 +124,7 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   const t = e.target;
   if (pt && t.dataset.ptF === 'sid') { ptOnSession(); ptDraw(); return; }
-  if (pt && t.dataset.ptF === 'key') { ptDraw(); return; }
+  if (pt && t.dataset.ptF === 'key') { pt.tyres = []; ptDraw(); return; }
   if (rn.form && t.classList.contains('dp-h') && t.dataset.rnF === 'date') { rn.form.date = t.value; const b = document.querySelector('[data-rn=save]'); if (b) b.disabled = !(rn.form.name.trim() && rn.form.date); }
   if (rn.form && t.dataset.rnF === 'circuit') rn.form.circuit = t.value;
 });
@@ -136,7 +139,7 @@ document.addEventListener('click', async e => {
       if (a === 'delstage') { pt.stages.splice(+b.dataset.i, 1); if (!pt.stages.length) pt.stages.push({name: '', length_km: '', passes: 1}); return ptDraw(); }
       if (a === 'save') {
         const s = ptSession(); pt.saving = true; pt.err = ''; ptDraw();
-        const body = {laps: parseInt(pt.laps) || 0, km: rdNum(pt.km), hours: rdNum(pt.hours), drivers: String(pt.drivers).split(',').map(x => x.trim()).filter(Boolean), notes: pt.notes || ''};
+        const body = {laps: parseInt(pt.laps) || 0, km: rdNum(pt.km), hours: rdNum(pt.hours), drivers: String(pt.drivers).split(',').map(x => x.trim()).filter(Boolean), notes: pt.notes || '', tyres: tyUsesBody(pt.tyres)};
         if (s.kind === 'rally') body.stages = rnStages(pt.stages);
         try {
           if (pt.runId) await rsCall('/api/rides/runs/' + encodeURIComponent(pt.runId), {method: 'PUT', body: JSON.stringify({...body, stages: s.kind === 'rally' ? body.stages : [], date: s.date, name: s.name, kind: s.kind, circuit: s.circuit || '', event_id: s.event_id || ''})});

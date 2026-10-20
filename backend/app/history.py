@@ -16,7 +16,7 @@ from . import settings
 # collection -> libellé de l'objet dans le relevé
 TRACKED = {"timesheet_templates": "Modèle de job", "timesheet_form_models": "Modèle de formulaire", "ride_templates": "Modèle d'architecture voiture", "ride_sessions": "Roulage",
            "ride_runs": "Participation à un roulage", "ride_circuits": "Circuit", "ride_parts": "Pièce du Garage", "ride_maint": "Maintenance d'une pièce", "ride_cars": "Fiche voiture",
-           "clients": "Client", "timesheet_jobs": "Job", "timesheet_garage": "Mise à jour du Garage", "run_reports": "Run report"}
+           "clients": "Client", "timesheet_jobs": "Job", "timesheet_garage": "Mise à jour du Garage", "run_reports": "Run report", "ride_tyres": "Train de pneus"}
 _actor: ContextVar[str] = ContextVar("history_actor", default="")
 _muted: ContextVar[bool] = ContextVar("history_muted", default=False)
 _coll = None

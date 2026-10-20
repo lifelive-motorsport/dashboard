@@ -1,11 +1,11 @@
 // Opérer › Roulages › « Roulage Al Kamel » : dépôt des PDF du chronométreur (classements, analyse des secteurs), création d'un roulage par session,
 // rattachement de nos voitures par numéro de course, et sessions non chronométrées saisies à la main (essais de la veille, shakedown).
-const ak = {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, manual: [], msg: null, ok: false};
+const ak = {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false};
 const akDayBefore = iso => { if (!iso) return ''; const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); };
 const akBlankManual = () => ({date: akDayBefore(ak.date) || rdToday(), name: 'Essais non chronométrés', cars: [{key: '', laps: '', drivers: ''}]});
 const akKinds = {race: 'Course', qualifying: 'Qualifications', practice: 'Essais'};
 
-function akReset() { Object.assign(ak, {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, manual: [], msg: null, ok: false}); }
+function akReset() { Object.assign(ak, {open: false, parsing: false, saving: false, data: null, event: '', date: '', circuit: '', newCircuit: '', circuitKm: '', map: {}, pick: {}, sdate: {}, tyres: {}, manual: [], msg: null, ok: false}); }
 
 function akNumbers() {                                      // numéros de course rencontrés dans les sessions choisies, une seule fois chacun
   const seen = new Map();
@@ -17,6 +17,11 @@ function akCarSelect(attr, cur) {
   return `<select class="sdin" ${attr}><option value="">—</option>${(rn.cars || []).map(c => `<option value="${esc(c.key)}" ${cur === c.key ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
 }
 
+function akTyresHtml(i) {
+  const keys = [...new Set(Object.values(ak.map).filter(Boolean))];
+  const rows = keys.map(k => { const car = (rn.cars || []).find(c => c.key === k); const list = ((ak.tyres[i] = ak.tyres[i] || {})[k] = ak.tyres[i][k] || []); return `<div class="ak-ty"><b>${esc(car ? car.name : k)}</b>${tyPickerHtml(`ak|${i}|${k}`, k, list)}</div>`; }).join('');
+  return rows ? `<div class="ak-tys">${rows}</div>` : '';
+}
 function akHtml() {
   if (!ak.open) return '';
   const d = ak.data;
@@ -26,7 +31,7 @@ function akHtml() {
     const sess = d.sessions.map((s, i) => {
       const cond = s.conditions || {};
       const meta = [akKinds[s.kind] ? tx(akKinds[s.kind]) : '', `${s.classification.length} ${tx('voitures')}`, cond.track_c != null ? `${tx('piste')} ${cond.track_c}°C` : '', cond.air_c != null ? `${tx('air')} ${cond.air_c}°C` : '', cond.status || ''].filter(Boolean).join(' · ');
-      return `<div class="sdbar"><label class="chk"><input type="checkbox" data-ak-pick="${i}" ${ak.pick[i] ? 'checked' : ''}> <b>${esc(s.session)}</b> <small class="na">${esc(meta)}</small></label>${dpField(`data-ak-sd="${i}"`, ak.sdate[i] || ak.date)}</div>`;
+      return `<div class="sdbar"><label class="chk"><input type="checkbox" data-ak-pick="${i}" ${ak.pick[i] ? 'checked' : ''}> <b>${esc(s.session)}</b> <small class="na">${esc(meta)}</small></label>${dpField(`data-ak-sd="${i}"`, ak.sdate[i] || ak.date)}</div>${ak.pick[i] ? akTyresHtml(i) : ''}`;
     }).join('');
     const nums = akNumbers();
     const cars = table(['N°', 'Pilote(s)', 'Voiture', 'Notre voiture'], nums.map(c => `<tr><td>${c.no}</td><td>${esc((c.drivers || []).join(' / '))}</td><td>${esc(c.car)}</td><td>${akCarSelect(`data-ak-car="${c.no}"`, ak.map[c.no] || '')}</td></tr>`));
@@ -37,7 +42,7 @@ function akHtml() {
   const newc = ak.circuit === '__new' ? `<label class="sdfield"><span>${esc(tx('Nom du circuit'))}</span><input class="sdin" data-ak-f="newCircuit" value="${esc(ak.newCircuit)}"></label><label class="sdfield"><span>${esc(tx('Longueur du tour (km)'))}</span><input class="sdin" data-ak-f="circuitKm" value="${esc(ak.circuitKm)}" inputmode="decimal"></label>${d && d.circuit_km ? `<small class="na">${esc(tx('Longueur estimée d’après le classement de course (vitesse moyenne × durée ÷ tours) :'))} ${rdKm(d.circuit_km)} km</small>` : ''}` : '';
   const head = `<div class="sdgrid"><label class="sdfield"><span>${esc(tx('Épreuve'))}</span><input class="sdin" data-ak-f="event" value="${esc(ak.event)}" placeholder="Imola Classic"></label><label class="sdfield"><span>${esc(tx('Premier jour'))}</span>${dpField('data-ak-f="date"', ak.date)}</label>${circs}${newc}</div>`;
   const manual = ak.manual.map((m, i) => `<div class="rn-card"><div class="sdgrid"><label class="sdfield"><span>Date</span>${dpField(`data-ak-m="date" data-i="${i}"`, m.date)}</label><label class="sdfield"><span>${esc(tx('Nom'))}</span><input class="sdin" data-ak-m="name" data-i="${i}" value="${esc(m.name)}"></label><button type="button" class="mini danger" data-ak="delm" data-i="${i}" title="${esc(tx('Retirer cette session'))}">✕</button></div>
-    ${m.cars.map((c, j) => `<div class="sdgrid">${akCarSelect(`data-ak-mc="key" data-i="${i}" data-j="${j}"`, c.key)}<input class="sdin" data-ak-mc="laps" data-i="${i}" data-j="${j}" value="${esc(c.laps)}" placeholder="${esc(tx('Tours'))}" inputmode="numeric" style="max-width:90px"><input class="sdin" data-ak-mc="drivers" data-i="${i}" data-j="${j}" value="${esc(c.drivers)}" placeholder="${esc(tx('Pilote(s)'))}"></div>`).join('')}
+    ${m.cars.map((c, j) => `<div class="sdgrid">${akCarSelect(`data-ak-mc="key" data-i="${i}" data-j="${j}"`, c.key)}<input class="sdin" data-ak-mc="laps" data-i="${i}" data-j="${j}" value="${esc(c.laps)}" placeholder="${esc(tx('Tours'))}" inputmode="numeric" style="max-width:90px"><input class="sdin" data-ak-mc="drivers" data-i="${i}" data-j="${j}" value="${esc(c.drivers)}" placeholder="${esc(tx('Pilote(s)'))}"></div>${c.key ? tyPickerHtml(`akm|${i}|${j}`, c.key, c.tyres || []) : ''}`).join('')}
     <button type="button" class="mini" data-ak="addmc" data-i="${i}">＋ ${esc(tx('Autre voiture'))}</button></div>`).join('');
   const picked = d ? d.sessions.some((s, i) => ak.pick[i]) : false;
   const hasManual = ak.manual.some(m => m.cars.some(c => c.key));
@@ -82,7 +87,7 @@ document.addEventListener('change', e => {
   if (!ak.open) return;
   if (t.dataset.akPick !== undefined) { ak.pick[+t.dataset.akPick] = t.checked; return akDraw(); }
   if (t.dataset.akSd !== undefined && t.classList.contains('dp-h')) { ak.sdate[+t.dataset.akSd] = t.value; return; }
-  if (t.dataset.akCar !== undefined) { ak.map[t.dataset.akCar] = t.value; return; }
+  if (t.dataset.akCar !== undefined) { ak.map[t.dataset.akCar] = t.value; return akDraw(); }
   if (t.dataset.akF === 'circuit') { ak.circuit = t.value; return akDraw(); }
   if (t.dataset.akF === 'date' && t.classList.contains('dp-h')) { ak.date = t.value; return akDraw(); }
   if (t.dataset.akM === 'date' && t.classList.contains('dp-h')) { ak.manual[+t.dataset.i].date = t.value; return; }
@@ -97,7 +102,7 @@ document.addEventListener('input', e => {
 document.addEventListener('click', async e => {
   const b = e.target.closest && e.target.closest('[data-ak]'); if (!b) return;
   const a = b.dataset.ak;
-  if (a === 'open') { akReset(); ak.open = true; return akDraw(); }
+  if (a === 'open') { akReset(); ak.open = true; akDraw(); await tyLoadOpts(true); return akDraw(); }
   if (a === 'cancel') { akReset(); return akDraw(); }
   if (a === 'addm') { ak.manual.push(akBlankManual()); return akDraw(); }
   if (a === 'delm') { ak.manual.splice(+b.dataset.i, 1); return akDraw(); }
@@ -108,8 +113,8 @@ document.addEventListener('click', async e => {
       const d = ak.data, mapped = {};
       for (const [no, key] of Object.entries(ak.map)) if (key) mapped[no] = key;
       const body = {series: d ? d.series : '', event: ak.event.trim(), date: ak.date, circuit: ak.circuit === '__new' ? ak.newCircuit.trim() : ak.circuit, circuit_km: rdNum(ak.circuitKm) || 0,
-        sessions: d ? d.sessions.map((s, i) => ({s, i})).filter(x => ak.pick[x.i]).map(({s, i}) => ({date: ak.sdate[i] || ak.date, session: s.session, kind: s.kind, conditions: s.conditions, classification: s.classification, cars: mapped})) : [],
-        manual: ak.manual.map(m => ({date: m.date, name: m.name, cars: m.cars.filter(c => c.key).map(c => ({key: c.key, laps: parseInt(c.laps) || 0, drivers: String(c.drivers).split(',').map(x => x.trim()).filter(Boolean)}))}))};
+        sessions: d ? d.sessions.map((s, i) => ({s, i})).filter(x => ak.pick[x.i]).map(({s, i}) => ({date: ak.sdate[i] || ak.date, session: s.session, kind: s.kind, conditions: s.conditions, classification: s.classification, cars: mapped, tyres: Object.fromEntries(Object.entries(ak.tyres[i] || {}).map(([k, l]) => [k, tyUsesBody(l)]).filter(([, l]) => l.length))})) : [],
+        manual: ak.manual.map(m => ({date: m.date, name: m.name, cars: m.cars.filter(c => c.key).map(c => ({key: c.key, tyres: tyUsesBody(c.tyres), laps: parseInt(c.laps) || 0, drivers: String(c.drivers).split(',').map(x => x.trim()).filter(Boolean)}))}))};
       const r = await rsCall('/api/rides/alkamel/import', {method: 'POST', body: JSON.stringify(body)});
       const n = r.sessions.length, m = r.runs;
       akReset(); rn.msg = `${n} ${tx('roulage(s) créé(s)')}, ${m} ${tx('participation(s) de voitures.')}`; rn.ok = true; rn.cars = null; akDraw(); return rnLoad();

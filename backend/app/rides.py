@@ -245,6 +245,13 @@ class Stage(BaseModel):
     passes: int = Field(default=1, ge=1, le=50)
 
 
+class TyreUse(BaseModel):
+    """Train de pneus utilisé dans une participation : tours roulés avec ce train (vide = tous si un seul train, sinon réparti à parts égales) et nombre de cycles de chauffe."""
+    set_id: str = Field(max_length=60)
+    laps: int | None = Field(default=None, ge=0, le=5000)
+    cycles: int = Field(default=1, ge=0, le=50)
+
+
 class RunIn(BaseModel):
     date: date
     name: str = Field(min_length=1, max_length=120)
@@ -255,6 +262,7 @@ class RunIn(BaseModel):
     km: float | None = Field(default=None, ge=0, le=100000)          # kilomètres saisis à la main : prioritaires sur le calcul
     hours: float | None = Field(default=None, ge=0, le=500)
     drivers: list[str] = Field(default_factory=list, max_length=6)
+    tyres: list[TyreUse] = Field(default_factory=list, max_length=6)
     event_id: str = Field(default="", max_length=40)
     notes: str = Field(default="", max_length=1000)
 
@@ -277,6 +285,7 @@ class AssocIn(BaseModel):
     km: float | None = Field(default=None, ge=0, le=100000)
     hours: float | None = Field(default=None, ge=0, le=500)
     drivers: list[str] = Field(default_factory=list, max_length=6)
+    tyres: list[TyreUse] = Field(default_factory=list, max_length=6)
     notes: str = Field(default="", max_length=1000)
 
 
@@ -850,6 +859,8 @@ def compute_km(data: RunIn) -> float:
 
 def _run_doc(vehicle: str, data: RunIn, rid: str, user: str, created: str | None = None, source: str = "manual", session_id: str = "") -> dict:
     km = compute_km(data)
+    from . import tyres
+    tyres.check_uses(vehicle, data.tyres)
     if not km and data.hours is None:
         raise ValueError("Indiquez des tours, des spéciales, des kilomètres ou une durée")
     return {"id": rid, "vehicle": vehicle, **data.model_dump(mode="json"), "km": km, "km_manual": data.km is not None, "session_id": session_id, "created_by": user.lower(), "created_at": created or now().isoformat(), "source": source}
@@ -902,6 +913,8 @@ def update_run(rid: str, data: RunIn, user: str) -> dict:
         if s:                                                        # le roulage décide de la date, du nom et du circuit ; ici on ne change que la part de la voiture
             data = data.model_copy(update={"date": date.fromisoformat(s["date"]), "name": s["name"], "kind": s["kind"], "circuit": s.get("circuit", ""), "event_id": s.get("event_id", "")})
     doc = _run_doc(cur["vehicle"], data, rid, cur.get("created_by", user), cur.get("created_at"), cur.get("source", "manual"), cur.get("session_id", ""))
+    if cur.get("timing"):                                            # chronométrage Al Kamel conservé quand on corrige la participation
+        doc["timing"] = cur["timing"]
     runs_coll().put(rid, doc)
     return doc
 
@@ -918,7 +931,7 @@ def _session_view(s: dict, runs: list[dict], names: dict[str, str]) -> dict:
     mine = sorted((r for r in runs if r.get("session_id") == s["id"]), key=lambda r: names.get(r["vehicle"], r["vehicle"]).lower())
     alk = s.get("alkamel")
     s = {**s, "alkamel": {"session": alk.get("session"), "conditions": alk.get("conditions", {}), "cars": len(alk.get("classification", []))} if alk else None}
-    return {**s, "cars": [{"run_id": r["id"], "key": r["vehicle"], "name": names.get(r["vehicle"], r["vehicle"]), "km": r.get("km"), "hours": r.get("hours"), "laps": r.get("laps", 0), "drivers": r.get("drivers", []), "notes": r.get("notes", ""), "timing": ({"best": r["timing"].get("best"), "pos": r["timing"].get("pos"), "no": r["timing"].get("no")} if r.get("timing") else None)} for r in mine],
+    return {**s, "cars": [{"run_id": r["id"], "key": r["vehicle"], "name": names.get(r["vehicle"], r["vehicle"]), "km": r.get("km"), "hours": r.get("hours"), "laps": r.get("laps", 0), "drivers": r.get("drivers", []), "notes": r.get("notes", ""), "tyres": r.get("tyres", []), "timing": ({"best": r["timing"].get("best"), "pos": r["timing"].get("pos"), "no": r["timing"].get("no")} if r.get("timing") else None)} for r in mine],
             "km_total": round(sum(r.get("km") or 0 for r in mine), 1)}
 
 
@@ -942,9 +955,12 @@ def save_session(sid: str | None, data: SessionIn, user: str) -> dict:
     if cur:                                                          # les voitures associées suivent la date, le nom, le type et le circuit ; leurs kilomètres se recalculent (sauf ceux saisis à la main)
         for run in [r for r in runs_coll().all() if r.get("session_id") == sid]:
             rin = RunIn(date=data.date, name=doc["name"], kind=doc["kind"], circuit=doc["circuit"], laps=run.get("laps", 0), stages=run.get("stages", []) if doc["kind"] == "rally" else [],
-                        km=run["km"] if run.get("km_manual") else None, hours=run.get("hours"), drivers=run.get("drivers", []), event_id=doc["event_id"], notes=run.get("notes", ""))
+                        km=run["km"] if run.get("km_manual") else None, hours=run.get("hours"), drivers=run.get("drivers", []), tyres=run.get("tyres", []), event_id=doc["event_id"], notes=run.get("notes", ""))
             try:
-                runs_coll().put(run["id"], _run_doc(run["vehicle"], rin, run["id"], run.get("created_by", user), run.get("created_at"), run.get("source", "manual"), sid))
+                nd = _run_doc(run["vehicle"], rin, run["id"], run.get("created_by", user), run.get("created_at"), run.get("source", "manual"), sid)
+                if run.get("timing"):
+                    nd["timing"] = run["timing"]
+                runs_coll().put(run["id"], nd)
             except ValueError:
                 run.update(date=data.date.isoformat(), name=doc["name"], kind=doc["kind"], circuit=doc["circuit"])
                 runs_coll().put(run["id"], run)
@@ -973,7 +989,7 @@ def associate(sid: str, vehicle: str, data: AssocIn, user: str) -> dict:
         raise ValueError("Cette voiture est déjà associée à ce roulage")
     stages = data.stages if data.stages is not None else [Stage(**x) for x in s.get("stages", [])]
     rin = RunIn(date=date.fromisoformat(s["date"]), name=s["name"], kind=s["kind"], circuit=s.get("circuit", ""), laps=data.laps, stages=stages if s["kind"] == "rally" else [], km=data.km, hours=data.hours,
-                drivers=data.drivers, event_id=s.get("event_id", ""), notes=data.notes)
+                drivers=data.drivers, tyres=data.tyres, event_id=s.get("event_id", ""), notes=data.notes)
     doc = _run_doc(vehicle, rin, "r-" + uuid.uuid4().hex[:10], user, session_id=sid)
     runs_coll().put(doc["id"], doc)
     return doc

@@ -523,3 +523,6 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .ak-drop{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 16px;margin:8px 0 14px;border:2px dashed var(--line,#666);border-radius:12px;cursor:pointer;text-align:center;transition:background .15s,border-color .15s}
 .ak-drop:hover,.ak-drop.over{background:color-mix(in srgb,var(--red) 8%,transparent);border-color:var(--red)}
 .ak-drop .ak-ico{font-size:26px;line-height:1}.ak-drop b{font-size:15px}.ak-drop small{opacity:.75;max-width:640px}.ak-drop.busy{opacity:.6;pointer-events:none}
+
+.ty-bar{height:6px;background:var(--line,#ddd);border-radius:3px;overflow:hidden;min-width:70px}.ty-bar i{display:block;height:100%}
+.ty-pick .ty-row{margin:2px 0}.ak-tys{margin:2px 0 8px 26px}.ak-ty{display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin:2px 0}.ak-ty>b{min-width:140px;padding-top:8px;font-weight:500}

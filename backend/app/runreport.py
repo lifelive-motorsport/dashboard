@@ -11,7 +11,7 @@ from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, Field
 
-from . import alkamel, rides
+from . import alkamel, rides, tyres
 from .timesheets import Coll
 
 _coll = None
@@ -155,7 +155,7 @@ def view(meeting: str, car: str) -> dict:
             "general": doc.get("general", ""), "runs": notes, "tyre_sets": doc.get("tyre_sets", []), "pressure_base": doc.get("pressure_base", ""),
             "actions_car": doc.get("actions_car", ""), "actions_logistics": doc.get("actions_logistics", ""),
             "status": doc.get("status", "draft") if doc else "draft", "validated_by": doc.get("validated_by", ""), "validated_at": doc.get("validated_at", ""),
-            "entries": entries, "days": _days(entries, notes), "km_total": round(sum(e["km"] or 0 for e in entries), 1)}
+            "entries": entries, "tyres_auto": tyres.for_meeting(meeting, car), "days": _days(entries, notes), "km_total": round(sum(e["km"] or 0 for e in entries), 1)}
 
 
 # ---- Enregistrement -----------------------------------------------------------------------------------------------------------------------
@@ -321,9 +321,12 @@ def print_page(v: dict, lang: str = "fr", client: bool = False) -> str:
         blk.append("</section>")
         out.append("".join(blk))
     # 4. pneus
-    if v["tyre_sets"] or v["pressure_base"]:
+    auto = v.get("tyres_auto") or []
+    rows_a = "".join(f"<tr><td>{e(t['ref'])}</td><td>{e((t['brand'] + ' ' + t['model']).strip() + (' · ' + t['compound'] if t.get('compound') else ''))}</td><td>{t['laps']}</td><td>{t['km']:g}</td><td>{t['total_km']:g}</td></tr>" for t in auto)
+    auto_html = f"<table><thead><tr><th>Set</th><th>{T('Modèle', 'Model')}</th><th>{T('Tours', 'Laps')}</th><th>{T('Km (meeting)', 'Km (meeting)')}</th><th>{T('Km (total du set)', 'Km (set total)')}</th></tr></thead><tbody>{rows_a}</tbody></table>" if auto else ""
+    if v["tyre_sets"] or v["pressure_base"] or auto:
         rows_t = "".join(f"<tr><td>{e(t['set'])}</td><td>{e(t['model'])}</td><td>{t['laps'] if t.get('laps') is not None else ''}</td><td>{t['km'] if t.get('km') is not None else ''}</td></tr>" for t in v["tyre_sets"])
-        out.append(f"<h3>4. {T('Pneumatiques', 'Tyres')}</h3>" + (f"<table><thead><tr><th>Set</th><th>{T('Modèle', 'Model')}</th><th>{T('Tours', 'Laps')}</th><th>{T('Kilométrage', 'Mileage')}</th></tr></thead><tbody>{rows_t}</tbody></table>" if rows_t else "")
+        out.append(f"<h3>4. {T('Pneumatiques', 'Tyres')}</h3>" + auto_html + (f"<table><thead><tr><th>Set</th><th>{T('Modèle', 'Model')}</th><th>{T('Tours', 'Laps')}</th><th>{T('Kilométrage', 'Mileage')}</th></tr></thead><tbody>{rows_t}</tbody></table>" if rows_t else "")
                    + (f"<p><b>{T('Base de pression', 'Pressure base')}</b></p><ul>{''.join(f'<li>{e(x)}</li>' for x in _bullets(v['pressure_base']))}</ul>" if v["pressure_base"] else ""))
     ac = _bullets(v["actions_car"])
     if ac:

@@ -64,7 +64,7 @@ function rrEditorHtml() {
     <p><b>1. ${esc(tx('Synthèse générale'))}</b> <small class="na">${esc(tx('calculée d’après les roulages'))}</small></p>${days}
     <p><b>2. ${esc(tx('Observations générales'))}</b></p>${rrArea('general', f.general, dis, 4)}
     <p><b>3. ${esc(tx('Détail par run'))}</b></p>${v.entries.map(e => rrEntryHtml(e, v, f, dis)).join('')}
-    <p><b>4. ${esc(tx('Pneumatiques'))}</b></p>${sets}${dis ? '' : `<div class="sdbar"><button type="button" class="mini" data-rr="addset">＋ ${esc(tx('Ajouter un train de pneus'))}</button></div>`}
+    <p><b>4. ${esc(tx('Pneumatiques'))}</b></p>${(v.tyres_auto || []).length ? `<p class="na">${esc(tx('Trains du stock utilisés pendant l’épreuve (calculés d’après les roulages) :'))}</p>${table(['Set', 'Modèle', 'Tours', 'Km (meeting)', 'Km (total du set)'], v.tyres_auto.map(t => `<tr><td><b>${esc(t.ref)}</b></td><td>${esc([t.brand, t.model, t.compound].filter(Boolean).join(' '))}</td><td>${t.laps}</td><td>${rdKm(t.km)}</td><td>${rdKm(t.total_km)}</td></tr>`))}` : ''}${sets ? `<p class="na">${esc(tx('Autres trains (hors stock) :'))}</p>` : ''}${sets}${dis ? '' : `<div class="sdbar"><button type="button" class="mini" data-rr="addset">＋ ${esc(tx('Ajouter un train de pneus'))}</button></div>`}
     <label class="sdfield"><span>${esc(tx('Base de pression'))}</span>${rrArea('pressure_base', f.pressure_base, dis)}</label>
     <label class="sdfield"><span>5. ${esc(tx('Actions à améliorer pour le prochain meeting (voiture)'))}</span>${rrArea('actions_car', f.actions_car, dis)}</label>
     <label class="sdfield"><span>6. ${esc(tx('Actions pour le prochain meeting (logistique, interne : non visible du client)'))}</span>${rrArea('actions_logistics', f.actions_logistics, dis)}</label>

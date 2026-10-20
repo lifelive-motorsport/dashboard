@@ -511,7 +511,8 @@ def import_batch(body: dict, user: str) -> dict:
             laps = max(int(c.get("laps") or 0), max((x["n"] for x in c.get("lap_list") or []), default=0))
             for old in [r for r in rides.runs_coll().all() if r.get("session_id") == sid and r["vehicle"] == key]:
                 rides.runs_coll().delete(old["id"])                  # ré-import : la participation est remplacée
-            rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], notes="")
+            uses = [rides.TyreUse(**{k: u[k] for k in ("set_id", "laps", "cycles") if k in u and u[k] not in (None, "")}) for u in ((s.get("tyres") or {}).get(key) or []) if u.get("set_id")]
+            rin = rides.RunIn(date=sd, name=name, kind="circuit", circuit=circuit, laps=laps, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], tyres=uses, notes="")
             run = rides._run_doc(key, rin, "r-" + uuid.uuid4().hex[:10], user, source="alkamel", session_id=sid)
             run["timing"] = {"no": no, "class": c.get("class", ""), "pos": c.get("pos"), "laps": c.get("laps"), "total_time": c.get("total_time", ""), "gap": c.get("gap", ""), "kph": c.get("kph"), "best": c.get("best", ""), "best_lap_no": c.get("best_lap_no"),
                              "summary": c.get("summary") or {}, "pace5": c.get("pace5", ""), "grid": c.get("grid"), "story": c.get("story"), "lap_list": (c.get("lap_list") or [])[:400]}
@@ -543,7 +544,8 @@ def import_batch(body: dict, user: str) -> dict:
         for c in cars:
             laps = max(0, min(int(c.get("laps") or 0), 5000))
             km = c.get("km")
-            rin = rides.RunIn(date=md, name=sname, kind="circuit", circuit=circuit, laps=laps, km=float(km) if km not in (None, "") else None, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6])
+            uses = [rides.TyreUse(**{k: u[k] for k in ("set_id", "laps", "cycles") if k in u and u[k] not in (None, "")}) for u in (c.get("tyres") or []) if u.get("set_id")]
+            rin = rides.RunIn(date=md, name=sname, kind="circuit", circuit=circuit, laps=laps, km=float(km) if km not in (None, "") else None, drivers=[str(x)[:60] for x in (c.get("drivers") or [])][:6], tyres=uses)
             for old in [r for r in rides.runs_coll().all() if r.get("session_id") == sid and r["vehicle"] == c["key"]]:
                 rides.runs_coll().delete(old["id"])
             run = rides._run_doc(c["key"], rin, "r-" + uuid.uuid4().hex[:10], user, source="manual", session_id=sid)

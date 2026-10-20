@@ -1,5 +1,9 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Octobre 2026', title: 'Run reports', tag: 'Opérer', items: [
+    'Nouvelle page « Run reports » : pour chaque épreuve et chaque voiture, synthèse par jour, détail par run (chronométrage Al Kamel, rangs sur le plateau, graphique des temps au tour) et saisie de l’ingénieur (objectifs, setup, pressions, observations, retour pilote, pneus, actions).',
+    'Feuille A4 aux couleurs de Lifelive en français ou en anglais ; une fois validé, le rapport apparaît dans l’onglet « Rapports » de l’accès client (sans la rubrique logistique, interne).',
+  ]},
   {date: 'Octobre 2026', title: 'Roulage Al Kamel', tag: 'Opérer', items: [
     'Roulages › « Roulage Al Kamel » : on dépose les PDF du chronométreur (classements, analyse des secteurs) ; un roulage est créé par session (essais, qualifications, course) avec temps, tours, meilleurs secteurs, vitesse de pointe et météo.',
     'On choisit quelles voitures (numéros de course) importer et la voiture du Garage correspondante ; la longueur du circuit est estimée d’après le classement de course.',

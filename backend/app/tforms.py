@@ -362,11 +362,11 @@ def _n(v, unit: str = "", digits: int = 2) -> str:
     return txt + (f" {unit}" if unit else "")
 
 
-def _shell(title: str, lang: str, content: str, f: dict) -> str:
+def _shell(title: str, lang: str, content: str, f: dict, valid: str | None = None) -> str:
     """Coque commune des feuilles imprimables : en-tête Lifelive, styles de la charte, pied de page (validation et identifiant)."""
     e = html.escape
     T = (lambda fr, eng: eng if lang == "en" else fr)
-    valid = T("Validé par le chef d'atelier", "Approved by the workshop manager") if f.get("validated") else T("Non validé", "Not approved")
+    valid = valid or (T("Validé par le chef d'atelier", "Approved by the workshop manager") if f.get("validated") else T("Non validé", "Not approved"))
     return f"""<!doctype html><html lang="{lang}"><head><meta charset="utf-8"><title>{e(title)}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">

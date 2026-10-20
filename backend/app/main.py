@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import speech, leaves, scheduler
 from . import adjustments, dkv, expenses, ga, gauth, gcal, maps, planning, resources, settings, staff, stockvar, timesheets, tn11
-from . import access, clients, feedback, history, projection, rides, tforms, tgarage, tmodels, users, vdocs, wall
+from . import access, clients, feedback, history, projection, rides, runreport, tforms, tgarage, tmodels, users, vdocs, wall
 from .auth import COOKIE, VIEWAS, audit_viewas, is_allowed, real_user, require_user, role, set_session_cookie, set_viewas_cookie, verify_google
 from .bu import aggregate
 from .providers.demo import DemoProvider
@@ -1050,6 +1050,20 @@ def client_jobs(key: str, email: str = Depends(require_client)):
     return {"jobs": _cl(clients.jobs_of_car, email, key)}
 
 
+@app.get("/api/client/cars/{key}/reports")
+def client_reports(key: str, email: str = Depends(require_client)):
+    _cl(clients.own, email, key)
+    return {"reports": runreport.validated_for_car(key)}
+
+
+@app.get("/api/client/cars/{key}/reports/{meeting}/print", response_class=HTMLResponse)
+def client_report_print(key: str, meeting: str, lang: str = "fr", email: str = Depends(require_client)):
+    _cl(clients.own, email, key)
+    if not any(r["meeting"] == meeting for r in runreport.validated_for_car(key)):      # seuls les rapports validés sont visibles du client
+        raise HTTPException(404, "Rapport introuvable")
+    return HTMLResponse(_cl(lambda: runreport.print_page(runreport.view(meeting, key), "en" if lang == "en" else "fr", client=True)))
+
+
 @app.get("/api/client/cars/{key}/photo")
 def client_car_photo(key: str, email: str = Depends(require_client)):
     _cl(clients.own, email, key)
@@ -1228,6 +1242,50 @@ def rd_alkamel_import(body: dict, user: str = Depends(granted("consigner/runs"))
         return alkamel.import_batch(body, user)
     except ValueError as e:
         raise HTTPException(422, str(e))
+
+
+# ---- Run reports (rapport remis au client après un meeting) ----------------------------------------------------------------------------------
+
+@app.get("/api/rides/reports")
+def rr_list(_user: str = Depends(granted("consigner/runreports"))):
+    return {"meetings": runreport.meetings()}
+
+
+def _rr(fn, *a):
+    try:
+        return fn(*a)
+    except LookupError as e:
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.get("/api/rides/reports/{meeting}/{car}")
+def rr_get(meeting: str, car: str, _user: str = Depends(granted("consigner/runreports"))):
+    return _rr(runreport.view, meeting, car)
+
+
+@app.put("/api/rides/reports/{meeting}/{car}")
+def rr_save(meeting: str, car: str, body: runreport.ReportIn, user: str = Depends(granted("consigner/runreports"))):
+    return _rr(runreport.save, meeting, car, body, user)
+
+
+@app.post("/api/rides/reports/{meeting}/{car}/validate")
+def rr_validate(meeting: str, car: str, user: str = Depends(require_user)):
+    _ts_models(user)
+    return _rr(runreport.set_status, meeting, car, True, user)
+
+
+@app.post("/api/rides/reports/{meeting}/{car}/reopen")
+def rr_reopen(meeting: str, car: str, user: str = Depends(require_user)):
+    _ts_models(user)
+    return _rr(runreport.set_status, meeting, car, False, user)
+
+
+@app.get("/api/rides/reports/{meeting}/{car}/print", response_class=HTMLResponse)
+def rr_print(meeting: str, car: str, lang: str = "fr", _user: str = Depends(granted("consigner/runreports"))):
+    return HTMLResponse(_rr(lambda: runreport.print_page(runreport.view(meeting, car), "en" if lang == "en" else "fr")))
+
 
 
 @app.post("/api/rides/circuits")

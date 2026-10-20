@@ -106,3 +106,44 @@ def test_grid_lapchart_and_field_ranks():
     alkamel.add_field_ranks(cl)
     a, b = cl[0]["summary"], cl[1]["summary"]
     assert a["rank"] == {"s1": 2, "s2": 1, "s3": 1, "top": 2, "ideal": 1} and b["rank"]["top"] == 1 and a["gap"]["s1"] == 0.5 and b["gap"]["s2"] == 1.0 and a["field"] == 2
+
+
+def _import_imola(api):
+    m3 = {c["name"]: c["key"] for c in api.get("/api/rides/cars").json()["cars"]}["BMW M3 E30"]
+    laps = [{"n": i, "d": 1, "time": f"2:{20 + i % 3}.000", "s1": "29.000", "s2": "46.000", "s3": "1:05.000", "top": 190.0 + i, "elapsed": "x", "flags": []} for i in range(1, 8)]
+    cl = [{"pos": 3, "no": 20, "drivers": ["C. DUMOLIN", "R. de BORMAN"], "car": "Ford Mustang", "class": "+2L", "classified": True, "laps": 7, "best": "2:21.000", "grid": 8,
+           "summary": {"best": "2:21.000", "sectors": {"s1": "29.000", "s2": "46.000", "s3": "1:05.000"}, "top_speed": 197.0, "ideal": "2:20.000", "rank": {"s1": 5, "s2": 5, "s3": 5, "top": 10, "ideal": 5}, "gap": {"s1": 1.3, "s2": 2.1, "s3": 1.9}, "field": 14},
+           "story": {"start": 8, "finish": 3, "best": 3, "led": 0, "positions": [8, 7, 6, 5, 4, 3, 3]}, "lap_list": laps}]
+    body = {"series": "CTC", "event": "Imola Classic", "date": "2026-10-18", "circuit": "Imola", "circuit_km": 4.909,
+            "sessions": [{"date": "2026-10-18", "session": "RACE (60')", "kind": "race", "conditions": {"track_c": 23.3, "air_c": 19.5, "status": "DRY"}, "classification": cl, "cars": {"20": m3}}],
+            "manual": [{"date": "2026-10-17", "name": "Essais de la veille", "cars": [{"key": m3, "laps": 8, "drivers": ["Raphaël"]}]}]}
+    assert api.post("/api/rides/alkamel/import", json=body).status_code == 200
+    return m3
+
+
+def test_run_report_flow_print_and_client_privacy(api):
+    from app import runreport
+    m3 = _import_imola(api)
+    ms = api.get("/api/rides/reports").json()["meetings"]
+    assert len(ms) == 1 and ms[0]["event"] == "Imola Classic" and ms[0]["cars"][0]["status"] == "none" and ms[0]["cars"][0]["sessions"] == 2
+    mid = ms[0]["meeting"]
+    v = api.get(f"/api/rides/reports/{mid}/{m3}").json()
+    assert [e["date"] for e in v["entries"]] == ["2026-10-17", "2026-10-18"] and v["entries"][1]["timing"]["best"] == "2:21.000" and v["km_total"] == 73.6
+    assert [d["date"] for d in v["days"]] == ["2026-10-17", "2026-10-18"] and v["days"][1]["best"] == "2:21.000" and v["days"][1]["laps"] == 7
+    rid_race = v["entries"][1]["run_id"]
+    body = {"header": {"engineer": "Adam", "type_of_event": "Classic Touring Challenge"}, "general": "- Essayer les R8\n- 4500 tr/min en 3e", "actions_car": "- Setdown", "actions_logistics": "- Acheter un chronomètre",
+            "runs": {rid_race: {"objective": "Course", "tyres_start": ["1.3", "1.4", "1.3", "1.4"], "observations": "1ère place\n65°C pneus ok", "driver_feedback": "Sur-virage en appui", "fuel_l": 70}, "inconnu": {"objective": "x"}},
+            "tyre_sets": [{"set": "S9", "model": "HOOSIER", "laps": 49, "km": 186.2}, {"set": "", "model": ""}], "pressure_base": ""}
+    s = api.put(f"/api/rides/reports/{mid}/{m3}", json=body).json()
+    assert s["status"] == "draft" and "inconnu" not in s["runs"] and len(s["tyre_sets"]) == 1 and s["days"][1]["fuel"] == 70
+    fr = api.get(f"/api/rides/reports/{mid}/{m3}/print").text
+    assert "Synthèse générale" in fr and "HOOSIER" in fr and "Essayer les R8" in fr and "Acheter un chronomètre" in fr and "Brouillon" in fr and "2:21.000" in fr and "P8 → arrivée : P3" in fr and "5/14" in fr and "<svg" in fr
+    assert "General summary" in api.get(f"/api/rides/reports/{mid}/{m3}/print?lang=en").text
+    assert runreport.validated_for_car(m3) == []                                                    # un brouillon n'est pas visible du client
+    assert api.post(f"/api/rides/reports/{mid}/{m3}/validate").json()["status"] == "validated"
+    assert api.put(f"/api/rides/reports/{mid}/{m3}", json=body).status_code == 422                 # validé : verrouillé
+    assert [r["event"] for r in runreport.validated_for_car(m3)] == ["Imola Classic"]
+    cl_html = runreport.print_page(runreport.view(mid, m3), "fr", client=True)
+    assert "Essayer les R8" in cl_html and "Setdown" in cl_html and "Acheter un chronomètre" not in cl_html and "Rapport validé" in cl_html   # la logistique reste interne
+    assert api.post(f"/api/rides/reports/{mid}/{m3}/reopen").json()["status"] == "draft"
+    assert api.get(f"/api/rides/reports/{mid}/zzz").status_code == 404

@@ -51,15 +51,22 @@ function jobsHtml(c) {
     ${j.entries.length ? `<div class="cl-entries">${j.entries.map(e => `<div class="cl-entry"><div class="cl-edate"><b>${fmtD(e.date)}</b><small class="na">${fmtMin(e.minutes)}</small></div><div class="cl-ebody">${e.system || e.assignment ? `<small class="na">${esc([e.assignment, e.system].filter(Boolean).join(' · '))}</small><br>` : ''}${e.text ? `<span class="cl-etext">${esc(e.text)}</span>` : e.text_hidden ? `<small class="na">${esc(tx('Détail non communiqué'))}</small>` : ''}${e.lines.length ? `<ul class="cl-lines">${e.lines.map(l => `<li>☑ ${esc(l)}</li>`).join('')}</ul>` : ''}
       ${e.photos.length ? `<div class="cl-photos">${e.photos.map(p => `<button type="button" class="rd-fthumb cl-ph" data-cl="preview" data-u="${ph(e, p.id)}" data-n="${esc(p.name || '')}" data-pdf="0"><img src="${ph(e, p.id)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}</div></div>`).join('')}</div>` : `<p class="na">${esc(tx('Aucune intervention validée pour le moment.'))}</p>`}</section>`).join('');
 }
+function reportsHtml(c) {
+  if (cl.reports == null) return '<p class="na loading">Chargement…</p>';
+  if (!cl.reports.length) return `<p class="na">${esc(tx('Aucun rapport de roulage pour le moment.'))}</p>`;
+  const u = (r, l) => `/api/client/cars/${encodeURIComponent(c.key)}/reports/${encodeURIComponent(r.meeting)}/print?lang=${l}`;
+  return cl.reports.map(r => `<section class="rn-card"><div class="rn-head"><div><b>${esc(r.event)}</b> <span class="rd-chip">${esc(r.circuit || '')}</span><br><small class="na">${fmtD(r.from)}${r.to !== r.from ? ' → ' + fmtD(r.to) : ''} · ${fmtKm(r.km_total)} km</small></div>
+    <div class="rd-acts"><a class="mini" href="${u(r, LANG === 'en' ? 'en' : 'fr')}" target="_blank" rel="noopener">📄 ${esc(tx('Ouvrir le rapport'))}</a></div></div></section>`).join('');
+}
 function carHtml() {
   const c = cl.car; if (!c) return '<p class="na loading">Chargement…</p>';
   const id = [['chassis', 'N° de châssis'], ['engine_no', 'N° de moteur'], ['gearbox_no', 'N° de boîte de vitesse'], ['livery', 'Couleur / livrée'], ['race_number', 'N° de course habituel']].filter(([k]) => c[k]);
-  const tabs = [['jobs', 'Interventions'], ['docs', 'Documents'], ['runs', 'Roulages']];
+  const tabs = [['jobs', 'Interventions'], ['docs', 'Documents'], ['runs', 'Roulages'], ['reports', 'Rapports']];
   return `<p><a href="#" class="cl-back">← ${esc(tx('Mes voitures'))}</a></p>
     <div class="rd-head">${carThumb(c, true)}<div><h2 class="cl-title">${esc(c.name)}</h2><small class="na">${c.category === 'rally' ? esc(tx('Rallye')) : esc(tx('Circuit'))} · ${fmtKm(c.km_total)} km</small>
     ${id.length ? `<dl class="cl-id">${id.map(([k, l]) => `<div><dt>${esc(tx(l))}</dt><dd>${esc(c[k])}</dd></div>`).join('')}</dl>` : ''}</div></div>
     <div class="bu-filter cl-tabs" role="tablist">${tabs.map(([k, l]) => `<button type="button" class="rs-pill" role="tab" data-cl="tab" data-k="${k}" aria-pressed="${cl.tab === k}">${esc(tx(l))}</button>`).join('')}</div>
-    <div class="cl-pane">${cl.tab === 'jobs' ? jobsHtml(c) : cl.tab === 'docs' ? docsHtml(c) : runsHtml(c)}</div>`;
+    <div class="cl-pane">${cl.tab === 'jobs' ? jobsHtml(c) : cl.tab === 'docs' ? docsHtml(c) : cl.tab === 'reports' ? reportsHtml(c) : runsHtml(c)}</div>`;
 }
 function draw() {
   const el = $c('cl'); if (!el) return;
@@ -70,12 +77,13 @@ function draw() {
 async function route() {
   if (!cl.me) return draw();
   const k = carHash();
-  cl.car = null; cl.jobs = null;
+  cl.car = null; cl.jobs = null; cl.reports = null;
   if (!k) return draw();
   draw();
   try {
     cl.car = await api('/api/client/cars/' + encodeURIComponent(k)); draw();
     cl.jobs = (await api(`/api/client/cars/${encodeURIComponent(k)}/jobs`)).jobs; draw();
+    cl.reports = (await api(`/api/client/cars/${encodeURIComponent(k)}/reports`)).reports; draw();
   } catch (e) { if (e.status === 401) { cl.me = null; cl.err = e.message; } else location.hash = ''; draw(); }
 }
 function lightbox(u, name, pdf) {
@@ -95,7 +103,7 @@ document.addEventListener('click', async e => {
     cl.busy = false; return draw();
   }
   if (b.id === 'cl-prevout') { try { await api('/api/client/logout', {method: 'POST', body: '{}'}); } catch {} window.close(); location.href = '/'; return; }
-  if (b.id === 'cl-out') { try { await api('/api/client/logout', {method: 'POST', body: '{}'}); } catch {} cl.me = cl.car = cl.jobs = null; cl.sent = false; location.hash = ''; return draw(); }
+  if (b.id === 'cl-out') { try { await api('/api/client/logout', {method: 'POST', body: '{}'}); } catch {} cl.me = cl.car = cl.jobs = cl.reports = null; cl.sent = false; location.hash = ''; return draw(); }
   if (b.classList.contains('cl-back')) { e.preventDefault(); location.hash = ''; return; }
   const a = b.dataset.cl;
   if (a === 'tab') { cl.tab = b.dataset.k; return draw(); }

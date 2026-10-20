@@ -545,7 +545,7 @@ def import_batch(body: dict, user: str) -> dict:
         mname = str(m.get("name") or "").strip()
         if not mname:
             raise ValueError("Nom manquant pour une session manuelle")
-        cars = [c for c in (m.get("cars") or []) if c.get("key") and rides.car_of(c["key"])]
+        cars = [c for c in (m.get("cars") or []) if c.get("key") and rides.car_of(c["key"]) and (c.get("laps") or c.get("km"))]      # une voiture sans tour ni km n'a pas roulé
         if not cars:
             continue
         sname = f"{event} — {mname}"[:120]

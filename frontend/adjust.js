@@ -116,7 +116,8 @@ function drawAdjEditor() {
     let body;
     if (a.kind === 'manual') {
       body = `<label>Effet sur la MB (€, + = la MB augmente)<input type="number" step="0.01" data-adj="amount" data-i="${i}" value="${a.amount}"${dis}></label>
-        <label>Date d’effet${dpField(`data-adj="date" data-i="${i}"`, a.date || '', dis)}</label>`;
+        <label>Date d’effet${dpField(`data-adj="date" data-i="${i}"`, a.date || '', dis)}</label>
+        ${a.date ? '' : '<p class="neg" style="flex-basis:100%;margin:0">⚠ Sans date d’effet, cet ajustement n’est pas pris en compte dans la marge.</p>'}`;
     } else {
       const picked = new Set((a.sel || []).map(s => s.id));
       const cands = adjCandidates(a.kind), known = new Set(cands.map(c => c.id));
@@ -161,7 +162,7 @@ document.addEventListener('click', e => {
   else if (t.hasAttribute('data-adjcancel')) { adjDraft = adjClone(adj.items || []); adjDirty = false; adjMsg = ''; drawAdjEditor(); }
 });
 
-document.addEventListener('input', e => {
+function adjOnEdit(e) {
   const t = e.target, f = t.dataset && t.dataset.adj; if (!f || !document.getElementById('adj-editor')) return;
   const a = adjDraft[+t.dataset.i]; if (!a) return;
   if (f === 'sel') {
@@ -177,5 +178,7 @@ document.addEventListener('input', e => {
   adjDirty = true; adjMsg = '';
   const save = document.querySelector('[data-adjsave]'), cancel = document.querySelector('[data-adjcancel]');
   if (save) save.disabled = false; if (cancel) cancel.disabled = false;
-  if (f === 'kind' || f === 'enabled') drawAdjEditor();
-});
+  if (f === 'kind' || f === 'enabled' || (f === 'date' && t.classList.contains('dp-h'))) drawAdjEditor();
+}
+document.addEventListener('input', e => { if (!e.target.classList.contains('dp-h')) adjOnEdit(e); });
+document.addEventListener('change', e => { if (e.target.classList.contains('dp-h')) adjOnEdit(e); });       // le calendrier maison (dpField) déclenche « change » sur son champ caché

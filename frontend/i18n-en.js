@@ -2232,3 +2232,4 @@ Object.assign(EN_T, {
   "Les personnes ajoutées recevront une invitation, les autres une mise à jour.": "Added people will receive an invitation, the others an update.",
   "Aucun e-mail ne sera envoyé (pratique pour régulariser un événement passé).": "No e-mail will be sent (handy to regularise a past event).",
 });
+Object.assign(EN_T, {"⚠ Sans date d’effet, cet ajustement n’est pas pris en compte dans la marge.": "⚠ Without an effective date, this adjustment is not taken into account in the margin."});

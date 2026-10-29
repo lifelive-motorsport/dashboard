@@ -41,8 +41,15 @@ def as_(c, e):
 
 
 def nxt(wd, weeks=2):
-    d = date.today() + timedelta(days=7 * weeks)
-    return d - timedelta(days=d.weekday()) + timedelta(days=wd)
+    """Jour de la semaine `wd` (0 = lundi) d'une semaine à venir SANS jour férié belge : les tests ne dépendent pas de la date du jour."""
+    from app import presence
+    w = weeks
+    while True:
+        d = date.today() + timedelta(days=7 * w)
+        monday = d - timedelta(days=d.weekday())
+        if not any(monday + timedelta(days=i) in presence.holidays_be((monday + timedelta(days=i)).year) for i in range(7)):
+            return monday + timedelta(days=wd)
+        w += 1
 
 
 def req(**kw):

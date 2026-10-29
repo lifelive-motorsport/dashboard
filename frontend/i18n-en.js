@@ -2233,3 +2233,4 @@ Object.assign(EN_T, {
   "Aucun e-mail ne sera envoyé (pratique pour régulariser un événement passé).": "No e-mail will be sent (handy to regularise a past event).",
 });
 Object.assign(EN_T, {"⚠ Sans date d’effet, cet ajustement n’est pas pris en compte dans la marge.": "⚠ Without an effective date, this adjustment is not taken into account in the margin."});
+Object.assign(EN_T, {"Autres écarts avec la comptabilité": "Other differences with the accounts"});

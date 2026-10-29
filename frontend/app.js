@@ -298,14 +298,16 @@ function decompTable(d, cols) {
   const cell = (v, ca, extra = '') => `<td${extra}>${eur(v)}${ca > 0 ? `<br><small class="na">${pct(v / ca)} du CA</small>` : ''}</td>`;
   const sum = o => ['604', '603', '602'].reduce((t, k) => t + ((o.costs || {})[k] || 0), 0);
   const row = (label, fn, cl = '', pctOn = true) => `<tr class="${cl}"><td class="prod">${label}</td>${cols.map(c => { const v = fn(c.o); return pctOn ? cell(v, c.o.ca, v < 0 && cl === 'tot' ? ' class="neg"' : '') : `<td>${eur(v)}</td>`; }).join('')}</tr>`;
-  const adj = cols.some(c => Math.abs(sum(c.o) - c.o.direct_costs) >= 1);
+  const gap = o => sum(o) - o.direct_costs, nz = fn => cols.some(c => Math.abs(fn(c.o)) >= 1);
+  const rows = [nz(o => o._adj || 0) ? row('Ajustements de MB', o => o._adj || 0, '') : '', nz(o => o._stock || 0) ? row('Variation de stock', o => o._stock || 0, '') : ''];
+  if (nz(o => gap(o) - (o._adj || 0) - (o._stock || 0))) rows.push(row('Autres écarts avec la comptabilité', o => gap(o) - (o._adj || 0) - (o._stock || 0), ''));       // écart non expliqué par les deux rubriques ci-dessus
   return table([''].concat(cols.map(c => c.label)), [
     row('<b>Chiffre d’affaires</b> (comptes 700)', o => o.ca, 'tot', false),
     row('Achats de marchandises (604)', o => (o.costs || {})['604'] || 0),
     row('Sous-traitance (603)', o => (o.costs || {})['603'] || 0),
     row('Frais (602)', o => (o.costs || {})['602'] || 0),
     row('<b>Total des coûts directs</b>', o => sum(o), 'tot'),
-    adj ? row('Ajustements de MB', o => sum(o) - o.direct_costs, '') : '',
+    ...rows,
     `<tr class="tot"><td class="prod">Marge brute</td>${cols.map(c => `<td class="${cls(c.o.margin)}">${eur(c.o.margin)}<br><small>${c.o.ca ? pct(c.o.margin / c.o.ca) : '–'}</small></td>`).join('')}</tr>`,
   ].filter(Boolean), 'prodtable decomp') + '<small class="na">Les pourcentages sont rapportés au CA de chaque colonne. Coûts directs = achats de marchandises (604), sous-traitance (603) et frais (602) rattachés à la BU ; le personnel et les véhicules (615) sont exclus.</small>';
 }

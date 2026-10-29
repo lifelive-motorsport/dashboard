@@ -52,9 +52,9 @@ function adjustedData(d) {
   const fx = adjEffects(d), byBu = {};
   fx.forEach(a => { byBu[a.bu] = (byBu[a.bu] || 0) + a.effect; });
   const pnl = adjClone(d.pnl);
-  pnl.bus.forEach(b => { const e = byBu[b.key] || 0; b.direct_costs -= e; b.margin = b.ca - b.direct_costs; });
-  pnl.groups.forEach(g => { const m = pnl.bus.filter(b => b.group === g.key); g.direct_costs = m.reduce((s, b) => s + b.direct_costs, 0); g.margin = g.ca - g.direct_costs; });
-  const t = pnl.total; t.direct_costs = pnl.bus.reduce((s, b) => s + b.direct_costs, 0); t.margin = t.ca - t.direct_costs; t.margin_pct = t.ca ? t.margin / t.ca : 0;
+  pnl.bus.forEach(b => { const e = byBu[b.key] || 0; b.direct_costs -= e; b.margin = b.ca - b.direct_costs; b._adj = e; });
+  pnl.groups.forEach(g => { const m = pnl.bus.filter(b => b.group === g.key); g.direct_costs = m.reduce((s, b) => s + b.direct_costs, 0); g.margin = g.ca - g.direct_costs; g._adj = m.reduce((s, b) => s + b._adj, 0); });
+  const t = pnl.total; t.direct_costs = pnl.bus.reduce((s, b) => s + b.direct_costs, 0); t.margin = t.ca - t.direct_costs; t.margin_pct = t.ca ? t.margin / t.ca : 0; t._adj = pnl.bus.reduce((s, b) => s + b._adj, 0);       // part des ajustements de MB dans l'écart avec les coûts comptables (détail du tableau de décomposition)
   return {...d, pnl, _adj: {items: fx, byBu}};
 }
 

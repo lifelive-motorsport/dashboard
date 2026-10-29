@@ -26,9 +26,9 @@ function svEffects(d) {
 function applyStockVar(d) {
   if (!d || !d.pnl || !stockOn || !sv.loaded) return d;
   const fx = svEffects(d), eff = fx.reduce((t, a) => t + a.effect, 0), pnl = svClone(d.pnl);
-  pnl.bus.forEach(b => { if (b.key === 'XC') { b.direct_costs -= eff; b.margin = b.ca - b.direct_costs; } });
-  pnl.groups.forEach(g => { const m = pnl.bus.filter(b => b.group === g.key); g.direct_costs = m.reduce((s, b) => s + b.direct_costs, 0); g.margin = g.ca - g.direct_costs; });
-  const t = pnl.total; t.direct_costs = pnl.bus.reduce((s, b) => s + b.direct_costs, 0); t.margin = t.ca - t.direct_costs; t.margin_pct = t.ca ? t.margin / t.ca : 0;
+  pnl.bus.forEach(b => { b._stock = 0; if (b.key === 'XC') { b.direct_costs -= eff; b.margin = b.ca - b.direct_costs; b._stock = eff; } });
+  pnl.groups.forEach(g => { const m = pnl.bus.filter(b => b.group === g.key); g.direct_costs = m.reduce((s, b) => s + b.direct_costs, 0); g.margin = g.ca - g.direct_costs; g._stock = m.reduce((s, b) => s + b._stock, 0); });
+  const t = pnl.total; t.direct_costs = pnl.bus.reduce((s, b) => s + b.direct_costs, 0); t.margin = t.ca - t.direct_costs; t.margin_pct = t.ca ? t.margin / t.ca : 0; t._stock = pnl.bus.reduce((s, b) => s + b._stock, 0);
   return {...d, pnl, _stock: {items: fx, effect: eff}};
 }
 // Chiffres affichés : ajustements de MB si activés, puis variations de stock si activées.

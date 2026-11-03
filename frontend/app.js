@@ -272,7 +272,8 @@ const FINANCE = B('finance', 'Position financière (à date)', d => {
   if (split) { const sr = split.reduce((t, r) => t + r[1], 0), sp = split.reduce((t, r) => t + r[2], 0), gr = bank.receivables - sr, gp = bank.payables - sp;
     bu = '<h4 class="sub">Créances et dettes par BU</h4>' + table(['', 'Créances clients', 'Dettes fournisseurs', 'Encours net'], split.map(r => `<tr><td>${esc(r[0])}</td><td>${eur(r[1])}</td><td>${eur(r[2])}</td><td class="${cls(r[1] - r[2])}">${eur(r[1] - r[2])}</td></tr>`)
       .concat([`<tr><td>Non ventilé par BU</td><td>${eur(gr)}</td><td>${eur(gp)}</td><td class="${cls(gr - gp)}">${eur(gr - gp)}</td></tr>`, `<tr class="tot"><td>Total (société)</td><td>${eur(bank.receivables)}</td><td>${eur(bank.payables)}</td><td class="${cls(bank.receivables - bank.payables)}">${eur(bank.receivables - bank.payables)}</td></tr>`]), 'prodtable')
-      + '<small class="na">Les lignes par BU sont celles qu’affiche le filtre BU. « Non ventilé » = écart entre le total de la société et la somme des BU : factures dont aucune ligne n’est rattachée à une BU (frais généraux, immobilisations…) ou sans tiers. Les BU et cet écart totalisent exactement les chiffres du haut.</small>'; }
+      + '<small class="na">Les lignes par BU sont celles qu’affiche le filtre BU. « Non ventilé » = écart entre le total de la société et la somme des BU : factures dont aucune ligne n’est rattachée à une BU (frais généraux, immobilisations…), sans tiers, ou dont la date comptable est postérieure à la période affichée. Les BU et cet écart totalisent exactement les chiffres du haut.</small>'
+      + `<p><button type="button" class="mini" data-gap="rec">${esc(tx('Voir le détail du non ventilé (créances clients)'))}</button></p><div id="gap-detail"></div>`; }
   return `<div class="kpis">${kpi('Trésorerie', eur(d.balance_sheet.cash), cls(d.balance_sheet.cash))
   + kpi('Créances clients', eur(d.balance_sheet.receivables)) + kpi('Dettes fournisseurs', eur(d.balance_sheet.payables))}</div>
   <small class="na">Créances et dettes : montant restant dû des factures validées, non payées ou partiellement payées, dont la date comptable est en ${esc(d.balance_sheet.year)} (critères de « Vendor bills to pay » dans Odoo ; avoirs déduits ; brouillons exclus). Les factures ouvertes d’années antérieures ne sont pas comptées. Trésorerie : solde à date.</small>` + bu; }, true);
@@ -848,3 +849,17 @@ async function alertsBanner() {
   const pass = () => { queued = false; page.querySelectorAll('a[href^="#/"]').forEach(a => { const k = a.getAttribute('href').slice(2).split('?')[0]; if (item(k) && !allowedPage(k)) a.remove(); }); };
   new MutationObserver(() => { if (!queued) { queued = true; queueMicrotask(pass); } }).observe(page, {childList: true, subtree: true});
 })();
+
+// Détail du « non ventilé » des créances clients : les factures ouvertes qui sont dans le total société mais pas dans les lignes par BU, avec la cause.
+const GAP_CAUSES = {after_period: 'Date comptable après la période affichée', before_period: 'Date comptable avant la période affichée', no_partner: 'Sans client (tiers)', no_bu_line: 'Aucune ligne de produit (comptes 700) rattachée à une BU', other_bu: 'BU non affichée dans le tableau'};
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('[data-gap]'); if (!b) return;
+  const el = document.getElementById('gap-detail'); if (!el) return;
+  if (el.dataset.open === '1') { el.innerHTML = ''; el.dataset.open = ''; return; }
+  el.innerHTML = `<p class="na loading">${esc(tx('Chargement…'))}</p>`; el.dataset.open = '1';
+  try {
+    const j = await rsCall('/api/receivables-gap');
+    el.innerHTML = j.rows.length ? table(['Facture', 'Client', 'Date comptable', 'Reste dû', 'Cause'], j.rows.map(r => `<tr><td>${esc(r.number)}${r.credit_note ? ' <small class="na">(' + esc(tx('avoir')) + ')</small>' : ''}</td><td>${esc(r.partner || '—')}</td><td>${fmtDate(r.date)}</td><td class="${cls(r.amount)}">${eur(r.amount)}</td><td>${esc(tx(GAP_CAUSES[r.cause] || r.cause))}${r.detail ? ' <small class="na">' + esc(r.detail) + '</small>' : ''}</td></tr>`)
+      .concat([`<tr class="tot"><td colspan="3">${esc(tx('Total'))}</td><td>${eur(j.total)}</td><td></td></tr>`]), 'prodtable') : `<p class="na">${esc(tx('Aucune facture : le non ventilé vient d’arrondis ou d’avoirs.'))}</p>`;
+  } catch (err) { el.innerHTML = `<p class="neg">${esc(err.message)}</p>`; el.dataset.open = ''; }
+});

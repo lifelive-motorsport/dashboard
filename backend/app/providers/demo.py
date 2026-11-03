@@ -33,6 +33,12 @@ class DemoProvider:
     def balance_sheet(self, year: int) -> dict[str, float]:
         return {"year": year, "receivables": 412_000.0, "payables": 298_000.0, "cash": 187_000.0}
 
+    def receivable_gap(self, d_from: date, d_to: date) -> dict:
+        rows = [{"number": "INV/2026/01900", "partner": "Client Exemple A", "date": d_to.isoformat(), "credit_note": False, "amount": 30_000.0, "cause": "after_period", "detail": ""},
+                {"number": "INV/2026/01012", "partner": "", "date": d_from.isoformat(), "credit_note": False, "amount": 9_000.0, "cause": "no_partner", "detail": ""},
+                {"number": "INV/2026/01044", "partner": "Client Exemple B", "date": d_from.isoformat(), "credit_note": False, "amount": 5_105.0, "cause": "no_bu_line", "detail": ""}]
+        return {"year": d_to.year, "period": {"from": d_from.isoformat(), "to": d_to.isoformat()}, "rows": rows, "total": round(sum(r["amount"] for r in rows), 2)}
+
     def top_clients(self, d_from: date, d_to: date) -> dict:
         rnd = random.Random(7)
         names = [f"Client {c}" for c in "ABCDEFGHIJKLMNOPQRST"]

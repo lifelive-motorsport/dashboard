@@ -2315,6 +2315,21 @@ def _dashboard(date_from, date_to, refresh):
     return result
 
 
+@app.get("/api/receivables-gap")
+def receivables_gap(date_from: date | None = Query(None, alias="from"), date_to: date | None = Query(None, alias="to"), user: str = Depends(require_user)):
+    """Détail du « non ventilé par BU » des créances clients : les factures ouvertes qui sont dans le total société mais pas dans les lignes par BU, avec la cause."""
+    p_ = users.pages_of(user)
+    if not users.is_super(user) and p_ is not None and "overview/ca" not in p_:
+        raise HTTPException(403, "Page réservée aux catégories autorisées")
+    today = date.today()
+    d_from, d_to = date_from or date(today.year, 1, 1), date_to or today
+    try:
+        return provider().receivable_gap(d_from, d_to)
+    except Exception:
+        log.exception("Détail du non ventilé indisponible")
+        raise HTTPException(502, "Détail indisponible pour le moment")
+
+
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
 if FRONTEND.is_dir():
     app.mount("/static", StaticFiles(directory=FRONTEND), name="static")

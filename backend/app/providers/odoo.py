@@ -348,6 +348,48 @@ class OdooProvider:
             d_from, d_to, ["out_invoice", "out_refund"], [("account_id.code", "=like", "700%")], self._bucket_revenue, -1, 1),
             names, "regroup_client", limit, aggregates={"CARS": [b for b, g in BU_GROUP.items() if g == "CARS"]}, moves=moves)
 
+    def receivable_gap(self, d_from: date, d_to: date) -> dict:
+        """Factures et avoirs clients ouverts de l'année qui sont dans le total « société » mais PAS dans les lignes par BU du tableau « Créances et dettes par BU » :
+        client absent, date comptable hors de la période affichée, aucune ligne de produit (comptes 700) classée dans une BU, ou BU non affichée. Lecture seule."""
+        year = d_to.year
+        shown = {"XC", "MODERN_RALLY", "HISTORIC_RACING", "HISTORIC_RALLY", "CARS_OTHERS"}
+        invs = self._call("account.move", "search_read",
+                          domain=[("state", "=", "posted"), ("move_type", "in", ["out_invoice", "out_refund"]),
+                                  ("payment_state", "in", ["not_paid", "partial"]),
+                                  ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")],
+                          fields=["name", "partner_id", "date", "amount_residual_signed", "move_type"])
+        lo, hi = d_from.isoformat(), d_to.isoformat()
+        ids = [x["id"] for x in invs if x["partner_id"] and lo <= x["date"] <= hi]
+        shares: dict[int, dict[str, float]] = {}
+        for k in range(0, len(ids), 400):
+            for r in self._grouped([("move_id", "in", ids[k:k + 400]), ("account_id.code", "=like", "700%")], ["move_id", "account_id"]):
+                b = self._bucket_revenue(r["account_id"][1])
+                if b:
+                    d = shares.setdefault(r["move_id"][0], {})
+                    d[b] = d.get(b, 0.0) - r["balance:sum"]
+        rows = []
+        for inv in invs:
+            amt = float(inv["amount_residual_signed"] or 0.0)
+            base = {"number": inv["name"], "partner": inv["partner_id"][1] if inv["partner_id"] else "", "date": inv["date"], "credit_note": inv["move_type"] == "out_refund"}
+            if not inv["partner_id"]:
+                rows.append({**base, "amount": round(amt, 2), "cause": "no_partner", "detail": ""})
+            elif inv["date"] > hi:
+                rows.append({**base, "amount": round(amt, 2), "cause": "after_period", "detail": ""})
+            elif inv["date"] < lo:
+                rows.append({**base, "amount": round(amt, 2), "cause": "before_period", "detail": ""})
+            else:
+                sh = shares.get(inv["id"]) or {}
+                tot = sum(sh.values())
+                if not tot:
+                    rows.append({**base, "amount": round(amt, 2), "cause": "no_bu_line", "detail": ""})
+                else:
+                    other = {b: v for b, v in sh.items() if b not in shown}
+                    if other:
+                        rows.append({**base, "amount": round(amt * sum(other.values()) / tot, 2), "cause": "other_bu", "detail": ", ".join(sorted(other))})
+        rows = [r for r in rows if abs(r["amount"]) >= 0.5]
+        rows.sort(key=lambda r: -abs(r["amount"]))
+        return {"year": year, "period": {"from": lo, "to": hi}, "rows": rows, "total": round(sum(r["amount"] for r in rows), 2)}
+
     def _non_bill_direct_costs(self, d_from: date, d_to: date) -> dict[str, dict]:
         """Charges directes (comptes 602/603/604 classés par BU) qui NE viennent PAS de lignes de factures fournisseurs avec tiers :
         écritures diverses, provisions / factures à recevoir, notes de frais, paiements directs, lignes sans tiers…

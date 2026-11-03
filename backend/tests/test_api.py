@@ -820,3 +820,13 @@ def test_event_notification_choice():
     assert c.put(f"/api/events/{lbid}", json=_ev(title="Passé", start="2026-01-10", end="2026-01-11", immo_start="2026-01-10", immo_end="2026-01-11")).status_code == 200
     assert [x for x in sent if x[0] == "patch"][-1][2] is True                                      # par défaut on prévient
     c.delete(f"/api/events/{lbid}")
+
+
+def test_receivables_gap_detail_is_served_and_guarded():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    c = TestClient(app)
+    j = c.get("/api/receivables-gap").json()
+    assert {"year", "period", "rows", "total"} <= set(j) and j["rows"] and j["total"] == round(sum(r["amount"] for r in j["rows"]), 2)
+    assert {r["cause"] for r in j["rows"]} <= {"after_period", "before_period", "no_partner", "no_bu_line", "other_bu"}
+    assert c.get("/api/receivables-gap", params={"from": "2026-01-01", "to": "2026-11-03"}).status_code == 200

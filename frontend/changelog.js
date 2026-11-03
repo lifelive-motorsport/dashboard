@@ -1,5 +1,10 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Novembre 2026', title: 'Analyse de la situation', tag: 'Piloter', items: [
+    'Nouvelle page « Vue d’ensemble › Analyse » : à chaque ouverture, une synthèse calculée sur les chiffres du moment : tendance générale, tendance par BU et points d’attention (marges, créances et dettes, trésorerie, concentration clients, marge nette).',
+    'La comparaison avec 2025 porte sur le CA de la société ; la tendance par BU compare les 3 derniers mois aux 3 mois précédents.',
+    'Chiffre d’affaires : le « non ventilé » des créances clients se détaille facture par facture.',
+  ]},
   {date: 'Octobre 2026', title: 'Stock de pneus', tag: 'Opérer', items: [
     'Nouvelle page « Pneus » : les trains de pneus de chaque voiture (référence, marque, modèle, dimensions, gomme, état, limites de vie).',
     'On indique le train utilisé quand on associe une voiture à un roulage ou à l’import Al Kamel : kilomètres, tours et cycles de chauffe du train se calculent tout seuls, avec alerte en fin de vie.',

@@ -530,3 +530,6 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 
 .pe-notify{margin:18px 0 6px;padding:12px 14px;border:1px solid var(--line);border-left:4px solid var(--grn);border-radius:10px;background:var(--card,transparent)}
 .pe-notify.off{border-left-color:var(--red)}.pe-notify .chk{font-size:15px;margin:0}.pe-notify small{display:block;margin:4px 0 0 26px;opacity:.8}
+
+.an-list{list-style:none;margin:6px 0 10px;padding:0;text-align:left}.an-list li{padding:7px 10px;margin:4px 0;border-left:4px solid var(--line);border-radius:6px;background:var(--card,transparent)}
+.an-list .an-ic{display:inline-block;width:22px}.an-bad{border-left-color:var(--neg)!important}.an-warn{border-left-color:#e0a100!important}.an-good{border-left-color:var(--grn)!important}.an-foot{margin-top:14px}

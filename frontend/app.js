@@ -13,7 +13,7 @@ let role = 'full', superUser = false, pagesList = null, workshopRole = null;    
 const workshopOk = k => !WORKSHOP_ONLY.has(k) || superUser || workshopRole === 'chef' || workshopRole === 'coordinator';
 const allowedPage = k => k === 'home/welcome' || (workshopOk(k) && (!SUPER_ONLY.has(k) || superUser) && (!GRANT_ONLY.has(k) || superUser || (pagesList && pagesList.has(k))) && (!pagesList || pagesList.has(k) || (superUser && !pagesList)));
 const homePage = () => !superUser && pagesList && pagesList.size === 1 && pagesList.has('consigner/wall') ? 'consigner/wall' : 'home/welcome';      // compte « Kiosque » : il ouvre directement l'écran atelier
-const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
+const needsAdj = () => !pagesList || ['overview/mb', 'overview/nm', 'overview/xcvscars', 'overview/adjustments', 'overview/analysis', 'xc/general', 'xc/lignes', 'cars/general', 'cars/bu'].some(k => pagesList.has(k));
 const setSession = sj => { me = {name: sj.name || '', first: sj.first || '', profile: sj.profile || '', email: sj.email || ''}; role = sj.role || 'full'; superUser = !!sj.super; workshopRole = sj.workshop_role || null; pagesList = sj.pages ? new Set(sj.pages) : null; buEnforce(); viewAs(sj.viewing_as); };
 // Bandeau « Voir comme » : toujours visible tant qu'un Super User agit avec les droits d'un autre utilisateur
 function viewAs(v) {
@@ -26,7 +26,7 @@ function viewAs(v) {
 // ---- Menu (id de page = « rubrique/élément ») ----------------------------------------------
 const MENU = [
   ['home', 'Accueil', [['welcome','Accueil']]],
-  ['overview', 'Vue d’ensemble', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB']]],
+  ['overview', 'Vue d’ensemble', [['ca','Chiffre d’affaires'], ['mb','Marge brute'], ['nm','Marge nette'], ['xcvscars','XC vs CARS'], ['clients','Clients'], ['suppliers','Fournisseurs'], ['adjustments','Ajustements MB'], ['analysis','Analyse']]],
   ['xc', 'Détail XC', [['general','Général'], ['lignes','Par ligne d’activité'], ['webshop_xc','XC Webshop'], ['webshop_gs','Goldspeed EAX Webshop'], ['events','Par événement'], ['inventory','Stock'], ['margins','Contrôle des marges s/ produits'], ['tn11','Contrôle des marges s/ TN11']]],
   ['cars', 'Détail CARS', [['general','Général'], ['bu','Par BU'], ['events','Par événement'], ['vehicles','Par véhicule']]],
   ['staff', 'Coûts du personnel', [['source','Données source'], ['people','Imputation du personnel'], ['general','Général'], ['xc','XC'], ['cars','CARS'], ['shared','Shared Services'], ['management','Management']]],
@@ -37,7 +37,7 @@ const MENU = [
   ['consigner', 'Consigner', [['timesheets','Ma semaine'], ['team','Équipe'], ['jobs','Jobs'], ['leaves','Congés'], ['absences','Absences'], ['wall','Cockpit'], ['rides','Garage'], ['parts','Magasin de pièces'], ['tyres','Pneus'], ['runs','Roulages'], ['runreports','Run reports'], ['consumables','Consommables'], ['job_models','Modèles de jobs'], ['form_models','Modèles de formulaires'], ['arch_models','Modèles d’architecture voiture']]],
   ['others', 'Administrer', [['tags','Tags Odoo'], ['users','Utilisateurs'], ['clients','Accès clients'], ['history','Historique']]],
 ];
-const LIVE = new Set(['home/welcome','consigner/leaves','consigner/absences','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','consigner/runreports','consigner/tyres','consigner/job_models','consigner/form_models','consigner/arch_models','others/history','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
+const LIVE = new Set(['home/welcome','overview/analysis','consigner/leaves','consigner/absences','consigner/timesheets','consigner/team','consigner/jobs','consigner/wall','consigner/rides','consigner/parts','consigner/runs','consigner/runreports','consigner/tyres','consigner/job_models','consigner/form_models','consigner/arch_models','others/history','planifier/planning','planifier/res_staff','planifier/res_ext','planifier/res_veh','planifier/events','xc/events','cars/events','cars/vehicles','overview/ca','overview/mb','overview/nm','overview/clients','overview/suppliers','overview/xcvscars','overview/adjustments','xc/inventory','xc/margins','xc/tn11','marketing/site','marketing/expenses','others/tags','others/users','others/clients','expenses/source','expenses/general','expenses/rules','vehicles/source','vehicles/general','vehicles/byvehicle','vehicles/fuel','staff/source','staff/people','staff/general','staff/xc','staff/cars','staff/shared','staff/management','xc/general','xc/lignes','xc/webshop_xc','xc/webshop_gs','cars/general','cars/bu','vehicles/usage']);
 
 // Pages en construction : ce qu'elles afficheront et ce qu'il faut pour les alimenter.
 const PLAN = {
@@ -497,6 +497,7 @@ const PAGES = {
     ...(buSel === 'cars' ? [B('suppliers_oth', 'Hit-parade fournisseurs · CARS Others', d => suppliers(d, ALL_SUPPLIERS, {hideTabs: true, force: 'CARS_OTHERS'}))] : []),
   ],
   'overview/adjustments': () => adjPageBlocks(),
+  'overview/analysis': () => analysisBlocks(),
   'xc/inventory': () => stockBlocks().concat(stockVarBlocks()),
   'xc/margins': () => marginsBlocks(),
   'xc/tn11': () => tn11Blocks(),
@@ -671,6 +672,7 @@ function render(force) {
   $('page').innerHTML = PAGES[key] ? blocks.map(blockHTML).join('') : soon(key);
   blocks.forEach(b => { if (!b.static && (force || !fresh(b.fixed ? 'ytd' : periodOf(bkey(b))))) fillBlock(b, force); });  // données périmées : affichées, puis rafraîchies
   if (key === 'overview/adjustments') drawAdjEditor();
+  if (key === 'overview/analysis') anLoad();
   if (key === 'xc/inventory') { drawStockVar(); loadStock(!!force).then(drawStock); }
   if (key === 'home/welcome') homeDraw();
   if (key === 'xc/tn11') drawTn11();

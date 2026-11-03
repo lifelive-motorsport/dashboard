@@ -81,3 +81,9 @@ def test_alkamel_import_with_tyres_and_run_report_table(api):
     assert v["tyres_auto"][0]["ref"] == "S9" and v["tyres_auto"][0]["laps"] == 15 and v["tyres_auto"][0]["total_km"] == s9["km"]
     page = api.get(f"/api/rides/reports/{mid}/{m3}/print").text
     assert "Hoosier R8" in page and "Km (total du set)" in page
+
+
+def test_circuit_car_in_meeting_space_category():
+    from app import resources
+    assert resources.categorize({"name": "Aston Martin GT4", "type": "Circuit", "category": "CONFERENCE_ROOM"}) == "circuit"
+    assert resources.categorize({"name": "Salle", "type": "Meeting room", "category": "CONFERENCE_ROOM"}) is None

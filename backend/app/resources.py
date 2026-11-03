@@ -117,6 +117,9 @@ HIDDEN = re.compile(r"meeting|conference|salle", re.I)                     # sal
 def categorize(row: dict) -> str | None:
     """Identifiant de catégorie ('other' si inconnue), ou None si la ressource ne doit pas apparaître (salle de réunion)."""
     typ = (row.get("type") or "").strip().lower()
+    for cid, _label, types in CATEGORIES:                                  # un type connu (ex. « Circuit ») l'emporte sur la catégorie Google « Meeting space »
+        if typ in types:
+            return cid
     if HIDDEN.search(typ) or (row.get("category") or "").upper() == "CONFERENCE_ROOM":
         return None
     name = re.sub(r"^[\s(\[]+", "", (row.get("name") or "").lower())

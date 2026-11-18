@@ -2246,5 +2246,5 @@ Object.assign(EN_T, {
   'Répartition des ETP imputés': 'Allocated FTE by BU',
   'Événements indisponibles': 'Events unavailable',
   'ETP : données du personnel réservées aux administrateurs.': 'FTE: staff data is restricted to administrators.',
-  'Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.': 'Events = analytic accounts of the Odoo events axis with entries in the period, classed under the main BU of the BU axis. FTE = sum of the allocation % of active employees, excluding Shared Services and Management.',
+  'Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel actif (salariés et indépendants), comme dans Coûts du personnel › XC / CARS ; hors Shared Services et Management.': 'Events = analytic accounts of the Odoo events axis with entries in the period, classed under the main BU of the BU axis. FTE = sum of the allocation % of active staff (employees and contractors), as in Staff costs › XC / CARS; excluding Shared Services and Management.',
 });

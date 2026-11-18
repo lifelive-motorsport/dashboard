@@ -287,7 +287,7 @@ function xvcActHtml(d) {
   const evd = d.events, list = evd && !evd.unavailable ? evd.events : null;
   const main = e => { const m = e.bus && e.bus[0] ? Object.keys(XVC_LABEL).find(k => XVC_LABEL[k] === e.bus[0].bu) : null; return m || (e.group === 'XC' ? 'XC' : null); };
   const ev = list ? list.filter(e => keys.includes(main(e))) : null;
-  const staff = sd.loaded && !sd.restricted && sd.doc ? sd.doc.people.filter(p => p.active && p.kind === 'salarie') : null;
+  const staff = sd.loaded && !sd.restricted && sd.doc ? sd.doc.people.filter(p => p.active) : null;
   const side = ks => ({e: ev ? ev.filter(e => ks.includes(main(e))).length : null, f: staff ? staff.reduce((t, p) => t + ks.reduce((u, k) => u + (+(p.alloc || {})[k] || 0), 0) / 100, 0) : null});
   const carsKeys = keys.filter(k => k !== 'XC'), x = side(['XC']), c = side(carsKeys), lab = buIsCars(buSel) && buSel !== 'cars' ? BU_PNL_LABEL[buSel] : 'CARS';
   const show = (v, fmt) => v == null ? '–' : fmt(v), num1 = v => num(Math.round(v * 10) / 10);
@@ -296,7 +296,7 @@ function xvcActHtml(d) {
   const evG = ev ? split(k => ev.filter(e => main(e) === k).length, v => num(v) + ' ' + tx('événements')) : '', ftG = staff ? split(k => staff.reduce((t, p) => t + (+(p.alloc || {})[k] || 0), 0) / 100, v => num1(v) + ' ' + tx('ETP')) : '';
   const msg = !list ? `<small class="na">${esc(tx('Événements indisponibles'))} : ${esc(evd && evd.unavailable || '')}</small><br>` : staff ? '' : `<small class="na">${esc(tx('ETP : données du personnel réservées aux administrateurs.'))}</small><br>`;
   return `<div class="two">${cards}</div>${evG ? `<h4 class="sub">${esc(tx('Répartition des événements'))}</h4>${evG}` : ''}${ftG ? `<h4 class="sub">${esc(tx('Répartition des ETP imputés'))}</h4>${ftG}` : ''}<br>${msg}`
-    + `<small class="na">${esc(tx('Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.'))}</small>`;
+    + `<small class="na">${esc(tx('Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel actif (salariés et indépendants), comme dans Coûts du personnel › XC / CARS ; hors Shared Services et Management.'))}</small>`;
 }
 function xvcActivity(d) { setTimeout(xvcActLoad, 0); return `<div id="xvc-act">${xvcActHtml(d)}</div>`; }
 const BU_OPEN_KEY = {xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};

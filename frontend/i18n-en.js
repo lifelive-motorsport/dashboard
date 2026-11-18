@@ -2236,3 +2236,14 @@ Object.assign(EN_T, {"⚠ Sans date d’effet, cet ajustement n’est pas pris e
 Object.assign(EN_T, {"Autres écarts avec la comptabilité": "Other differences with the accounts"});
 Object.assign(EN_T, {"Voir le détail du non ventilé (créances clients)": "See the unallocated detail (customer receivables)", "Date comptable après la période affichée": "Accounting date after the displayed period", "Date comptable avant la période affichée": "Accounting date before the displayed period", "Sans client (tiers)": "No customer (partner)", "Aucune ligne de produit (comptes 700) rattachée à une BU": "No revenue line (accounts 700) assigned to a BU", "BU non affichée dans le tableau": "BU not shown in the table", "Aucune facture : le non ventilé vient d’arrondis ou d’avoirs.": "No invoice: the unallocated amount comes from rounding or credit notes.", "avoir": "credit note", "Date comptable": "Accounting date", "Reste dû": "Amount due", "Cause": "Cause"});
 Object.assign(EN_T, {"Les lignes par BU sont celles qu’affiche le filtre BU. « Non ventilé » = écart entre le total de la société et la somme des BU : factures dont aucune ligne n’est rattachée à une BU (frais généraux, immobilisations…), sans tiers, ou dont la date comptable est postérieure à la période affichée. Les BU et cet écart totalisent exactement les chiffres du haut.": "The BU lines are those shown by the BU filter. “Unallocated” = difference between the company total and the sum of the BUs: invoices with no line linked to a BU (overheads, fixed assets…) or without a third party, or whose accounting date is after the displayed period. The BUs and this difference add up exactly to the figures above."});
+
+Object.assign(EN_T, {
+  'Activité et ressources : XC vs CARS': 'Activity and resources: XC vs CARS',
+  'événements': 'events',
+  'ETP imputés': 'FTE allocated',
+  'Répartition des événements': 'Events by BU',
+  'Répartition des ETP imputés': 'Allocated FTE by BU',
+  'Événements indisponibles': 'Events unavailable',
+  'ETP : données du personnel réservées aux administrateurs.': 'FTE: staff data is restricted to administrators.',
+  'Événements des agendas Google de la période (transports exclus). ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.': 'Events from the Google calendars for the period (transports excluded). FTE = sum of the allocation % of active employees, excluding Shared Services and Management.',
+});

@@ -1,5 +1,9 @@
 // Journal des nouveautés affiché sur la page d'accueil (les plus récentes en premier). À compléter à chaque ajout important de section ou de fonctionnalité.
 const CHANGELOG = [
+  {date: 'Novembre 2026', title: 'XC vs CARS : couleurs des BU, événements et ETP', tag: 'Piloter', items: [
+    'Les jauges du CA et de la marge brute reprennent les couleurs de chaque BU (XC, Modern Rally, Historic Rally, Historic Racing) selon leur contribution.',
+    'Nouveau bloc « Activité et ressources » : nombre d’événements de la période et ETP imputés, XC face à CARS, avec leur répartition par BU.',
+  ]},
   {date: 'Novembre 2026', title: 'Analyse de la situation', tag: 'Piloter', items: [
     'Nouvelle page « Vue d’ensemble › Analyse » : à chaque ouverture, une synthèse calculée sur les chiffres du moment : tendance générale, tendance par BU et points d’attention (marges, créances et dettes, trésorerie, concentration clients, marge nette).',
     'La comparaison avec 2025 porte sur le CA de la société ; la tendance par BU compare les 3 derniers mois aux 3 mois précédents.',

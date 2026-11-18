@@ -257,6 +257,48 @@ const BU_TAB = {all: 'total', xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: '
 const buSyncTabs = () => { tab = tabS = BU_TAB[buSel] || 'total'; };
 // Page « XC vs CARS » : quand une BU CARS précise est choisie, on compare XC à cette BU (sinon XC à l'ensemble CARS)
 const xvcSide = d => buIsCars(buSel) && buSel !== 'cars' ? buScope(d) : {...grp(d, 'CARS'), label: 'CARS'};
+// Jauges XC vs CARS : une couleur par BU (XC rouge, puis les BU de CARS selon leur contribution)
+const XVC_COL = () => ({XC: BUS.xc.color, MODERN_RALLY: buDark() ? '#6F8FD6' : BUS.mr.color, HISTORIC_RACING: BUS.hrc.color, HISTORIC_RALLY: BUS.hrl.color, CARS_OTHERS: 'var(--mut)'});
+const XVC_LABEL = {XC: 'XC', MODERN_RALLY: 'Modern Rally', HISTORIC_RACING: 'Historic Racing', HISTORIC_RALLY: 'Historic Rally', CARS_OTHERS: 'CARS Others'};
+function xvcParts(d, field) {          // [{v, label, color}] : XC puis la ou les BU du côté CARS (ordre : XC, Modern Rally, Historic Rally, Historic Racing, CARS Others)
+  const col = XVC_COL(), keys = buIsCars(buSel) && buSel !== 'cars' ? BU_KEYS[buSel] : ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'];
+  const val = k => k === 'XC' ? grp(d, 'XC')[field] : (d.pnl.bus.find(b => b.key === k) || {})[field] || 0;
+  return ['XC', ...keys].map(k => ({v: val(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v || i.label === 'XC');
+}
+const xvcGauge = items => { const t = items.reduce((a, i) => a + i.v, 0) || 1;
+  return `<div class="stack">${items.map(i => `<div style="width:${i.v / t * 100}%;background:${i.color}"></div>`).join('')}</div><small class="na">${items.map(i => `${esc(i.label)} ${pct(i.v / t)}`).join(' · ')}</small>`; };
+// Événements (agendas Google, période du bloc) et ETP imputés (fiches du personnel) : chargés après coup
+const xvcAct = {key: null, events: null, err: null, loading: false};
+async function xvcPlanning(f, t) {        // /api/planning accepte 130 jours au plus : on découpe la période
+  const out = new Map(); let a = new Date(f + 'T12:00:00'); const end = new Date(t + 'T12:00:00');
+  while (a <= end) { const b = new Date(Math.min(end, new Date(a.getTime() + 119 * 864e5)));
+    (await rsCall(`/api/planning?from=${ymd(a)}&to=${ymd(b)}`)).events.forEach(e => out.set(e.id, e)); a = new Date(b.getTime() + 864e5); }
+  return [...out.values()];
+}
+function xvcActLoad(f, t) {
+  const k = f + '|' + t; if (xvcAct.key === k) return;
+  xvcAct.loading = true; xvcAct.key = k; xvcAct.events = null; xvcAct.err = null;
+  Promise.all([xvcPlanning(f, t).then(ev => { if (xvcAct.key === k) xvcAct.events = ev; }).catch(e => { if (xvcAct.key === k) xvcAct.err = e.message; }), sd.loaded ? 0 : sdLoad().catch(() => {})])
+    .finally(() => { if (xvcAct.key !== k) return; xvcAct.loading = false; const el = document.getElementById('xvc-act'); if (el) el.innerHTML = xvcActHtml(); });
+}
+function xvcActHtml() {
+  const col = XVC_COL(), keys = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING'].filter(k => k === 'XC' || !buIsCars(buSel) || buSel === 'cars' || BU_KEYS[buSel].includes(k));
+  const ev = xvcAct.events ? xvcAct.events.filter(e => !e.transport && keys.includes(e.bu)) : null;
+  const staff = sd.loaded && !sd.restricted && sd.doc ? sd.doc.people.filter(p => p.active && p.kind === 'salarie') : null;
+  const side = (ks) => ({e: ev ? ev.filter(e => ks.includes(e.bu)).length : null, f: staff ? staff.reduce((t, p) => t + ks.reduce((u, k) => u + (+(p.alloc || {})[k] || 0), 0) / 100, 0) : null});
+  const carsKeys = keys.filter(k => k !== 'XC'), x = side(['XC']), c = side(carsKeys), lab = buIsCars(buSel) && buSel !== 'cars' ? BU_PNL_LABEL[buSel] : 'CARS';
+  const show = (v, fmt) => v == null ? '–' : fmt(v), num1 = v => num(Math.round(v * 10) / 10);
+  const cards = [['XC Cross Car', x], [lab, c]].map(([l, o]) => kpi(l, show(o.e, v => num(v)), '', esc(tx('événements')) + ' · ' + show(o.f, num1) + ' ' + esc(tx('ETP imputés')))).join('');
+  const split = (field, fmt) => { const items = keys.map(k => ({v: field(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v > 0); return items.length ? xvcGauge(items) : ''; };
+  const evG = ev ? split(k => ev.filter(e => e.bu === k).length) : '', ftG = staff ? split(k => staff.reduce((t, p) => t + (+(p.alloc || {})[k] || 0), 0)) : '';
+  const msg = xvcAct.err ? `<small class="na">${esc(tx('Événements indisponibles'))} : ${esc(xvcAct.err)}</small>` : staff ? '' : `<small class="na">${esc(tx('ETP : données du personnel réservées aux administrateurs.'))}</small>`;
+  return `<div class="two">${cards}</div>${evG ? `<h4 class="sub">${esc(tx('Répartition des événements'))}</h4>${evG}` : ''}${ftG ? `<h4 class="sub">${esc(tx('Répartition des ETP imputés'))}</h4>${ftG}` : ''}${msg}`
+    + `<br><small class="na">${esc(tx('Événements des agendas Google de la période (transports exclus). ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.'))}</small>`;
+}
+function xvcActivity() {
+  const [f, t] = periodRange(periodOf(current.key + ':cmpact')); setTimeout(() => xvcActLoad(f, t), 0);
+  return `<div id="xvc-act">${xvcAct.key === f + '|' + t && !xvcAct.loading ? xvcActHtml() : '<p class="na loading">Chargement…</p>'}</div>`;
+}
 const BU_OPEN_KEY = {xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};
 const FINANCE = B('finance', 'Position financière (à date)', d => {
   if (buSel !== 'all') {              // par BU : la trésorerie (comptes bancaires) n'est pas ventilable ; créances et dettes = encours des factures de l'année, répartis par BU
@@ -544,15 +586,15 @@ const PAGES = {
   'marketing/site': () => gaBlocks('site', {pages: true, geo: true}).concat([NOTE('Trafic du site vitrine lifelive-motorsport.com (toutes les pages, boutique comprise) d’après Google Analytics. Les visiteurs qui refusent les cookies ne sont pas comptés ; les chiffres sont fiables pour comparer des périodes entre elles. Les webshops XC et Goldspeed ont leur propre analyse dans Détail XC.')]),
   'overview/xcvscars': () => [BU_BAR(), ...PAGES['xcvscars/ca'](), ...PAGES['xcvscars/mb']()],
   'xcvscars/ca': () => [
-    B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d), tot = x.ca + c.ca || 1;
-      return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi(c.label, eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>
-      <div class="stack"><div style="width:${x.ca / tot * 100}%;background:var(--red)"></div><div style="width:${c.ca / tot * 100}%;background:var(--mut)"></div></div>
-      <small class="na">Rouge : XC — gris : ${esc(c.label)} (hors « Non affecté », ${eur(grp(d,'OTHER').ca)})</small>`; }),
+    B('cmp', 'CA : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d), tot = x.ca + c.ca || 1, parts = xvcParts(d, 'ca');
+      return `<div class="two">${kpi('XC Cross Car', eur(x.ca), '', pct(x.ca / tot) + ' du CA')}${kpi(c.label, eur(c.ca), '', pct(c.ca / tot) + ' du CA')}</div>`
+      + xvcGauge(parts.filter(i => i.v > 0)) + `<br><small class="na">Hors « Non affecté » (${eur(grp(d,'OTHER').ca)})</small>`; }),
   ],
   'xcvscars/mb': () => [
     B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d);
       return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi(c.label, eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
-      + signedGauge([{v: x.margin, label: 'XC', color: 'var(--red)'}, {v: c.margin, label: c.label, color: 'var(--mut)'}]) + `<small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
+      + signedGauge(xvcParts(d, 'margin')) + `<br><small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
+    B('cmpact', 'Activité et ressources : XC vs CARS', d => xvcActivity(), false),
     B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow(xvcSide(d).label, xvcSide(d))])),
   ],
   'xc/general': () => [

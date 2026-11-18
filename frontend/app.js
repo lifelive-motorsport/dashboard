@@ -265,40 +265,40 @@ function xvcParts(d, field) {          // [{v, label, color}] : XC puis la ou le
   const val = k => k === 'XC' ? grp(d, 'XC')[field] : (d.pnl.bus.find(b => b.key === k) || {})[field] || 0;
   return ['XC', ...keys].map(k => ({v: val(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v || i.label === 'XC');
 }
-const xvcGauge = items => { const t = items.reduce((a, i) => a + i.v, 0) || 1;
-  return `<div class="stack">${items.map(i => `<div style="width:${i.v / t * 100}%;background:${i.color}"></div>`).join('')}</div><small class="na">${items.map(i => `${esc(i.label)} ${pct(i.v / t)}`).join(' · ')}</small>`; };
-// Événements (agendas Google, période du bloc) et ETP imputés (fiches du personnel) : chargés après coup
-const xvcAct = {key: null, events: null, err: null, loading: false};
-async function xvcPlanning(f, t) {        // /api/planning accepte 130 jours au plus : on découpe la période
-  const out = new Map(); let a = new Date(f + 'T12:00:00'); const end = new Date(t + 'T12:00:00');
-  while (a <= end) { const b = new Date(Math.min(end, new Date(a.getTime() + 119 * 864e5)));
-    (await rsCall(`/api/planning?from=${ymd(a)}&to=${ymd(b)}`)).events.forEach(e => out.set(e.id, e)); a = new Date(b.getTime() + 864e5); }
-  return [...out.values()];
+const xvcGauge = (items, fmt = eur) => { const t = items.reduce((a, i) => a + i.v, 0) || 1;
+  return `<div class="stack">${items.map(i => `<div data-tip="${esc(i.label)} · ${esc(fmt(i.v))} · ${pct(i.v / t)}" style="width:${i.v / t * 100}%;background:${i.color}"></div>`).join('')}</div><small class="na">${items.map(i => `${esc(i.label)} ${pct(i.v / t)}`).join(' · ')}</small>`; };
+// Étiquette au survol d'un segment de jauge (attribut data-tip)
+(() => { let tip = null;
+  const hide = () => { if (tip) { tip.remove(); tip = null; } };
+  document.addEventListener('mouseover', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (!el) return hide();
+    if (!tip) { tip = document.createElement('div'); tip.className = 'tip'; document.body.appendChild(tip); }
+    tip.textContent = el.dataset.tip; const r = el.getBoundingClientRect(), w = tip.offsetWidth;
+    tip.style.left = Math.max(6, Math.min(innerWidth - w - 6, r.left + r.width / 2 - w / 2)) + 'px'; tip.style.top = (r.top - tip.offsetHeight - 8) + 'px'; });
+  document.addEventListener('scroll', hide, true); })();
+// Événements = comptes analytiques de l'axe MEETING / EVENTS d'Odoo ayant des écritures sur la période (d.events), classés dans la BU principale de l'axe BU ;
+// ETP imputés = fiches du personnel (chargées après coup)
+const xvcAct = {loading: false};
+function xvcActLoad() {
+  if (sd.loaded || xvcAct.loading) return; xvcAct.loading = true;
+  sdLoad().catch(() => {}).finally(() => { xvcAct.loading = false; const el = document.getElementById('xvc-act'), c = anyData(); if (el && c) el.innerHTML = xvcActHtml(viewData(cached(periodOf(current.key + ':cmpact')) || c)); });
 }
-function xvcActLoad(f, t) {
-  const k = f + '|' + t; if (xvcAct.key === k) return;
-  xvcAct.loading = true; xvcAct.key = k; xvcAct.events = null; xvcAct.err = null;
-  Promise.all([xvcPlanning(f, t).then(ev => { if (xvcAct.key === k) xvcAct.events = ev; }).catch(e => { if (xvcAct.key === k) xvcAct.err = e.message; }), sd.loaded ? 0 : sdLoad().catch(() => {})])
-    .finally(() => { if (xvcAct.key !== k) return; xvcAct.loading = false; const el = document.getElementById('xvc-act'); if (el) el.innerHTML = xvcActHtml(); });
-}
-function xvcActHtml() {
+function xvcActHtml(d) {
   const col = XVC_COL(), keys = ['XC', 'MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING'].filter(k => k === 'XC' || !buIsCars(buSel) || buSel === 'cars' || BU_KEYS[buSel].includes(k));
-  const ev = xvcAct.events ? xvcAct.events.filter(e => !e.transport && keys.includes(e.bu)) : null;
+  const evd = d.events, list = evd && !evd.unavailable ? evd.events : null;
+  const main = e => { const m = e.bus && e.bus[0] ? Object.keys(XVC_LABEL).find(k => XVC_LABEL[k] === e.bus[0].bu) : null; return m || (e.group === 'XC' ? 'XC' : null); };
+  const ev = list ? list.filter(e => keys.includes(main(e))) : null;
   const staff = sd.loaded && !sd.restricted && sd.doc ? sd.doc.people.filter(p => p.active && p.kind === 'salarie') : null;
-  const side = (ks) => ({e: ev ? ev.filter(e => ks.includes(e.bu)).length : null, f: staff ? staff.reduce((t, p) => t + ks.reduce((u, k) => u + (+(p.alloc || {})[k] || 0), 0) / 100, 0) : null});
+  const side = ks => ({e: ev ? ev.filter(e => ks.includes(main(e))).length : null, f: staff ? staff.reduce((t, p) => t + ks.reduce((u, k) => u + (+(p.alloc || {})[k] || 0), 0) / 100, 0) : null});
   const carsKeys = keys.filter(k => k !== 'XC'), x = side(['XC']), c = side(carsKeys), lab = buIsCars(buSel) && buSel !== 'cars' ? BU_PNL_LABEL[buSel] : 'CARS';
   const show = (v, fmt) => v == null ? '–' : fmt(v), num1 = v => num(Math.round(v * 10) / 10);
   const cards = [['XC Cross Car', x], [lab, c]].map(([l, o]) => kpi(l, show(o.e, v => num(v)), '', esc(tx('événements')) + ' · ' + show(o.f, num1) + ' ' + esc(tx('ETP imputés')))).join('');
-  const split = (field, fmt) => { const items = keys.map(k => ({v: field(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v > 0); return items.length ? xvcGauge(items) : ''; };
-  const evG = ev ? split(k => ev.filter(e => e.bu === k).length) : '', ftG = staff ? split(k => staff.reduce((t, p) => t + (+(p.alloc || {})[k] || 0), 0)) : '';
-  const msg = xvcAct.err ? `<small class="na">${esc(tx('Événements indisponibles'))} : ${esc(xvcAct.err)}</small>` : staff ? '' : `<small class="na">${esc(tx('ETP : données du personnel réservées aux administrateurs.'))}</small>`;
-  return `<div class="two">${cards}</div>${evG ? `<h4 class="sub">${esc(tx('Répartition des événements'))}</h4>${evG}` : ''}${ftG ? `<h4 class="sub">${esc(tx('Répartition des ETP imputés'))}</h4>${ftG}` : ''}${msg}`
-    + `<br><small class="na">${esc(tx('Événements des agendas Google de la période (transports exclus). ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.'))}</small>`;
+  const split = (field, fmt) => { const items = keys.map(k => ({v: field(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v > 0); return items.length ? xvcGauge(items, fmt) : ''; };
+  const evG = ev ? split(k => ev.filter(e => main(e) === k).length, v => num(v) + ' ' + tx('événements')) : '', ftG = staff ? split(k => staff.reduce((t, p) => t + (+(p.alloc || {})[k] || 0), 0) / 100, v => num1(v) + ' ' + tx('ETP')) : '';
+  const msg = !list ? `<small class="na">${esc(tx('Événements indisponibles'))} : ${esc(evd && evd.unavailable || '')}</small><br>` : staff ? '' : `<small class="na">${esc(tx('ETP : données du personnel réservées aux administrateurs.'))}</small><br>`;
+  return `<div class="two">${cards}</div>${evG ? `<h4 class="sub">${esc(tx('Répartition des événements'))}</h4>${evG}` : ''}${ftG ? `<h4 class="sub">${esc(tx('Répartition des ETP imputés'))}</h4>${ftG}` : ''}<br>${msg}`
+    + `<small class="na">${esc(tx('Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel salarié actif, hors Shared Services et Management.'))}</small>`;
 }
-function xvcActivity() {
-  const [f, t] = periodRange(periodOf(current.key + ':cmpact')); setTimeout(() => xvcActLoad(f, t), 0);
-  return `<div id="xvc-act">${xvcAct.key === f + '|' + t && !xvcAct.loading ? xvcActHtml() : '<p class="na loading">Chargement…</p>'}</div>`;
-}
+function xvcActivity(d) { setTimeout(xvcActLoad, 0); return `<div id="xvc-act">${xvcActHtml(d)}</div>`; }
 const BU_OPEN_KEY = {xc: 'XC', cars: 'CARS', mr: 'MODERN_RALLY', hrc: 'HISTORIC_RACING', hrl: 'HISTORIC_RALLY'};
 const FINANCE = B('finance', 'Position financière (à date)', d => {
   if (buSel !== 'all') {              // par BU : la trésorerie (comptes bancaires) n'est pas ventilable ; créances et dettes = encours des factures de l'année, répartis par BU
@@ -594,7 +594,7 @@ const PAGES = {
     B('cmpm', 'Marge brute : XC vs CARS', d => { const x = grp(d,'XC'), c = xvcSide(d);
       return `<div class="two">${kpi('XC Cross Car', eur(x.margin), cls(x.margin), 'Marge brute · ' + margin(x))}${kpi(c.label, eur(c.margin), cls(c.margin), 'Marge brute · ' + margin(c))}</div>`
       + signedGauge(xvcParts(d, 'margin')) + `<br><small class="na">Parts de la marge brute XC + CARS, hors « Non affecté » (${eur(grp(d,'OTHER').margin)}).</small>`; }),
-    B('cmpact', 'Activité et ressources : XC vs CARS', d => xvcActivity(), false),
+    B('cmpact', 'Activité et ressources : XC vs CARS', d => xvcActivity(d), false),
     B('detailxc', 'Détail', d => table(HEAD, [lineRow('XC Cross Car', grp(d,'XC')), lineRow(xvcSide(d).label, xvcSide(d))])),
   ],
   'xc/general': () => [

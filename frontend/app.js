@@ -113,7 +113,7 @@ function renderFooter() {
 document.addEventListener('click', async e => {
   if (!(e.target.closest && e.target.closest('#logout, .logout-btn'))) return; e.preventDefault();
   try { await fetch('/api/session', {method: 'DELETE'}); } catch {}
-  sessionStorage.removeItem('idt'); token = null; location.reload();
+  sessionStorage.removeItem('idt'); token = null; store.set('lm_relogin', '1'); location.reload();      // déconnexion volontaire : le prochain accès redemande le mot de passe Google
 });
 
 // ---- Composants (tous reçoivent les données `d` de LA période du bloc) -----------------------
@@ -758,6 +758,13 @@ function needLogin() {
     callback: async r => { token = r.credential; sessionStorage.setItem('idt', token);
       try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); setSession(await sr.json()); } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
+  if (store.get('lm_relogin') === '1') {            // après une déconnexion volontaire : connexion Google qui impose de ressaisir le mot de passe (prompt=login, max_age=0)
+    $('g_btn').innerHTML = `<button type="button" class="primary" id="g_force">${esc(tx('Se connecter avec Google'))}</button><p class="na">${esc(tx('Le mot de passe Google sera demandé : vous vous êtes déconnecté(e) volontairement.'))}</p>`;
+    $('g_force').onclick = () => { const nonce = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('lm_nonce', nonce);
+      location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({client_id: cfg.google_client_id, redirect_uri: location.origin + '/', response_type: 'id_token',
+        scope: 'openid email profile', nonce, prompt: 'login', max_age: '0', state: 'lm'}); };
+    return;
+  }
   google.accounts.id.renderButton($('g_btn'), {theme: 'outline', size: 'large', width: 280, locale: 'en'});
 }
 
@@ -822,6 +829,14 @@ document.addEventListener('visibilitychange', tick);
 buSyncTabs(); if (typeof buLogo === 'function') buLogo();
 (async () => {
   cfg = await (await fetch('/api/config')).json();
+  const back = new URLSearchParams(location.hash.replace(/^#/, ''));      // retour de la connexion Google avec mot de passe (jeton dans l'adresse)
+  if (cfg.auth && back.get('state') === 'lm' && back.get('id_token')) {
+    const idt = back.get('id_token'); let nonceOk = false;
+    try { nonceOk = JSON.parse(atob(idt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).nonce === sessionStorage.getItem('lm_nonce'); } catch {}
+    sessionStorage.removeItem('lm_nonce'); history.replaceState(null, '', '/#/' + (store.get('lm_page') || 'home/welcome'));
+    if (nonceOk) { token = idt; sessionStorage.setItem('idt', idt); store.set('lm_relogin', '0');
+      try { await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + idt}}); } catch {} }
+  }
   if (cfg.auth) {
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client?hl=en'; s.onload = res; document.head.append(s); });
     let ok = false;

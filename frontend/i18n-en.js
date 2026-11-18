@@ -2248,3 +2248,8 @@ Object.assign(EN_T, {
   'ETP : données du personnel réservées aux administrateurs.': 'FTE: staff data is restricted to administrators.',
   'Événements = comptes analytiques de l’axe événements d’Odoo avec des écritures sur la période, classés dans la BU principale de l’axe BU. ETP = somme des % d’imputation du personnel actif (salariés et indépendants), comme dans Coûts du personnel › XC / CARS ; hors Shared Services et Management.': 'Events = analytic accounts of the Odoo events axis with entries in the period, classed under the main BU of the BU axis. FTE = sum of the allocation % of active staff (employees and contractors), as in Staff costs › XC / CARS; excluding Shared Services and Management.',
 });
+
+Object.assign(EN_T, {
+  'Se connecter avec Google': 'Sign in with Google',
+  'Le mot de passe Google sera demandé : vous vous êtes déconnecté(e) volontairement.': 'Google will ask for your password: you signed out on purpose.',
+});

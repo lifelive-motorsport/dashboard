@@ -800,8 +800,10 @@ class OdooProvider:
         fields = ["default_code", "name", "standard_price", "uom_id"] + ([pif] if pif else [])
         items = []
         ids = sorted(qty)
+        lang = self._fr_lang()                                              # désignations en français quand Odoo a une traduction
+        ctx = {"active_test": False, **({"lang": lang} if lang else {})}
         for k in range(0, len(ids), 400):
-            for p in self._call("product.product", "read", ids=ids[k:k + 400], fields=fields, context={"active_test": False}):
+            for p in self._call("product.product", "read", ids=ids[k:k + 400], fields=fields, context=ctx):
                 code = p.get(pif) if pif else None
                 items.append({"ref": p.get("default_code") or "", "name": p.get("name") or "", "pif": (str(code).strip() if code else ""),
                               "cost": float(p.get("standard_price") or 0.0), "qty": qty[p["id"]],

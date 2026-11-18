@@ -263,7 +263,7 @@ const XVC_LABEL = {XC: 'XC', MODERN_RALLY: 'Modern Rally', HISTORIC_RACING: 'His
 function xvcParts(d, field) {          // [{v, label, color}] : XC puis la ou les BU du côté CARS (ordre : XC, Modern Rally, Historic Rally, Historic Racing, CARS Others)
   const col = XVC_COL(), keys = buIsCars(buSel) && buSel !== 'cars' ? BU_KEYS[buSel] : ['MODERN_RALLY', 'HISTORIC_RALLY', 'HISTORIC_RACING', 'CARS_OTHERS'];
   const val = k => k === 'XC' ? grp(d, 'XC')[field] : (d.pnl.bus.find(b => b.key === k) || {})[field] || 0;
-  return ['XC', ...keys].map(k => ({v: val(k), label: XVC_LABEL[k], color: col[k]})).filter(i => i.v || i.label === 'XC');
+  return ['XC', ...keys].map(k => ({v: val(k), label: XVC_LABEL[k], color: col[k], legend: field === 'margin' && k === 'CARS_OTHERS'})).filter(i => i.v || i.label === 'XC');      // marge : « CARS Others » (souvent négative) reste dans la légende seulement
 }
 const xvcGauge = (items, fmt = eur) => { const t = items.reduce((a, i) => a + i.v, 0) || 1;
   return `<div class="stack">${items.map(i => `<div data-tip="${esc(i.label)} · ${esc(fmt(i.v))} · ${pct(i.v / t)}" style="width:${i.v / t * 100}%;background:${i.color}"></div>`).join('')}</div><small class="na">${items.map(i => `${esc(i.label)} ${pct(i.v / t)}`).join(' · ')}</small>`; };

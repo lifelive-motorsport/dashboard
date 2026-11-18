@@ -535,3 +535,5 @@ table.nmtable{table-layout:fixed;min-width:640px}table.nmtable th:first-child,ta
 .an-list .an-ic{display:inline-block;width:22px}.an-bad{border-left-color:var(--neg)!important}.an-warn{border-left-color:#e0a100!important}.an-good{border-left-color:var(--grn)!important}.an-foot{margin-top:14px}
 
 .tip{position:fixed;z-index:60;background:var(--text);color:var(--bg);padding:4px 9px;border-radius:6px;font-size:12px;white-space:nowrap;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+
+.logout-btn{position:sticky;bottom:0;display:block;width:100%;margin:20px 0 0;box-shadow:0 0 0 8px var(--nav);padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);font:inherit;font-size:14px;font-weight:600;cursor:pointer}.logout-btn:hover{border-color:var(--fg)}

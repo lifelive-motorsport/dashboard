@@ -111,7 +111,7 @@ function renderFooter() {
   if (cfg && cfg.auth) { const a = document.createElement('a'); a.href = '#'; a.id = 'logout'; a.textContent = 'Se déconnecter'; f.append(' — ', a); }
 }
 document.addEventListener('click', async e => {
-  if (e.target.id !== 'logout') return; e.preventDefault();
+  if (!(e.target.closest && e.target.closest('#logout, .logout-btn'))) return; e.preventDefault();
   try { await fetch('/api/session', {method: 'DELETE'}); } catch {}
   sessionStorage.removeItem('idt'); token = null; location.reload();
 });
@@ -668,7 +668,8 @@ function renderNav(key) {
     return pages.map(p => link(p[0], pages.length === 1 ? m.label : p[1], !LIVE.has(p[0]))).join('');
   };
   $('nav').innerHTML = `<a class="navhome ${key === 'home/welcome' ? 'on' : ''}" href="#/home/welcome">Accueil</a>`
-    + CHAPTERS.map(c => { const h = c.modules.map(modHtml).join(''); return h ? `<div class="chap"><div class="chap-h"><span>${c.n}</span>${esc(c.label)}</div>${h}</div>` : ''; }).join('');
+    + CHAPTERS.map(c => { const h = c.modules.map(modHtml).join(''); return h ? `<div class="chap"><div class="chap-h"><span>${c.n}</span>${esc(c.label)}</div>${h}</div>` : ''; }).join('')
+    + (cfg && cfg.auth ? `<button type="button" class="logout-btn">${esc(tx('Se déconnecter'))}</button>` : '');
 }
 
 let current = {key: null, blocks: []};

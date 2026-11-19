@@ -75,7 +75,7 @@ def test_session_cookie_roundtrip_expiry_tampering_and_revocation(monkeypatch):
     monkeypatch.setattr(a.settings, "SESSION_DAYS", 14)
     monkeypatch.setattr(a.settings, "ALLOWED_DOMAIN", "lifelive-motorsport.com")
     monkeypatch.setattr(a.settings, "ALLOWED_EMAILS", ["actio@gmail.com"])
-    monkeypatch.setattr(a, "verify_google", lambda auth: "md@lifelive-motorsport.com" if auth == "Bearer ok" else (_ for _ in ()).throw(HTTPException(401, "x")))
+    monkeypatch.setattr(a, "verify_google", lambda auth, fresh=False: "md@lifelive-motorsport.com" if auth == "Bearer ok" else (_ for _ in ()).throw(HTTPException(401, "x")))
     monkeypatch.setattr(m, "verify_google", a.verify_google)
     from fastapi import HTTPException
     cl = TestClient(app)
@@ -830,3 +830,32 @@ def test_receivables_gap_detail_is_served_and_guarded():
     assert {"year", "period", "rows", "total"} <= set(j) and j["rows"] and j["total"] == round(sum(r["amount"] for r in j["rows"]), 2)
     assert {r["cause"] for r in j["rows"]} <= {"after_period", "before_period", "no_partner", "no_bu_line", "other_bu"}
     assert c.get("/api/receivables-gap", params={"from": "2026-01-01", "to": "2026-11-03"}).status_code == 200
+
+
+def test_fresh_login_requires_recent_google_auth(monkeypatch):
+    import sys
+    import time
+    import types
+    from fastapi import HTTPException
+    from app import auth
+    base = {"email": "a@lifelive-motorsport.com", "email_verified": True, "hd": "lifelive-motorsport.com"}
+    claims = {}
+    fake = types.ModuleType("google.oauth2.id_token")
+    fake.verify_oauth2_token = lambda *a, **k: dict(claims)
+    fake_req = types.ModuleType("google.auth.transport.requests")
+    fake_req.Request = lambda: None
+    oauth2 = types.ModuleType("google.oauth2")
+    oauth2.id_token = fake
+    transport = types.ModuleType("google.auth.transport")
+    transport.requests = fake_req
+    for name, mod in (("google.oauth2", oauth2), ("google.oauth2.id_token", fake), ("google.auth.transport", transport), ("google.auth.transport.requests", fake_req)):
+        monkeypatch.setitem(sys.modules, name, mod)             # indépendant de la bibliothèque de chiffrement
+    claims.update(base, auth_time=time.time() - 3600)
+    assert auth.verify_google("Bearer x") == base["email"]                       # connexion ordinaire : pas de contrôle
+    try:
+        auth.verify_google("Bearer x", fresh=True)
+        assert False, "un jeton dont l'authentification date d'une heure doit être refusé"
+    except HTTPException as e:
+        assert e.status_code == 401
+    claims["auth_time"] = time.time() - 20
+    assert auth.verify_google("Bearer x", fresh=True) == base["email"]

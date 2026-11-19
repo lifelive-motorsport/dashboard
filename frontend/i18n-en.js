@@ -2253,3 +2253,7 @@ Object.assign(EN_T, {
   'Se connecter avec Google': 'Sign in with Google',
   'Le mot de passe Google sera demandé : vous vous êtes déconnecté(e) volontairement.': 'Google will ask for your password: you signed out on purpose.',
 });
+
+Object.assign(EN_T, {
+  'Connexion refusée : Google n’a pas redemandé le mot de passe. Réessayez.': 'Sign-in refused: Google did not ask for the password again. Please try again.',
+});

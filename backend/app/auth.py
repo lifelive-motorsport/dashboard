@@ -18,8 +18,12 @@ def is_allowed(email: str) -> bool:
     return email in settings.ALLOWED_EMAILS or email.endswith("@" + settings.ALLOWED_DOMAIN) or users.is_registered(email)
 
 
-def verify_google(authorization: str | None) -> str:
-    """Vérifie le jeton Google (ID token, valable ~1 h) ; domaine Workspace ou liste blanche. Renvoie l'adresse."""
+FRESH_SECONDS = 1800     # connexion « mot de passe redemandé » : l'authentification Google doit dater de 30 minutes au plus
+
+
+def verify_google(authorization: str | None, fresh: bool = False) -> str:
+    """Vérifie le jeton Google (ID token, valable ~1 h) ; domaine Workspace ou liste blanche. Renvoie l'adresse.
+    `fresh` : exige que l'utilisateur se soit réellement authentifié chez Google il y a moins de 30 minutes (`auth_time`, présent quand `max_age` est demandé)."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "Authentification requise")
     from google.auth.transport import requests as g_requests
@@ -28,6 +32,8 @@ def verify_google(authorization: str | None) -> str:
         info = id_token.verify_oauth2_token(authorization[7:], g_requests.Request(), settings.GOOGLE_CLIENT_ID)
     except ValueError:
         raise HTTPException(401, "Jeton invalide")
+    if fresh and info.get("auth_time") is not None and time.time() - float(info["auth_time"]) > FRESH_SECONDS:
+        raise HTTPException(401, "Reconnexion complète requise : Google doit redemander le mot de passe")
     email = (info.get("email") or "").lower()
     if not info.get("email_verified"):
         raise HTTPException(403, "Email non vérifié")

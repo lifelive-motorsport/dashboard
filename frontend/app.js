@@ -62,7 +62,7 @@ const PLAN = {
     'Les pourcentages retenus, saisis par un administrateur.'],
 };
 
-let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg;
+let token = sessionStorage.getItem('idt'), tab = 'total', tabS = 'total', cfg, loginNote = '';
 const route = () => (location.hash.replace(/^#\/?/, '') || 'home/welcome').replace(/^xc\/webshop$/, 'xc/webshop_xc').replace(/^planifier\/resources$/, 'planifier/res_staff').replace(/^xcvscars(\/.*)?$/, 'overview/xcvscars').replace(/^others\/marketing$/, 'marketing/site').replace(/^expenses\/(xc|cars)$/, 'expenses/rules');   // ancienne adresse
 const item = key => { const [g, i] = key.split('/'); const grp = MENU.find(m => m[0] === g);
   const it = grp && grp[2].find(x => x[0] === i); return grp && it ? {grp, it} : null; };
@@ -759,7 +759,7 @@ function needLogin() {
       try { const sr = await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + token}}); setSession(await sr.json()); } catch {}      // cookie de session du dashboard (durée longue)
       Promise.all([loadAdj(), loadStockVar()]).then(() => render()); }});
   if (store.get('lm_relogin') === '1') {            // après une déconnexion volontaire : connexion Google qui impose de ressaisir le mot de passe (prompt=login, max_age=0)
-    $('g_btn').innerHTML = `<button type="button" class="primary" id="g_force">${esc(tx('Se connecter avec Google'))}</button><p class="na">${esc(tx('Le mot de passe Google sera demandé : vous vous êtes déconnecté(e) volontairement.'))}</p>`;
+    $('g_btn').innerHTML = `<button type="button" class="primary" id="g_force">${esc(tx('Se connecter avec Google'))}</button><p class="na">${esc(tx('Le mot de passe Google sera demandé : vous vous êtes déconnecté(e) volontairement.'))}</p>${loginNote ? `<p class="neg">${esc(loginNote)}</p>` : ''}`;
     $('g_force').onclick = () => { const nonce = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('lm_nonce', nonce);
       location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({client_id: cfg.google_client_id, redirect_uri: location.origin + '/', response_type: 'id_token',
         scope: 'openid email profile', nonce, prompt: 'login', max_age: '0', state: 'lm'}); };
@@ -834,8 +834,10 @@ buSyncTabs(); if (typeof buLogo === 'function') buLogo();
     const idt = back.get('id_token'); let nonceOk = false;
     try { nonceOk = JSON.parse(atob(idt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).nonce === sessionStorage.getItem('lm_nonce'); } catch {}
     sessionStorage.removeItem('lm_nonce'); history.replaceState(null, '', '/#/' + (store.get('lm_page') || 'home/welcome'));
-    if (nonceOk) { token = idt; sessionStorage.setItem('idt', idt); store.set('lm_relogin', '0');
-      try { await fetch('/api/session', {method: 'POST', headers: {Authorization: 'Bearer ' + idt}}); } catch {} }
+    if (nonceOk) {       // le serveur vérifie que Google a réellement redemandé le mot de passe (authentification de moins de 30 minutes)
+      try { const pr = await fetch('/api/session?fresh=true', {method: 'POST', headers: {Authorization: 'Bearer ' + idt}});
+        if (pr.ok) { token = idt; sessionStorage.setItem('idt', idt); store.set('lm_relogin', '0'); }
+        else loginNote = tx('Connexion refusée : Google n’a pas redemandé le mot de passe. Réessayez.'); } catch {} }
   }
   if (cfg.auth) {
     await new Promise(res => { const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client?hl=en'; s.onload = res; document.head.append(s); });

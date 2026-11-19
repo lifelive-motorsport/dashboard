@@ -115,9 +115,9 @@ def config():
 
 
 @app.post("/api/session")
-def open_session(request: Request, response: Response, authorization: str | None = Header(default=None)):
-    """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant)."""
-    email = verify_google(authorization)
+def open_session(request: Request, response: Response, authorization: str | None = Header(default=None), fresh: bool = False):
+    """Échange le jeton Google (≈ 1 h) contre un cookie de session du dashboard (SESSION_DAYS jours, glissant). `fresh` : après une déconnexion volontaire, exige une authentification Google récente."""
+    email = verify_google(authorization, fresh=fresh)
     if not settings.SESSION_SECRET:
         return {"email": email, "session": False, "role": role(email), "super": users.is_super(email), "workshop_role": timesheets.role_of(email)["role"], **users.identity(email), "pages": sorted(p) if (p := users.pages_of(email)) is not None else None}            # non configuré : on reste sur le jeton Google
     set_session_cookie(response, request, email)
